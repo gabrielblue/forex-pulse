@@ -3,6 +3,7 @@ import { CurrencyPairsTable } from "@/components/CurrencyPairsTable";
 import { NewsAlertsCard } from "@/components/NewsAlertsCard";
 import { EconomicCalendar } from "@/components/EconomicCalendar";
 import { PredictionsCard } from "@/components/PredictionsCard";
+import { TradingBotDashboard } from "@/components/TradingBotDashboard";
 
 const Index = () => {
   return (
@@ -42,6 +43,11 @@ const Index = () => {
             <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-primary/20 to-transparent rounded-full blur-3xl"></div>
             <div className="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-tr from-accent/20 to-transparent rounded-full blur-2xl"></div>
           </div>
+        </div>
+
+        {/* Trading Bot Dashboard */}
+        <div className="mb-8">
+          <TradingBotDashboard />
         </div>
 
         {/* Main Content Grid */}
