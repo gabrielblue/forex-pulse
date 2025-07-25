@@ -4,6 +4,8 @@ import { NewsAlertsCard } from "@/components/NewsAlertsCard";
 import { EconomicCalendar } from "@/components/EconomicCalendar";
 import { PredictionsCard } from "@/components/PredictionsCard";
 import { TradingBotDashboard } from "@/components/TradingBotDashboard";
+import { PaperTradingSimulator } from "@/components/PaperTradingSimulator";
+import { EnhancedSignalsSystem } from "@/components/EnhancedSignalsSystem";
 
 const Index = () => {
   return (
@@ -48,6 +50,12 @@ const Index = () => {
         {/* Trading Bot Dashboard */}
         <div className="mb-8">
           <TradingBotDashboard />
+        </div>
+
+        {/* Paper Trading & Signals */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          <PaperTradingSimulator />
+          <EnhancedSignalsSystem />
         </div>
 
         {/* Main Content Grid */}
