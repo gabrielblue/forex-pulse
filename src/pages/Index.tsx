@@ -6,6 +6,9 @@ import { PredictionsCard } from "@/components/PredictionsCard";
 import { TradingBotDashboard } from "@/components/TradingBotDashboard";
 import { PaperTradingSimulator } from "@/components/PaperTradingSimulator";
 import { EnhancedSignalsSystem } from "@/components/EnhancedSignalsSystem";
+import { MarketCharts } from "@/components/MarketCharts";
+import { AIPredictionSystem } from "@/components/AIPredictionSystem";
+import { ExnessIntegration } from "@/components/ExnessIntegration";
 
 const Index = () => {
   return (
@@ -47,9 +50,24 @@ const Index = () => {
           </div>
         </div>
 
+        {/* Market Charts */}
+        <div className="mb-8">
+          <MarketCharts />
+        </div>
+
+        {/* AI Prediction System */}
+        <div className="mb-8">
+          <AIPredictionSystem />
+        </div>
+
         {/* Trading Bot Dashboard */}
         <div className="mb-8">
           <TradingBotDashboard />
+        </div>
+
+        {/* Exness Integration */}
+        <div className="mb-8">
+          <ExnessIntegration />
         </div>
 
         {/* Paper Trading & Signals */}
