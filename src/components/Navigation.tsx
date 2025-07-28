@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { 
   TrendingUp, 
@@ -8,19 +9,28 @@ import {
   BookOpen, 
   Menu,
   X,
-  Activity
+  Activity,
+  Settings
 } from "lucide-react";
 
 export const Navigation = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const navItems = [
-    { label: "Dashboard", icon: TrendingUp, active: true },
-    { label: "Charts", icon: BarChart3, active: false },
-    { label: "News", icon: Newspaper, active: false },
-    { label: "Calendar", icon: Calendar, active: false },
-    { label: "Learn", icon: BookOpen, active: false },
+    { label: "Dashboard", icon: TrendingUp, path: "/" },
+    { label: "Charts", icon: BarChart3, path: "/charts" },
+    { label: "News", icon: Newspaper, path: "/news" },
+    { label: "Calendar", icon: Calendar, path: "/calendar" },
+    { label: "Learn", icon: BookOpen, path: "/learn" },
+    { label: "Admin", icon: Settings, path: "/admin" },
   ];
+
+  const handleNavigation = (path: string) => {
+    navigate(path);
+    setIsMenuOpen(false);
+  };
 
   return (
     <nav className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
@@ -42,13 +52,14 @@ export const Navigation = () => {
             {navItems.map((item) => (
               <Button
                 key={item.label}
-                variant={item.active ? "default" : "ghost"}
+                variant={location.pathname === item.path ? "default" : "ghost"}
                 size="sm"
                 className={`flex items-center space-x-2 ${
-                  item.active 
+                  location.pathname === item.path
                     ? "bg-primary text-primary-foreground shadow-lg" 
                     : "text-muted-foreground hover:text-foreground"
                 }`}
+                onClick={() => handleNavigation(item.path)}
               >
                 <item.icon className="w-4 h-4" />
                 <span>{item.label}</span>
@@ -75,13 +86,14 @@ export const Navigation = () => {
             {navItems.map((item) => (
               <Button
                 key={item.label}
-                variant={item.active ? "default" : "ghost"}
+                variant={location.pathname === item.path ? "default" : "ghost"}
                 size="sm"
                 className={`w-full justify-start space-x-2 ${
-                  item.active 
+                  location.pathname === item.path
                     ? "bg-primary text-primary-foreground" 
                     : "text-muted-foreground hover:text-foreground"
                 }`}
+                onClick={() => handleNavigation(item.path)}
               >
                 <item.icon className="w-4 h-4" />
                 <span>{item.label}</span>
