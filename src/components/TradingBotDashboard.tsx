@@ -14,44 +14,89 @@ import {
   AlertTriangle,
   DollarSign,
   Activity,
-  Clock
+  Clock,
+  Zap
 } from "lucide-react";
 import { StrategyControls } from "./StrategyControls";
 import { RiskManagement } from "./RiskManagement";
 import { BotStatus } from "./BotStatus";
+import { useTradingBot } from "@/hooks/useTradingBot";
+import { toast } from "sonner";
 
 export const TradingBotDashboard = () => {
-  const [botActive, setBotActive] = useState(false);
-  const [autoTrade, setAutoTrade] = useState(false);
+  const { 
+    status, 
+    configuration, 
+    isLoading, 
+    error, 
+    startBot, 
+    stopBot, 
+    enableAutoTrading,
+    generateTestSignal,
+    clearError 
+  } = useTradingBot();
+  
   const [selectedTab, setSelectedTab] = useState<"status" | "strategy" | "risk">("status");
 
   const stats = {
-    totalTrades: 47,
-    winRate: 78.2,
-    dailyPnL: 2.34,
-    weeklyPnL: 8.91,
-    activePairs: 6,
+    totalTrades: status.totalTrades,
+    winRate: status.winRate,
+    dailyPnL: status.dailyPnL,
+    weeklyPnL: status.weeklyPnL,
+    activePairs: configuration.enabledPairs.length,
     lastSignal: "2 minutes ago"
   };
 
   const handleBotToggle = () => {
-    setBotActive(!botActive);
-    if (!botActive) {
-      // Bot starting logic here
-      console.log("Trading bot starting...");
+    if (status.isActive) {
+      stopBot().then(() => {
+        toast.success("Trading bot stopped");
+      }).catch((err) => {
+        toast.error("Failed to stop bot: " + err.message);
+      });
     } else {
-      // Bot stopping logic here
-      console.log("Trading bot stopping...");
+      startBot().then(() => {
+        toast.success("Trading bot started");
+      }).catch((err) => {
+        toast.error("Failed to start bot: " + err.message);
+      });
     }
+  };
+
+  const handleAutoTradeToggle = (enabled: boolean) => {
+    enableAutoTrading(enabled).then(() => {
+      toast.success(`Auto trading ${enabled ? 'enabled' : 'disabled'}`);
+    }).catch((err) => {
+      toast.error("Failed to toggle auto trading: " + err.message);
+    });
+  };
+
+  const handleGenerateTestSignal = () => {
+    generateTestSignal().then(() => {
+      toast.success("Test signal generated");
+    }).catch((err) => {
+      toast.error("Failed to generate test signal: " + err.message);
+    });
   };
 
   return (
     <Card className="p-6 bg-gradient-to-br from-card to-card/80 border-border/50">
+      {/* Error Display */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-500" />
+            <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
+            <Button size="sm" variant="ghost" onClick={clearError}>×</Button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-3">
-          <div className={`p-2 rounded-lg ${botActive ? 'bg-bullish/10' : 'bg-muted'}`}>
-            <Bot className={`w-5 h-5 ${botActive ? 'text-bullish animate-pulse' : 'text-muted-foreground'}`} />
+          <div className={`p-2 rounded-lg ${status.isActive ? 'bg-bullish/10' : 'bg-muted'}`}>
+            <Bot className={`w-5 h-5 ${status.isActive ? 'text-bullish animate-pulse' : 'text-muted-foreground'}`} />
           </div>
           <div>
             <h2 className="text-xl font-bold text-foreground">Trading Bot</h2>
@@ -59,16 +104,17 @@ export const TradingBotDashboard = () => {
           </div>
         </div>
         <div className="flex items-center space-x-4">
-          <Badge variant={botActive ? "default" : "secondary"} className={botActive ? "bg-bullish" : ""}>
-            {botActive ? "ACTIVE" : "INACTIVE"}
+          <Badge variant={status.isActive ? "default" : "secondary"} className={status.isActive ? "bg-bullish" : ""}>
+            {status.isActive ? "ACTIVE" : "INACTIVE"}
           </Badge>
           <Button
             onClick={handleBotToggle}
-            variant={botActive ? "destructive" : "default"}
+            variant={status.isActive ? "destructive" : "default"}
             className="flex items-center space-x-2"
+            disabled={isLoading}
           >
-            {botActive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            <span>{botActive ? "Stop Bot" : "Start Bot"}</span>
+            {status.isActive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            <span>{status.isActive ? "Stop Bot" : "Start Bot"}</span>
           </Button>
         </div>
       </div>
@@ -125,10 +171,29 @@ export const TradingBotDashboard = () => {
           </div>
         </div>
         <Switch
-          checked={autoTrade}
-          onCheckedChange={setAutoTrade}
-          disabled={!botActive}
+          checked={status.autoTradingEnabled}
+          onCheckedChange={handleAutoTradeToggle}
+          disabled={!status.isActive || isLoading}
         />
+      </div>
+
+      {/* Quick Actions */}
+      <div className="flex gap-4 mb-6">
+        <Button 
+          onClick={handleGenerateTestSignal}
+          variant="outline"
+          disabled={isLoading}
+          className="flex items-center gap-2"
+        >
+          <Zap className="w-4 h-4" />
+          Generate Test Signal
+        </Button>
+        <Button variant="outline" disabled={isLoading}>
+          View Live Trades
+        </Button>
+        <Button variant="outline" disabled={isLoading}>
+          Performance Report
+        </Button>
       </div>
 
       {/* Tab Navigation */}
@@ -157,7 +222,7 @@ export const TradingBotDashboard = () => {
 
       {/* Tab Content */}
       <div className="animate-fade-in">
-        {selectedTab === "status" && <BotStatus stats={stats} botActive={botActive} />}
+        {selectedTab === "status" && <BotStatus stats={stats} botActive={status.isActive} />}
         {selectedTab === "strategy" && <StrategyControls />}
         {selectedTab === "risk" && <RiskManagement />}
       </div>
@@ -170,7 +235,7 @@ export const TradingBotDashboard = () => {
           <span>Last signal: {stats.lastSignal}</span>
         </div>
         <div>
-          {botActive ? "Bot is monitoring markets..." : "Bot is offline"}
+          {status.isActive ? "Bot is monitoring markets..." : "Bot is offline"}
         </div>
       </div>
     </Card>

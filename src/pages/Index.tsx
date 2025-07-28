@@ -9,8 +9,16 @@ import { EnhancedSignalsSystem } from "@/components/EnhancedSignalsSystem";
 import { MarketCharts } from "@/components/MarketCharts";
 import { AIPredictionSystem } from "@/components/AIPredictionSystem";
 import { ExnessIntegration } from "@/components/ExnessIntegration";
+import { LiveTradingDashboard } from "@/components/LiveTradingDashboard";
+import { initializeTradingSystem } from "@/lib/trading";
+import { useEffect } from "react";
 
 const Index = () => {
+  useEffect(() => {
+    // Initialize trading system when app loads
+    initializeTradingSystem();
+  }, []);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Navigation */}
@@ -68,6 +76,11 @@ const Index = () => {
         {/* Exness Integration */}
         <div className="mb-8">
           <ExnessIntegration />
+        </div>
+
+        {/* Live Trading Dashboard */}
+        <div className="mb-8">
+          <LiveTradingDashboard />
         </div>
 
         {/* Paper Trading & Signals */}

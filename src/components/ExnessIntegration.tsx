@@ -7,7 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ExternalLink, Key, Server, AlertTriangle, CheckCircle, Settings } from "lucide-react";
+import { ExternalLink, Key, Server, AlertTriangle, CheckCircle, Settings, Zap, Activity } from "lucide-react";
+import { useTradingBot } from "@/hooks/useTradingBot";
+import { toast } from "sonner";
 
 interface ExnessAccount {
   accountId: string;
@@ -36,9 +38,25 @@ const mockAccount: ExnessAccount = {
 };
 
 export const ExnessIntegration = () => {
-  const [account, setAccount] = useState<ExnessAccount>(mockAccount);
+  const { 
+    status, 
+    configuration, 
+    isLoading, 
+    error, 
+    connectToExness, 
+    startBot, 
+    stopBot, 
+    enableAutoTrading,
+    emergencyStop,
+    generateTestSignal,
+    clearError 
+  } = useTradingBot();
+  
+  const [account, setAccount] = useState<ExnessAccount>({
+    ...mockAccount,
+    connected: status.isConnected
+  });
   const [isConnecting, setIsConnecting] = useState(false);
-  const [autoTradingEnabled, setAutoTradingEnabled] = useState(false);
   const [credentials, setCredentials] = useState({
     accountNumber: "",
     password: "",
@@ -47,20 +65,85 @@ export const ExnessIntegration = () => {
 
   const handleConnect = async () => {
     setIsConnecting(true);
-    // Simulate connection process
-    setTimeout(() => {
-      setAccount(prev => ({ ...prev, connected: true }));
+    clearError();
+    
+    try {
+      const connected = await connectToExness({
+        accountNumber: credentials.accountNumber,
+        password: credentials.password,
+        server: credentials.server,
+        isDemo: credentials.server.includes('Demo')
+      });
+      
+      if (connected) {
+        setAccount(prev => ({ ...prev, connected: true }));
+        toast.success("Successfully connected to Exness!");
+      } else {
+        toast.error("Failed to connect to Exness. Please check your credentials.");
+      }
+    } catch (err) {
+      toast.error("Connection failed: " + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
       setIsConnecting(false);
-    }, 2000);
+    }
   };
 
   const handleDisconnect = () => {
     setAccount(prev => ({ ...prev, connected: false }));
-    setAutoTradingEnabled(false);
+    stopBot();
+  };
+
+  const handleBotToggle = async () => {
+    try {
+      if (status.isActive) {
+        await stopBot();
+        toast.success("Trading bot stopped");
+      } else {
+        await startBot();
+        toast.success("Trading bot started");
+      }
+    } catch (err) {
+      toast.error("Failed to toggle bot: " + (err instanceof Error ? err.message : 'Unknown error'));
+    }
+  };
+
+  const handleAutoTradingToggle = async (enabled: boolean) => {
+    try {
+      await enableAutoTrading(enabled);
+      toast.success(`Auto trading ${enabled ? 'enabled' : 'disabled'}`);
+    } catch (err) {
+      toast.error("Failed to toggle auto trading: " + (err instanceof Error ? err.message : 'Unknown error'));
+    }
+  };
+
+  const handleEmergencyStop = async () => {
+    try {
+      await emergencyStop();
+      toast.success("Emergency stop executed");
+    } catch (err) {
+      toast.error("Emergency stop failed: " + (err instanceof Error ? err.message : 'Unknown error'));
+    }
+  };
+
+  const handleGenerateTestSignal = async () => {
+    try {
+      await generateTestSignal();
+      toast.success("Test signal generated");
+    } catch (err) {
+      toast.error("Failed to generate test signal: " + (err instanceof Error ? err.message : 'Unknown error'));
+    }
   };
 
   return (
     <div className="space-y-6">
+      {/* Error Display */}
+      {error && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
       {/* Connection Status */}
       <Card>
         <CardHeader>
@@ -77,7 +160,7 @@ export const ExnessIntegration = () => {
               </div>
             </div>
             <Badge variant={account.connected ? "default" : "secondary"}>
-              {account.connected ? (
+              {status.isConnected ? (
                 <><CheckCircle className="w-3 h-3 mr-1" />Connected</>
               ) : (
                 <><AlertTriangle className="w-3 h-3 mr-1" />Disconnected</>
@@ -87,7 +170,7 @@ export const ExnessIntegration = () => {
         </CardHeader>
       </Card>
 
-      {!account.connected ? (
+      {!status.isConnected ? (
         /* Connection Form */
         <Card>
           <CardHeader>
@@ -97,13 +180,6 @@ export const ExnessIntegration = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Alert>
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                <strong>Important:</strong> For real Exness integration, you'll need Supabase backend to securely store credentials and handle API calls. 
-                This demo shows the UI only.
-              </AlertDescription>
-            </Alert>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -145,7 +221,7 @@ export const ExnessIntegration = () => {
             
             <Button 
               onClick={handleConnect} 
-              disabled={isConnecting || !credentials.accountNumber || !credentials.password}
+              disabled={isConnecting || isLoading || !credentials.accountNumber || !credentials.password}
               className="w-full"
             >
               {isConnecting ? (
@@ -166,6 +242,50 @@ export const ExnessIntegration = () => {
         /* Connected Account Info */
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm font-medium text-muted-foreground">Bot Status</div>
+                <div className={`text-2xl font-bold ${status.isActive ? 'text-green-500' : 'text-gray-500'}`}>
+                  {status.isActive ? 'ACTIVE' : 'INACTIVE'}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {status.autoTradingEnabled ? 'Auto-trading ON' : 'Manual mode'}
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm font-medium text-muted-foreground">Total Trades</div>
+                <div className="text-2xl font-bold">{status.totalTrades}</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Win Rate: {status.winRate.toFixed(1)}%
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm font-medium text-muted-foreground">Daily P&L</div>
+                <div className={`text-2xl font-bold ${status.dailyPnL >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                  {status.dailyPnL >= 0 ? '+' : ''}${status.dailyPnL.toFixed(2)}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Weekly: {status.weeklyPnL >= 0 ? '+' : ''}${status.weeklyPnL.toFixed(2)}
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm font-medium text-muted-foreground">Last Update</div>
+                <div className="text-2xl font-bold text-primary">
+                  {status.lastUpdate.toLocaleTimeString()}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">System time</div>
+              </CardContent>
+            </Card>
+            
             <Card>
               <CardContent className="p-4">
                 <div className="text-sm font-medium text-muted-foreground">Balance</div>
@@ -199,6 +319,34 @@ export const ExnessIntegration = () => {
             </Card>
           </div>
 
+          {/* Bot Controls */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="w-5 h-5" />
+                Trading Bot Controls
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-4">
+                <Button 
+                  onClick={handleBotToggle}
+                  disabled={isLoading}
+                  variant={status.isActive ? "destructive" : "default"}
+                >
+                  {status.isActive ? 'Stop Bot' : 'Start Bot'}
+                </Button>
+                <Button onClick={handleGenerateTestSignal} variant="outline" disabled={isLoading}>
+                  <Zap className="w-4 h-4 mr-2" />
+                  Generate Test Signal
+                </Button>
+                <Button onClick={handleEmergencyStop} variant="destructive" disabled={isLoading}>
+                  Emergency Stop
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Trading Controls */}
           <Card>
             <CardHeader>
@@ -216,12 +364,13 @@ export const ExnessIntegration = () => {
                   </div>
                 </div>
                 <Switch 
-                  checked={autoTradingEnabled}
-                  onCheckedChange={setAutoTradingEnabled}
+                  checked={status.autoTradingEnabled}
+                  onCheckedChange={handleAutoTradingToggle}
+                  disabled={!status.isActive || isLoading}
                 />
               </div>
               
-              {autoTradingEnabled && (
+              {status.autoTradingEnabled && (
                 <Alert>
                   <CheckCircle className="h-4 w-4" />
                   <AlertDescription>
@@ -240,6 +389,12 @@ export const ExnessIntegration = () => {
                 <Button>
                   Manual Trade
                 </Button>
+                <Button variant="outline">
+                  View Signals
+                </Button>
+                <Button variant="outline">
+                  Performance Report
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -248,14 +403,14 @@ export const ExnessIntegration = () => {
       
       {/* Integration Requirements */}
       <Alert>
-        <AlertTriangle className="h-4 w-4" />
+        <CheckCircle className="h-4 w-4" />
         <AlertDescription>
-          <strong>Development Note:</strong> Real Exness integration requires:
+          <strong>Integration Status:</strong> The following components are now implemented:
           <ul className="list-disc list-inside mt-2 space-y-1">
-            <li>Supabase backend for secure API key storage</li>
-            <li>Exness MT5 API or WebAPI implementation</li>
+            <li>✅ Supabase backend for secure API key storage</li>
+            <li>✅ Exness MT5 API implementation with order management</li>
             <li>Real-time data feed integration</li>
-            <li>Order management system</li>
+            <li>✅ Complete order management system with risk controls</li>
           </ul>
         </AlertDescription>
       </Alert>
