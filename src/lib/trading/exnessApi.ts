@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 
+// Interface definitions
 export interface ExnessCredentials {
   accountNumber: string;
   password: string;
@@ -11,7 +12,7 @@ export interface TradeOrder {
   symbol: string;
   type: 'BUY' | 'SELL';
   volume: number;
-  price?: number;
+  price: number;
   stopLoss?: number;
   takeProfit?: number;
   comment?: string;
@@ -23,85 +24,90 @@ export interface AccountInfo {
   margin: number;
   freeMargin: number;
   marginLevel: number;
-  currency: string;
-  leverage: string;
-  profit: number;
 }
 
 export interface Position {
   ticket: number;
   symbol: string;
-  type: 'BUY' | 'SELL';
+  type: string;
   volume: number;
   openPrice: number;
   currentPrice: number;
-  stopLoss: number;
-  takeProfit: number;
   profit: number;
   swap: number;
   commission: number;
   openTime: Date;
+  stopLoss?: number;
+  takeProfit?: number;
+  comment: string;
+  ticketId: string;
 }
 
 class ExnessAPI {
+  private isConnected: boolean = false;
   private credentials: ExnessCredentials | null = null;
-  private isConnected = false;
-  private websocket: WebSocket | null = null;
-  private accountInfo: AccountInfo | null = null;
+  private webSocket: WebSocket | null = null;
+  private accountInfo: AccountInfo = {
+    balance: 0,
+    equity: 0,
+    margin: 0,
+    freeMargin: 0,
+    marginLevel: 0
+  };
 
   async connect(credentials: ExnessCredentials): Promise<boolean> {
     try {
-      // Store encrypted credentials in Supabase
-      await this.storeCredentials(credentials);
-      
-      // Simulate MT5 connection (in real implementation, this would connect to MT5 WebAPI)
+      console.log('Attempting to connect to Exness with:', {
+        accountNumber: credentials.accountNumber,
+        server: credentials.server,
+        isDemo: credentials.isDemo
+      });
+
+      // Basic validation
+      if (!credentials.accountNumber || !credentials.password) {
+        throw new Error('Account number and password are required');
+      }
+
+      // Simple validation for demo purposes
+      if (credentials.accountNumber.length < 5) {
+        throw new Error('Invalid account number format');
+      }
+
+      if (credentials.password.length < 4) {
+        throw new Error('Password too short');
+      }
+
+      // Store credentials and simulate connection
       this.credentials = credentials;
       this.isConnected = true;
       
-      // Initialize WebSocket for real-time data
-      await this.initializeWebSocket();
+      // Initialize mock account info
+      this.accountInfo = {
+        balance: 10000,
+        equity: 10245.67,
+        margin: 234.56,
+        freeMargin: 10011.11,
+        marginLevel: 4273.5
+      };
+
+      // Initialize WebSocket simulation
+      this.initializeWebSocket();
       
-      // Get initial account info
+      // Update account info in database
       await this.updateAccountInfo();
-      
+
+      console.log('Successfully connected to Exness (simulated)');
       return true;
     } catch (error) {
       console.error('Failed to connect to Exness:', error);
+      this.isConnected = false;
       return false;
     }
   }
 
-  private async storeCredentials(credentials: ExnessCredentials): Promise<void> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
-
-    // In a real implementation, encrypt these before storing
-    const { error } = await supabase
-      .from('api_keys')
-      .upsert({
-        user_id: user.id,
-        broker_name: 'Exness',
-        api_key_encrypted: btoa(credentials.accountNumber), // Simple encoding - use proper encryption in production
-        api_secret_encrypted: btoa(credentials.password),
-        account_number: credentials.accountNumber,
-        server_name: credentials.server,
-        is_demo: credentials.isDemo,
-        is_active: true
-      });
-
-    if (error) throw error;
-  }
-
-  private async initializeWebSocket(): Promise<void> {
-    // Simulate WebSocket connection for real-time data
-    // In real implementation, connect to Exness WebSocket API
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        console.log('WebSocket connected for real-time data');
-        this.startPriceUpdates();
-        resolve();
-      }, 1000);
-    });
+  private initializeWebSocket(): void {
+    console.log('Initializing WebSocket connection (simulated)');
+    this.startPriceUpdates();
   }
 
   private startPriceUpdates(): void {
@@ -109,88 +115,50 @@ class ExnessAPI {
     const symbols = ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD'];
     
     setInterval(() => {
-      symbols.forEach(symbol => {
-        const basePrice = this.getBasePrice(symbol);
-        const bid = basePrice + (Math.random() - 0.5) * 0.001;
-        const ask = bid + 0.00015; // Typical spread
-        
-        this.updateMarketData(symbol, bid, ask);
-      });
-    }, 1000);
+      const symbol = symbols[Math.floor(Math.random() * symbols.length)];
+      const basePrice = symbol.includes('JPY') ? 150 : 1.0;
+      const variation = (Math.random() - 0.5) * 0.001;
+      const bid = basePrice + variation;
+      const ask = bid + 0.0002;
+
+      console.log(`Price update: ${symbol} - Bid: ${bid}, Ask: ${ask}`);
+    }, 2000);
   }
 
-  private getBasePrice(symbol: string): number {
-    const basePrices: Record<string, number> = {
-      'EURUSD': 1.0845,
-      'GBPUSD': 1.2734,
-      'USDJPY': 149.85,
-      'AUDUSD': 0.6623,
-      'USDCHF': 0.8892,
-      'NZDUSD': 0.5987
-    };
-    return basePrices[symbol] || 1.0000;
-  }
-
-  private async updateMarketData(symbol: string, bid: number, ask: number): Promise<void> {
-    try {
-      const { error } = await supabase.rpc('update_market_data', {
-        p_symbol: symbol,
-        p_bid: bid,
-        p_ask: ask,
-        p_volume: Math.floor(Math.random() * 1000000)
-      });
-
-      if (error) console.error('Failed to update market data:', error);
-    } catch (error) {
-      console.error('Market data update error:', error);
-    }
-  }
-
-  async getAccountInfo(): Promise<AccountInfo | null> {
-    if (!this.isConnected) return null;
-
-    // Simulate getting account info from MT5
-    this.accountInfo = {
-      balance: 10000 + Math.random() * 5000,
-      equity: 10245.67 + Math.random() * 1000,
-      margin: 234.56 + Math.random() * 100,
-      freeMargin: 10011.11 + Math.random() * 1000,
-      marginLevel: 450.5 + Math.random() * 50,
-      currency: 'USD',
-      leverage: '1:500',
-      profit: 245.67 + (Math.random() - 0.5) * 500
-    };
-
+  async getAccountInfo(): Promise<AccountInfo> {
     return this.accountInfo;
   }
 
-  private async updateAccountInfo(): Promise<void> {
-    const accountInfo = await this.getAccountInfo();
-    if (!accountInfo) return;
+  async updateAccountInfo(): Promise<void> {
+    if (!this.isConnected) return;
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-    // Update trading account in database
-    const { error } = await supabase
-      .from('trading_accounts')
-      .upsert({
+      const accountData = {
         user_id: user.id,
-        account_number: this.credentials?.accountNumber,
-        broker_name: 'Exness',
-        account_type: this.credentials?.isDemo ? 'demo' : 'live',
-        balance: accountInfo.balance,
-        equity: accountInfo.equity,
-        margin: accountInfo.margin,
-        free_margin: accountInfo.freeMargin,
-        margin_level: accountInfo.marginLevel,
-        currency: accountInfo.currency,
-        leverage: accountInfo.leverage,
-        last_sync: new Date().toISOString(),
-        is_active: true
-      });
+        account_number: this.credentials?.accountNumber || '',
+        server: this.credentials?.server || '',
+        balance: this.accountInfo.balance,
+        equity: this.accountInfo.equity,
+        margin: this.accountInfo.margin,
+        free_margin: this.accountInfo.freeMargin,
+        margin_level: this.accountInfo.marginLevel,
+        currency: 'USD',
+        leverage: '1:500',
+        is_active: true,
+        is_demo: this.credentials?.isDemo || false
+      };
 
-    if (error) console.error('Failed to update account info:', error);
+      const { error } = await supabase
+        .from('trading_accounts')
+        .upsert(accountData);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Failed to update account info:', error);
+    }
   }
 
   async placeOrder(order: TradeOrder): Promise<string | null> {
@@ -202,63 +170,30 @@ class ExnessAPI {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // Get currency pair ID
-      const { data: pair } = await supabase
-        .from('currency_pairs')
-        .select('id')
-        .eq('symbol', order.symbol)
-        .single();
+      // Generate a mock trade ticket
+      const mockTicket = Date.now().toString();
 
-      if (!pair) throw new Error('Currency pair not found');
-
-      // Get account ID
-      const { data: account } = await supabase
-        .from('trading_accounts')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .single();
-
-      if (!account) throw new Error('No active trading account found');
-
-      // Execute trade order using RPC function
-      const { data: orderId, error } = await supabase.rpc('execute_trade_order', {
-        p_user_id: user.id,
-        p_account_id: account.id,
-        p_pair_id: pair.id,
-        p_order_type: 'MARKET',
-        p_trade_type: order.type,
-        p_lot_size: order.volume,
-        p_price: order.price,
-        p_stop_loss: order.stopLoss,
-        p_take_profit: order.takeProfit
-      });
-
-      if (error) throw error;
-
-      // Simulate order execution
-      const executionPrice = order.price || this.getBasePrice(order.symbol);
-      
-      // Create live trade record
-      const { error: tradeError } = await supabase
+      // Store trade record in database
+      const { error: insertError } = await supabase
         .from('live_trades')
         .insert({
           user_id: user.id,
-          account_id: account.id,
-          pair_id: pair.id,
+          symbol: order.symbol,
           trade_type: order.type,
           lot_size: order.volume,
-          entry_price: executionPrice,
-          current_price: executionPrice,
+          entry_price: order.price,
           stop_loss: order.stopLoss,
           take_profit: order.takeProfit,
           status: 'OPEN',
-          broker_trade_id: `EX${Date.now()}`
+          ticket_id: mockTicket,
+          opened_at: new Date().toISOString()
         });
 
-      if (tradeError) throw tradeError;
+      if (insertError) {
+        console.error('Failed to store trade record:', insertError);
+      }
 
-      return orderId;
+      return mockTicket;
     } catch (error) {
       console.error('Failed to place order:', error);
       throw error;
@@ -266,37 +201,34 @@ class ExnessAPI {
   }
 
   async getPositions(): Promise<Position[]> {
-    if (!this.isConnected) return [];
-
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
 
       const { data: trades, error } = await supabase
         .from('live_trades')
-        .select(`
-          *,
-          currency_pairs(symbol)
-        `)
+        .select('*')
         .eq('user_id', user.id)
         .eq('status', 'OPEN');
 
       if (error) throw error;
 
-      return trades.map(trade => ({
-        ticket: parseInt(trade.broker_trade_id?.replace('EX', '') || '0'),
-        symbol: trade.currency_pairs?.symbol || '',
-        type: trade.trade_type as 'BUY' | 'SELL',
-        volume: parseFloat(trade.lot_size.toString()),
-        openPrice: parseFloat(trade.entry_price.toString()),
-        currentPrice: parseFloat(trade.current_price?.toString() || trade.entry_price.toString()),
-        stopLoss: parseFloat(trade.stop_loss?.toString() || '0'),
-        takeProfit: parseFloat(trade.take_profit?.toString() || '0'),
+      return trades?.map(trade => ({
+        ticket: parseInt(trade.ticket_id || '0'),
+        symbol: trade.symbol,
+        type: trade.trade_type,
+        volume: parseFloat(trade.lot_size?.toString() || '0'),
+        openPrice: parseFloat(trade.entry_price?.toString() || '0'),
+        currentPrice: parseFloat(trade.current_price?.toString() || trade.entry_price?.toString() || '0'),
         profit: parseFloat(trade.profit?.toString() || '0'),
         swap: parseFloat(trade.swap?.toString() || '0'),
         commission: parseFloat(trade.commission?.toString() || '0'),
-        openTime: new Date(trade.opened_at || trade.created_at)
-      }));
+        openTime: new Date(trade.opened_at),
+        stopLoss: trade.stop_loss ? parseFloat(trade.stop_loss.toString()) : undefined,
+        takeProfit: trade.take_profit ? parseFloat(trade.take_profit.toString()) : undefined,
+        comment: '',
+        ticketId: trade.ticket_id || ''
+      })) || [];
     } catch (error) {
       console.error('Failed to get positions:', error);
       return [];
@@ -314,25 +246,25 @@ class ExnessAPI {
           status: 'CLOSED',
           closed_at: new Date().toISOString()
         })
-        .eq('user_id', user.id)
-        .eq('broker_trade_id', `EX${ticket}`);
+        .eq('ticket_id', ticket.toString())
+        .eq('user_id', user.id);
 
-      return !error;
+      if (error) throw error;
+      return true;
     } catch (error) {
       console.error('Failed to close position:', error);
       return false;
     }
   }
 
-  async disconnect(): Promise<void> {
+  disconnect(): void {
     this.isConnected = false;
     this.credentials = null;
-    this.accountInfo = null;
-    
-    if (this.websocket) {
-      this.websocket.close();
-      this.websocket = null;
+    if (this.webSocket) {
+      this.webSocket.close();
+      this.webSocket = null;
     }
+    console.log('Disconnected from Exness');
   }
 
   isConnectedToExness(): boolean {

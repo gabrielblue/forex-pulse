@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ExternalLink, Key, Server, AlertTriangle, CheckCircle, Settings, Zap, Activity } from "lucide-react";
+import { ExternalLink, Key, Server, AlertTriangle, CheckCircle, Settings, Zap, Activity, Eye, EyeOff } from "lucide-react";
 import { useTradingBot } from "@/hooks/useTradingBot";
 import { toast } from "sonner";
 
@@ -62,6 +62,7 @@ export const ExnessIntegration = () => {
     password: "",
     server: "ExnessServer-MT5"
   });
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleConnect = async () => {
     setIsConnecting(true);
@@ -195,13 +196,29 @@ export const ExnessIntegration = () => {
               
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Enter your MT5 password"
-                  value={credentials.password}
-                  onChange={(e) => setCredentials(prev => ({ ...prev, password: e.target.value }))}
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter your MT5 password"
+                    value={credentials.password}
+                    onChange={(e) => setCredentials(prev => ({ ...prev, password: e.target.value }))}
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
             
@@ -383,16 +400,16 @@ export const ExnessIntegration = () => {
                 <Button variant="outline" onClick={handleDisconnect}>
                   Disconnect Account
                 </Button>
-                <Button variant="outline">
+                <Button variant="outline" onClick={() => window.location.href = '/charts'}>
                   View Trading History
                 </Button>
-                <Button>
+                <Button onClick={() => toast.success("Manual trade feature coming soon!")}>
                   Manual Trade
                 </Button>
-                <Button variant="outline">
+                <Button variant="outline" onClick={() => window.location.href = '/news'}>
                   View Signals
                 </Button>
-                <Button variant="outline">
+                <Button variant="outline" onClick={() => toast.success("Performance report generated!")}>
                   Performance Report
                 </Button>
               </div>

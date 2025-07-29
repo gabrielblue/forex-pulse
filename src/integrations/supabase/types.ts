@@ -158,6 +158,83 @@ export type Database = {
         }
         Relationships: []
       }
+      live_trades: {
+        Row: {
+          closed_at: string | null
+          commission: number | null
+          created_at: string
+          current_price: number | null
+          entry_price: number
+          id: string
+          lot_size: number
+          opened_at: string
+          pair_id: string | null
+          profit: number | null
+          profit_pips: number | null
+          status: string
+          stop_loss: number | null
+          swap: number | null
+          symbol: string
+          take_profit: number | null
+          ticket_id: string | null
+          trade_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          closed_at?: string | null
+          commission?: number | null
+          created_at?: string
+          current_price?: number | null
+          entry_price: number
+          id?: string
+          lot_size?: number
+          opened_at?: string
+          pair_id?: string | null
+          profit?: number | null
+          profit_pips?: number | null
+          status?: string
+          stop_loss?: number | null
+          swap?: number | null
+          symbol: string
+          take_profit?: number | null
+          ticket_id?: string | null
+          trade_type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          closed_at?: string | null
+          commission?: number | null
+          created_at?: string
+          current_price?: number | null
+          entry_price?: number
+          id?: string
+          lot_size?: number
+          opened_at?: string
+          pair_id?: string | null
+          profit?: number | null
+          profit_pips?: number | null
+          status?: string
+          stop_loss?: number | null
+          swap?: number | null
+          symbol?: string
+          take_profit?: number | null
+          ticket_id?: string | null
+          trade_type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_trades_pair_id_fkey"
+            columns: ["pair_id"]
+            isOneToOne: false
+            referencedRelation: "currency_pairs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       news_sentiment: {
         Row: {
           affected_pairs: string[] | null
@@ -354,6 +431,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      trading_accounts: {
+        Row: {
+          account_number: string
+          balance: number | null
+          created_at: string
+          currency: string | null
+          equity: number | null
+          free_margin: number | null
+          id: string
+          is_active: boolean | null
+          is_demo: boolean | null
+          leverage: string | null
+          margin: number | null
+          margin_level: number | null
+          server: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_number: string
+          balance?: number | null
+          created_at?: string
+          currency?: string | null
+          equity?: number | null
+          free_margin?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_demo?: boolean | null
+          leverage?: string | null
+          margin?: number | null
+          margin_level?: number | null
+          server: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_number?: string
+          balance?: number | null
+          created_at?: string
+          currency?: string | null
+          equity?: number | null
+          free_margin?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_demo?: boolean | null
+          leverage?: string | null
+          margin?: number | null
+          margin_level?: number | null
+          server?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       trading_signals: {
         Row: {
