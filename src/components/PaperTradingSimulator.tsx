@@ -77,6 +77,8 @@ export const PaperTradingSimulator = () => {
 
   // Calculate P&L for active trades
   useEffect(() => {
+    if (activeTrades.length === 0) return;
+
     const updatedTrades = activeTrades.map(trade => {
       const currentPrice = currentPrices[trade.pair] || trade.entryPrice;
       const priceDiff = trade.type === "BUY" 
@@ -87,19 +89,53 @@ export const PaperTradingSimulator = () => {
       return { ...trade, currentPrice, pnl };
     });
 
-    setActiveTrades(updatedTrades);
+    // Only update if there's actually a change to prevent infinite loops
+    const hasChanges = updatedTrades.some((trade, index) => 
+      trade.currentPrice !== activeTrades[index]?.currentPrice || 
+      trade.pnl !== activeTrades[index]?.pnl
+    );
+
+    if (hasChanges) {
+      setActiveTrades(updatedTrades);
+    }
     
     // Update equity
     const totalPnL = updatedTrades.reduce((sum, trade) => sum + trade.pnl, 0);
-    setEquity(balance + totalPnL);
+    const newEquity = balance + totalPnL;
+    if (Math.abs(newEquity - equity) > 0.01) {
+      setEquity(newEquity);
+    }
     
     // Update margin (simplified calculation)
     const totalMargin = updatedTrades.reduce((sum, trade) => 
       sum + (trade.lotSize * 100000 * 0.01), 0
     );
-    setMargin(totalMargin);
-    setFreeMargin(equity - totalMargin);
-  }, [activeTrades, balance]);
+    if (Math.abs(totalMargin - margin) > 0.01) {
+      setMargin(totalMargin);
+      setFreeMargin(newEquity - totalMargin);
+    }
+  }, [balance]); // Only depend on balance, not activeTrades to prevent loops
+
+  // Update prices periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (activeTrades.length > 0) {
+        const updatedTrades = activeTrades.map(trade => {
+          const currentPrice = currentPrices[trade.pair] || trade.entryPrice;
+          const priceDiff = trade.type === "BUY" 
+            ? currentPrice - trade.entryPrice 
+            : trade.entryPrice - currentPrice;
+          const pnl = priceDiff * trade.lotSize * 100000;
+
+          return { ...trade, currentPrice, pnl };
+        });
+
+        setActiveTrades(updatedTrades);
+      }
+    }, 5000); // Update every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [activeTrades.length]); // Only depend on length to prevent infinite loops
 
   const executeTrade = () => {
     if (!newTrade.pair || newTrade.lotSize <= 0) return;
