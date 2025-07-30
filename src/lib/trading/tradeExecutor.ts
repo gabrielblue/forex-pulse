@@ -185,8 +185,8 @@ class TradeExecutor {
         .from('live_trades')
         .insert({
           user_id: user.id,
-          account_id: account.id,
           pair_id: pair.id,
+          symbol: request.symbol,
           trade_type: request.type,
           lot_size: request.volume,
           entry_price: executionPrice,
@@ -194,14 +194,14 @@ class TradeExecutor {
           stop_loss: request.stopLoss,
           take_profit: request.takeProfit,
           status: 'OPEN',
-          broker_trade_id: `MT5_${Date.now()}`,
+          ticket_id: `MT5_${Date.now()}`,
           opened_at: new Date().toISOString()
         });
 
       if (error) throw error;
 
       // Update account margin (simplified calculation)
-      await this.updateAccountMargin(account.id, request.volume);
+      await this.updateAccountMargin(user.id, request.volume);
       
     } catch (error) {
       console.error('Database execution error:', error);
@@ -209,18 +209,28 @@ class TradeExecutor {
     }
   }
 
-  private async updateAccountMargin(accountId: string, volume: number): Promise<void> {
+  private async updateAccountMargin(userId: string, volume: number): Promise<void> {
     try {
       // Simplified margin calculation: $1000 per lot
       const marginRequired = volume * 1000;
       
-      const { error } = await supabase.rpc('update_account_margin', {
-        p_account_id: accountId,
-        p_margin_change: marginRequired
-      });
+      // Update margin in trading_accounts table
+      const { data: account } = await supabase
+        .from('trading_accounts')
+        .select('margin')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .single();
 
-      if (error) {
-        console.error('Failed to update account margin:', error);
+      if (account) {
+        await supabase
+          .from('trading_accounts')
+          .update({ 
+            margin: (account.margin || 0) + marginRequired,
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', userId)
+          .eq('is_active', true);
       }
     } catch (error) {
       console.error('Margin update error:', error);

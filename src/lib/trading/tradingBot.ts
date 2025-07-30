@@ -251,14 +251,17 @@ class TradingBot {
 
       const today = new Date().toISOString().split('T')[0];
       
-      const { data: performance } = await supabase
-        .from('bot_performance')
-        .select('total_profit')
+      // Calculate daily P&L from live_trades
+      const { data: trades } = await supabase
+        .from('live_trades')
+        .select('profit')
         .eq('user_id', user.id)
-        .eq('date', today)
-        .single();
+        .gte('opened_at', today);
 
-      return parseFloat(performance?.total_profit?.toString() || '0');
+      const dailyProfit = trades?.reduce((sum, trade) => 
+        sum + (parseFloat(trade.profit?.toString() || '0')), 0) || 0;
+
+      return dailyProfit;
     } catch (error) {
       console.error('Failed to get daily loss:', error);
       return 0;
@@ -270,24 +273,18 @@ class TradingBot {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Get recent performance data
-      const { data: performance } = await supabase
-        .from('bot_performance')
+      // Get performance data from user_portfolios
+      const { data: portfolio } = await supabase
+        .from('user_portfolios')
         .select('*')
         .eq('user_id', user.id)
-        .order('date', { ascending: false })
-        .limit(7);
+        .single();
 
-      if (performance && performance.length > 0) {
-        const latest = performance[0];
-        this.status.totalTrades = latest.total_trades || 0;
-        this.status.winRate = parseFloat(latest.win_rate?.toString() || '0');
-        this.status.dailyPnL = parseFloat(latest.total_profit?.toString() || '0');
-        
-        // Calculate weekly P&L
-        this.status.weeklyPnL = performance.reduce((sum, day) => 
-          sum + parseFloat(day.total_profit?.toString() || '0'), 0
-        );
+      if (portfolio) {
+        this.status.totalTrades = portfolio.total_trades || 0;
+        this.status.winRate = parseFloat(portfolio.win_rate?.toString() || '0');
+        this.status.dailyPnL = parseFloat(portfolio.daily_pnl?.toString() || '0');
+        this.status.weeklyPnL = parseFloat(portfolio.total_pnl?.toString() || '0');
       }
     } catch (error) {
       console.error('Failed to update performance metrics:', error);
