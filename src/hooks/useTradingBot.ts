@@ -35,10 +35,16 @@ export const useTradingBot = () => {
   useEffect(() => {
     initializeBot();
     
-    // Update status every 30 seconds
+    // Update status every 30 seconds - keep running even when component unmounts
     const interval = setInterval(updateStatus, 30000);
     
-    return () => clearInterval(interval);
+    // Don't clear interval on unmount to keep bot persistent
+    return () => {
+      // Only clear if explicitly stopping the bot
+      if (!status.isActive) {
+        clearInterval(interval);
+      }
+    };
   }, []);
 
   const initializeBot = async () => {

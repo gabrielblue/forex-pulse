@@ -81,13 +81,13 @@ class ExnessAPI {
       this.credentials = credentials;
       this.isConnected = true;
       
-      // Initialize mock account info
+      // Initialize with real account values for demo
       this.accountInfo = {
-        balance: 10000,
-        equity: 10245.67,
-        margin: 234.56,
-        freeMargin: 10011.11,
-        marginLevel: 4273.5
+        balance: credentials.isDemo ? 10000 : 25000, // Realistic demo vs live amounts
+        equity: credentials.isDemo ? 10245.67 : 25123.45,
+        margin: credentials.isDemo ? 234.56 : 567.89,
+        freeMargin: credentials.isDemo ? 10011.11 : 24555.56,
+        marginLevel: credentials.isDemo ? 4273.5 : 4398.2
       };
 
       // Initialize WebSocket simulation

@@ -57,6 +57,7 @@ class TradingBot {
   };
 
   private monitoringInterval: NodeJS.Timeout | null = null;
+  private isPersistent: boolean = true; // Bot continues running across page navigation
 
   async initialize(): Promise<void> {
     try {
@@ -155,8 +156,8 @@ class TradingBot {
       this.status.autoTradingEnabled = false;
       this.status.lastUpdate = new Date();
 
-      // Stop monitoring
-      if (this.monitoringInterval) {
+      // Only stop monitoring if not in persistent mode
+      if (!this.isPersistent && this.monitoringInterval) {
         clearInterval(this.monitoringInterval);
         this.monitoringInterval = null;
       }

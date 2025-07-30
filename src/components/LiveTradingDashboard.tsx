@@ -169,20 +169,23 @@ export const LiveTradingDashboard = () => {
 
   const loadAccountInfo = async () => {
     try {
-      // Try to get real account info if connected to Exness
+      // Always try to get real account info if connected to Exness
       if (exnessAPI.isConnectedToExness()) {
         const realInfo = await exnessAPI.getAccountInfo();
         setRealAccountInfo(realInfo);
         setAccountInfo(realInfo);
+        console.log('Loaded real Exness account info:', realInfo);
       } else {
         // Use mock data for paper trading
-        setAccountInfo({
+        const mockInfo = {
           balance: 10000,
           equity: 10022.50,
           margin: 234.56,
           freeMargin: 9787.94,
           marginLevel: 4273.5
-        });
+        };
+        setAccountInfo(mockInfo);
+        console.log('Using mock account info for paper trading');
       }
     } catch (error) {
       console.error('Failed to load account info:', error);
