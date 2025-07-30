@@ -73,6 +73,11 @@ class OrderManager {
 
   async executeOrder(orderRequest: OrderRequest): Promise<string | null> {
     try {
+      // Ensure we're connected to Exness
+      if (!exnessAPI.isConnectedToExness()) {
+        throw new Error('Not connected to Exness. Please connect your account first.');
+      }
+
       // Pre-execution risk checks
       const riskCheck = await this.performRiskChecks(orderRequest);
       if (!riskCheck.passed) {
@@ -82,12 +87,20 @@ class OrderManager {
       // Calculate position size based on risk
       const adjustedVolume = await this.calculatePositionSize(orderRequest);
 
+      // Get current market price for execution
+      const marketPrice = await exnessAPI.getCurrentPrice(orderRequest.symbol);
+      if (!marketPrice) {
+        throw new Error(`Unable to get current price for ${orderRequest.symbol}`);
+      }
+
+      const executionPrice = orderRequest.type === 'BUY' ? marketPrice.ask : marketPrice.bid;
+
       // Prepare order for execution
       const order: TradeOrder = {
         symbol: orderRequest.symbol,
         type: orderRequest.type,
         volume: adjustedVolume,
-        price: this.getBasePrice(orderRequest.symbol), // Add required price field
+        price: executionPrice,
         stopLoss: orderRequest.stopLoss,
         takeProfit: orderRequest.takeProfit,
         comment: orderRequest.comment || 'Auto-trade'
@@ -119,7 +132,13 @@ class OrderManager {
 
     // Check if Exness is connected
     if (!exnessAPI.isConnectedToExness()) {
-      return { passed: false, reason: 'Not connected to Exness' };
+      return { passed: false, reason: 'Not connected to Exness API' };
+    }
+
+    // Get real account info from Exness
+    const accountInfo = await exnessAPI.getAccountInfo();
+    if (!accountInfo) {
+      return { passed: false, reason: 'Unable to fetch account information from Exness' };
     }
 
     // Check position size limit
@@ -130,10 +149,15 @@ class OrderManager {
 
     // Check daily loss limit
     const dailyLoss = await this.getDailyLoss();
-    const accountInfo = await exnessAPI.getAccountInfo();
     
-    if (accountInfo && dailyLoss > (accountInfo.balance * this.riskParameters.maxDailyLoss / 100)) {
+    if (dailyLoss > (accountInfo.balance * this.riskParameters.maxDailyLoss / 100)) {
       return { passed: false, reason: 'Daily loss limit exceeded' };
+    }
+
+    // Check margin requirements
+    const requiredMargin = this.calculateRequiredMargin(orderRequest, accountInfo);
+    if (requiredMargin > accountInfo.freeMargin) {
+      return { passed: false, reason: 'Insufficient free margin for this trade' };
     }
 
     // Check if stop loss is required and provided
@@ -144,6 +168,15 @@ class OrderManager {
     return { passed: true };
   }
 
+  private calculateRequiredMargin(orderRequest: OrderRequest, accountInfo: AccountInfo): number {
+    // Simplified margin calculation
+    // In reality, this would depend on the leverage and contract size
+    const leverage = parseInt(accountInfo.leverage.split(':')[1] || '100');
+    const contractSize = 100000; // Standard lot
+    const positionValue = orderRequest.volume * contractSize;
+    
+    return positionValue / leverage;
+  }
   private async calculatePositionSize(orderRequest: OrderRequest): Promise<number> {
     if (!this.riskParameters) return orderRequest.volume;
 
@@ -248,15 +281,128 @@ class OrderManager {
   }
 
   async getOpenPositions() {
-    return await exnessAPI.getPositions();
+    try {
+      // Get positions from Exness API
+      const exnessPositions = await exnessAPI.getPositions();
+      
+      // Sync with local database
+      await this.syncPositionsWithDatabase(exnessPositions);
+      
+      return exnessPositions;
+    } catch (error) {
+      console.error('Failed to get open positions:', error);
+      return [];
+    }
+  }
+
+  private async syncPositionsWithDatabase(positions: any[]): Promise<void> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Update existing positions or create new ones
+      for (const position of positions) {
+        await supabase
+          .from('live_trades')
+          .upsert({
+            user_id: user.id,
+            ticket_id: position.ticketId,
+            symbol: position.symbol,
+            trade_type: position.type,
+            lot_size: position.volume,
+            entry_price: position.openPrice,
+            current_price: position.currentPrice,
+            profit: position.profit,
+            stop_loss: position.stopLoss,
+            take_profit: position.takeProfit,
+            status: 'OPEN',
+            opened_at: position.openTime.toISOString()
+          });
+      }
+    } catch (error) {
+      console.error('Failed to sync positions with database:', error);
+    }
   }
 
   async closePosition(ticket: number): Promise<boolean> {
-    return await exnessAPI.closePosition(ticket);
+    try {
+      const success = await exnessAPI.closePosition(ticket);
+      
+      if (success) {
+        // Update local database
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase
+            .from('live_trades')
+            .update({
+              status: 'CLOSED',
+              closed_at: new Date().toISOString()
+            })
+            .eq('ticket_id', ticket.toString())
+            .eq('user_id', user.id);
+        }
+      }
+      
+      return success;
+    } catch (error) {
+      console.error('Failed to close position:', error);
+      return false;
+    }
   }
 
   async closeAllPositions(): Promise<void> {
-    const positions = await this.getOpenPositions();
+    try {
+      const positions = await this.getOpenPositions();
+      
+      const closePromises = positions.map(position => 
+        this.closePosition(position.ticket)
+      );
+      
+      const results = await Promise.allSettled(closePromises);
+      
+      const successCount = results.filter(result => 
+        result.status === 'fulfilled' && result.value === true
+      ).length;
+      
+      console.log(`Closed ${successCount} out of ${positions.length} positions`);
+      
+    } catch (error) {
+      console.error('Failed to close all positions:', error);
+    }
+  }
+
+  // New method to get real-time account status
+  async getAccountStatus(): Promise<any> {
+    try {
+      const accountInfo = await exnessAPI.getAccountInfo();
+      const positions = await this.getOpenPositions();
+      
+      return {
+        accountInfo,
+        openPositions: positions.length,
+        totalUnrealizedPnL: positions.reduce((sum, pos) => sum + pos.profit, 0),
+        isConnected: exnessAPI.isConnectedToExness(),
+        connectionStatus: exnessAPI.getConnectionStatus()
+      };
+    } catch (error) {
+      console.error('Failed to get account status:', error);
+      return null;
+    }
+  }
+
+  // Method to validate if we can trade a specific symbol
+  async canTradeSymbol(symbol: string): Promise<boolean> {
+    try {
+      const price = await exnessAPI.getCurrentPrice(symbol);
+      return price !== null;
+    } catch (error) {
+      console.error(`Cannot trade symbol ${symbol}:`, error);
+      return false;
+    }
+  }
+}
+
+export const orderManager = new OrderManager();
     
     for (const position of positions) {
       try {

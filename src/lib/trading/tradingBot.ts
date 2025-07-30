@@ -112,11 +112,30 @@ class TradingBot {
 
   async connectToExness(credentials: ExnessCredentials): Promise<boolean> {
     try {
+      // First test the connection
+      const testResult = await exnessAPI.testConnection(credentials);
+      if (!testResult.success) {
+        throw new Error(testResult.message);
+      }
+
+      // If test passes, establish full connection
       const connected = await exnessAPI.connect(credentials);
       this.status.isConnected = connected;
       
       if (connected) {
-        console.log('Successfully connected to Exness');
+        console.log('Successfully connected to Exness API');
+        
+        // Get real account information
+        const accountInfo = await exnessAPI.getAccountInfo();
+        if (accountInfo) {
+          console.log('Account Info:', {
+            balance: accountInfo.balance,
+            equity: accountInfo.equity,
+            currency: accountInfo.currency,
+            leverage: accountInfo.leverage
+          });
+        }
+        
         await this.updateStatus();
       }
       
@@ -130,7 +149,12 @@ class TradingBot {
 
   async startBot(): Promise<void> {
     if (!this.status.isConnected) {
-      throw new Error('Bot must be connected to Exness before starting');
+      throw new Error('Bot must be connected to Exness API before starting. Please connect your account first.');
+    }
+
+    // Verify connection is still active
+    if (!exnessAPI.isConnectedToExness()) {
+      throw new Error('Lost connection to Exness. Please reconnect your account.');
     }
 
     try {
@@ -205,7 +229,16 @@ class TradingBot {
   private async performHealthChecks(): Promise<void> {
     // Check Exness connection
     if (!exnessAPI.isConnectedToExness()) {
-      console.warn('Lost connection to Exness');
+      console.warn('Lost connection to Exness API');
+      this.status.isConnected = false;
+      await this.stopBot();
+      return;
+    }
+
+    // Verify we can still get account info
+    const accountInfo = await exnessAPI.getAccountInfo();
+    if (!accountInfo) {
+      console.warn('Cannot fetch account information from Exness');
       this.status.isConnected = false;
       await this.stopBot();
       return;
@@ -213,9 +246,8 @@ class TradingBot {
 
     // Check daily loss limits
     const dailyLoss = await this.getDailyLoss();
-    const accountInfo = await exnessAPI.getAccountInfo();
     
-    if (accountInfo && Math.abs(dailyLoss) > (accountInfo.balance * this.configuration.maxDailyLoss / 100)) {
+    if (Math.abs(dailyLoss) > (accountInfo.balance * this.configuration.maxDailyLoss / 100)) {
       console.warn('Daily loss limit exceeded, stopping bot');
       await this.emergencyStop('Daily loss limit exceeded');
       return;
@@ -369,11 +401,52 @@ class TradingBot {
   }
 
   async getRecentTrades(limit: number = 10) {
-    return await orderManager.getOpenPositions();
+    try {
+      // Get both open positions and recent closed trades
+      const openPositions = await orderManager.getOpenPositions();
+      
+      // Get recent closed trades from database
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return openPositions;
+
+      const { data: closedTrades } = await supabase
+        .from('live_trades')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'CLOSED')
+        .order('closed_at', { ascending: false })
+        .limit(limit);
+
+      return {
+        openPositions,
+        recentClosedTrades: closedTrades || []
+      };
+    } catch (error) {
+      console.error('Failed to get recent trades:', error);
+      return [];
+    }
   }
 
   async closeAllPositions(): Promise<void> {
     await orderManager.closeAllPositions();
+  }
+
+  // New method to get comprehensive trading status
+  async getTradingStatus(): Promise<any> {
+    try {
+      const accountStatus = await orderManager.getAccountStatus();
+      const recentTrades = await this.getRecentTrades(5);
+      
+      return {
+        ...accountStatus,
+        botStatus: this.status,
+        configuration: this.configuration,
+        recentTrades
+      };
+    } catch (error) {
+      console.error('Failed to get trading status:', error);
+      return null;
+    }
   }
 }
 

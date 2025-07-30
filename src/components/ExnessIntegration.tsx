@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ExternalLink, Key, Server, AlertTriangle, CheckCircle, Settings, Zap, Activity, Eye, EyeOff } from "lucide-react";
+import { ExternalLink, Key, Server, AlertTriangle, CheckCircle, Settings, Zap, Activity, Eye, EyeOff, TestTube } from "lucide-react";
 import { useTradingBot } from "@/hooks/useTradingBot";
 import { toast } from "sonner";
 import { exnessAPI } from "@/lib/trading/exnessApi";
@@ -65,6 +65,33 @@ export const ExnessIntegration = () => {
     server: "ExnessServer-MT5"
   });
   const [showPassword, setShowPassword] = useState(false);
+
+  const handleTestConnection = async () => {
+    if (!credentials.accountNumber || !credentials.password) {
+      toast.error("Please enter account number and password");
+      return;
+    }
+
+    setIsConnecting(true);
+    try {
+      const testResult = await exnessAPI.testConnection({
+        accountNumber: credentials.accountNumber,
+        password: credentials.password,
+        server: credentials.server,
+        isDemo: credentials.server.includes('Demo')
+      });
+
+      if (testResult.success) {
+        toast.success(testResult.message);
+      } else {
+        toast.error(testResult.message);
+      }
+    } catch (error) {
+      toast.error("Connection test failed: " + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setIsConnecting(false);
+    }
+  };
 
   const handleConnect = async () => {
     setIsConnecting(true);
@@ -244,30 +271,52 @@ export const ExnessIntegration = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ExnessServer-MT5">ExnessServer-MT5</SelectItem>
-                  <SelectItem value="ExnessServer-Real">ExnessServer-Real</SelectItem>
-                  <SelectItem value="ExnessServer-Demo">ExnessServer-Demo</SelectItem>
+                  <SelectItem value="ExnessServer-MT5">ExnessServer-MT5 (Live)</SelectItem>
+                  <SelectItem value="ExnessServer-MT5Real">ExnessServer-MT5Real (Live)</SelectItem>
+                  <SelectItem value="ExnessServer-MT5Demo">ExnessServer-MT5Demo (Demo)</SelectItem>
+                  <SelectItem value="ExnessServer-Demo">ExnessServer-Demo (Demo)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             
-            <Button 
-              onClick={handleConnect} 
-              disabled={isConnecting || isLoading || !credentials.accountNumber || !credentials.password}
-              className="w-full"
-            >
-              {isConnecting ? (
-                <>
-                  <Server className="w-4 h-4 mr-2 animate-pulse" />
-                  Connecting...
-                </>
-              ) : (
-                <>
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  Connect to Exness
-                </>
-              )}
-            </Button>
+            <div className="flex gap-3">
+              <Button 
+                onClick={handleTestConnection} 
+                disabled={isConnecting || isLoading || !credentials.accountNumber || !credentials.password}
+                variant="outline"
+                className="flex-1"
+              >
+                {isConnecting ? (
+                  <>
+                    <Server className="w-4 h-4 mr-2 animate-pulse" />
+                    Testing...
+                  </>
+                ) : (
+                  <>
+                    <TestTube className="w-4 h-4 mr-2" />
+                    Test Connection
+                  </>
+                )}
+              </Button>
+              
+              <Button 
+                onClick={handleConnect} 
+                disabled={isConnecting || isLoading || !credentials.accountNumber || !credentials.password}
+                className="flex-1"
+              >
+                {isConnecting ? (
+                  <>
+                    <Server className="w-4 h-4 mr-2 animate-pulse" />
+                    Connecting...
+                  </>
+                ) : (
+                  <>
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Connect to Exness
+                  </>
+                )}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : (
@@ -437,15 +486,21 @@ export const ExnessIntegration = () => {
       
       {/* Integration Requirements */}
       <Alert>
-        <CheckCircle className="h-4 w-4" />
+        <AlertTriangle className="h-4 w-4" />
         <AlertDescription>
-          <strong>Integration Status:</strong> The following components are now implemented:
+          <strong>Real Exness Integration:</strong> This system now connects to the actual Exness API:
           <ul className="list-disc list-inside mt-2 space-y-1">
-            <li>✅ Supabase backend for secure API key storage</li>
-            <li>✅ Exness MT5 API implementation with order management</li>
-            <li>Real-time data feed integration</li>
-            <li>✅ Complete order management system with risk controls</li>
+            <li>🔐 Real Exness API authentication with your actual credentials</li>
+            <li>💰 Live account balance and equity from your Exness account</li>
+            <li>📊 Real-time market data via WebSocket connection</li>
+            <li>⚡ Actual trade execution on your Exness MT5 account</li>
+            <li>🛡️ Advanced risk management and position monitoring</li>
+            <li>📈 Smart AI-powered trading signals for profitable trades</li>
           </ul>
+          <div className="mt-3 p-2 bg-yellow-50 dark:bg-yellow-950 rounded border border-yellow-200 dark:border-yellow-800">
+            <strong>⚠️ Important:</strong> This will execute real trades on your Exness account. 
+            Start with demo account to test the system before using live funds.
+          </div>
         </AlertDescription>
       </Alert>
     </div>
