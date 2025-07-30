@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ExternalLink, Key, Server, AlertTriangle, CheckCircle, Settings, Zap, Activity, Eye, EyeOff } from "lucide-react";
 import { useTradingBot } from "@/hooks/useTradingBot";
 import { toast } from "sonner";
+import { exnessAPI } from "@/lib/trading/exnessApi";
 
 interface ExnessAccount {
   accountId: string;
@@ -56,6 +57,7 @@ export const ExnessIntegration = () => {
     ...mockAccount,
     connected: status.isConnected
   });
+  const [realAccountInfo, setRealAccountInfo] = useState<any>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [credentials, setCredentials] = useState({
     accountNumber: "",
@@ -78,7 +80,18 @@ export const ExnessIntegration = () => {
       
       if (connected) {
         setAccount(prev => ({ ...prev, connected: true }));
-        toast.success("Successfully connected to Exness!");
+        // Get real account information
+        const accountInfo = await exnessAPI.getAccountInfo();
+        setRealAccountInfo(accountInfo);
+        setAccount(prev => ({
+          ...prev,
+          balance: accountInfo.balance,
+          equity: accountInfo.equity,
+          margin: accountInfo.margin,
+          freeMargin: accountInfo.freeMargin,
+          connected: true
+        }));
+        toast.success(`Successfully connected to Exness! Balance: $${accountInfo.balance.toFixed(2)}`);
       } else {
         toast.error("Failed to connect to Exness. Please check your credentials.");
       }
@@ -91,6 +104,8 @@ export const ExnessIntegration = () => {
 
   const handleDisconnect = () => {
     setAccount(prev => ({ ...prev, connected: false }));
+    setRealAccountInfo(null);
+    exnessAPI.disconnect();
     stopBot();
   };
 
@@ -305,7 +320,7 @@ export const ExnessIntegration = () => {
             
             <Card>
               <CardContent className="p-4">
-                <div className="text-sm font-medium text-muted-foreground">Balance</div>
+                <div className="text-sm font-medium text-muted-foreground">Investment Amount</div>
                 <div className="text-2xl font-bold">${account.balance.toLocaleString()}</div>
                 <div className="text-xs text-muted-foreground mt-1">{account.currency}</div>
               </CardContent>
@@ -313,7 +328,7 @@ export const ExnessIntegration = () => {
             
             <Card>
               <CardContent className="p-4">
-                <div className="text-sm font-medium text-muted-foreground">Equity</div>
+                <div className="text-sm font-medium text-muted-foreground">Grid Profit</div>
                 <div className="text-2xl font-bold text-bullish">${account.equity.toLocaleString()}</div>
                 <div className="text-xs text-bullish mt-1">+{((account.equity - account.balance) / account.balance * 100).toFixed(2)}%</div>
               </CardContent>
@@ -321,17 +336,19 @@ export const ExnessIntegration = () => {
             
             <Card>
               <CardContent className="p-4">
-                <div className="text-sm font-medium text-muted-foreground">Free Margin</div>
-                <div className="text-2xl font-bold">${account.freeMargin.toLocaleString()}</div>
-                <div className="text-xs text-muted-foreground mt-1">Available for trading</div>
+                <div className="text-sm font-medium text-muted-foreground">Variable P&L</div>
+                <div className={`text-2xl font-bold ${(account.equity - account.balance) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                  {(account.equity - account.balance) >= 0 ? '+' : ''}${(account.equity - account.balance).toFixed(2)}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">Unrealized profit/loss</div>
               </CardContent>
             </Card>
             
             <Card>
               <CardContent className="p-4">
-                <div className="text-sm font-medium text-muted-foreground">Leverage</div>
-                <div className="text-2xl font-bold text-accent">{account.leverage}</div>
-                <div className="text-xs text-muted-foreground mt-1">{account.accountType.toUpperCase()} Account</div>
+                <div className="text-sm font-medium text-muted-foreground">P&L Ratio</div>
+                <div className="text-2xl font-bold text-accent">{status.winRate.toFixed(1)}%</div>
+                <div className="text-xs text-muted-foreground mt-1">Win rate from {status.totalTrades} trades</div>
               </CardContent>
             </Card>
           </div>

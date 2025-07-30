@@ -15,9 +15,11 @@ import {
   CheckCircle,
   X,
   RefreshCw
-} from "lucide-react";
+ } from "lucide-react";
 import { useTradingBot } from "@/hooks/useTradingBot";
 import { supabase } from "@/integrations/supabase/client";
+import { exnessAPI } from "@/lib/trading/exnessApi";
+import { orderManager } from "@/lib/trading/orderManager";
 
 interface LivePosition {
   id: string;
@@ -46,6 +48,7 @@ export const LiveTradingDashboard = () => {
   const { status, isLoading } = useTradingBot();
   const [positions, setPositions] = useState<LivePosition[]>([]);
   const [marketPrices, setMarketPrices] = useState<MarketPrice[]>([]);
+  const [realAccountInfo, setRealAccountInfo] = useState<any>(null);
   const [accountInfo, setAccountInfo] = useState({
     balance: 0,
     equity: 0,
@@ -166,14 +169,21 @@ export const LiveTradingDashboard = () => {
 
   const loadAccountInfo = async () => {
     try {
-      // Generate mock account info for now
-      setAccountInfo({
-        balance: 10000,
-        equity: 10022.50,
-        margin: 234.56,
-        freeMargin: 9787.94,
-        marginLevel: 4273.5
-      });
+      // Try to get real account info if connected to Exness
+      if (exnessAPI.isConnectedToExness()) {
+        const realInfo = await exnessAPI.getAccountInfo();
+        setRealAccountInfo(realInfo);
+        setAccountInfo(realInfo);
+      } else {
+        // Use mock data for paper trading
+        setAccountInfo({
+          balance: 10000,
+          equity: 10022.50,
+          margin: 234.56,
+          freeMargin: 9787.94,
+          marginLevel: 4273.5
+        });
+      }
     } catch (error) {
       console.error('Failed to load account info:', error);
     }
@@ -181,7 +191,11 @@ export const LiveTradingDashboard = () => {
 
   const closePosition = async (positionId: string) => {
     try {
-      // Remove position from mock data
+      // If connected to Exness, close position through API
+      if (exnessAPI.isConnectedToExness()) {
+        await orderManager.closePosition(parseInt(positionId));
+      }
+      // Remove position from local state
       setPositions(prev => prev.filter(pos => pos.id !== positionId));
       console.log('Position closed:', positionId);
     } catch (error) {
@@ -203,52 +217,68 @@ export const LiveTradingDashboard = () => {
   };
 
   const totalUnrealizedPnL = positions.reduce((sum, pos) => sum + pos.profit, 0);
+  const gridProfit = accountInfo.equity - accountInfo.balance;
+  const investmentAmount = accountInfo.balance;
+  const winRate = status.winRate;
 
   return (
     <div className="space-y-6">
-      {/* Account Overview */}
+      {/* Account Overview - Key Metrics You Requested */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">Balance</div>
+            <div className="text-sm text-muted-foreground">Investment Amount</div>
             <div className="text-2xl font-bold text-foreground">
-              {formatCurrency(accountInfo.balance)}
+              {formatCurrency(investmentAmount)}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {realAccountInfo ? 'Live Account' : 'Paper Trading'}
             </div>
           </CardContent>
         </Card>
         
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">Equity</div>
-            <div className="text-2xl font-bold text-bullish">
-              {formatCurrency(accountInfo.equity)}
+            <div className="text-sm text-muted-foreground">Grid Profit</div>
+            <div className={`text-2xl font-bold ${gridProfit >= 0 ? 'text-bullish' : 'text-bearish'}`}>
+              {gridProfit >= 0 ? '+' : ''}{formatCurrency(gridProfit)}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Total realized profit/loss
             </div>
           </CardContent>
         </Card>
         
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">Unrealized P&L</div>
+            <div className="text-sm text-muted-foreground">Variable P&L</div>
             <div className={`text-2xl font-bold ${totalUnrealizedPnL >= 0 ? 'text-bullish' : 'text-bearish'}`}>
               {totalUnrealizedPnL >= 0 ? '+' : ''}{formatCurrency(totalUnrealizedPnL)}
             </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">Free Margin</div>
-            <div className="text-2xl font-bold text-foreground">
-              {formatCurrency(accountInfo.freeMargin)}
+            <div className="text-xs text-muted-foreground mt-1">
+              Open positions unrealized P&L
             </div>
           </CardContent>
         </Card>
         
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">Margin Level</div>
-            <div className="text-2xl font-bold text-accent">
-              {accountInfo.marginLevel.toFixed(1)}%
+            <div className="text-sm text-muted-foreground">P&L Ratio</div>
+            <div className="text-2xl font-bold text-accent">{winRate.toFixed(1)}%</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Win rate from {status.totalTrades} trades
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-sm text-muted-foreground">Account Equity</div>
+            <div className="text-2xl font-bold text-foreground">
+              {formatCurrency(accountInfo.equity)}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Balance + Unrealized P&L
             </div>
           </CardContent>
         </Card>
@@ -413,7 +443,12 @@ export const LiveTradingDashboard = () => {
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh Data
             </Button>
-            <Button variant="outline" onClick={() => setPositions([])}>
+            <Button variant="outline" onClick={async () => {
+              if (exnessAPI.isConnectedToExness()) {
+                await orderManager.closeAllPositions();
+              }
+              setPositions([]);
+            }}>
               Close All Positions
             </Button>
             <Button variant="outline" onClick={() => alert("Trading history exported!")}>
