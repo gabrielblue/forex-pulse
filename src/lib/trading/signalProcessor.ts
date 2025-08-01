@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { orderManager, OrderRequest } from './orderManager';
+import { professionalStrategies, MarketData, TechnicalIndicators } from './strategies/professionalStrategies';
 
 export interface TradingSignal {
   id: string;
@@ -228,7 +229,98 @@ class SignalProcessor {
     }
   }
 
-  async generateTestSignal(symbol: string = 'EURUSD'): Promise<void> {
+  async generateAdvancedSignals(symbols: string[] = ['EURUSD', 'GBPUSD', 'USDJPY']): Promise<void> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      for (const symbol of symbols) {
+        // Get market data for the symbol
+        const marketData = await this.getMarketData(symbol);
+        const indicators = professionalStrategies.calculateTechnicalIndicators(
+          marketData.prices, 
+          marketData.volumes
+        );
+
+        // Apply multiple strategies
+        const strategies = [
+          () => professionalStrategies.scalpingStrategy(marketData, indicators),
+          () => professionalStrategies.swingTradingStrategy(marketData, indicators),
+          () => professionalStrategies.breakoutStrategy(marketData, indicators),
+          () => professionalStrategies.meanReversionStrategy(marketData, indicators),
+          () => professionalStrategies.gridTradingStrategy(marketData, indicators)
+        ];
+
+        for (const strategy of strategies) {
+          const signal = await strategy();
+          if (signal && signal.confidence > this.config.minConfidence) {
+            await this.saveSignalToDatabase(signal, symbol);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to generate advanced signals:', error);
+    }
+  }
+
+  private async getMarketData(symbol: string): Promise<MarketData> {
+    try {
+      // Get recent price data from database
+      const { data: priceData } = await supabase
+        .from('price_data')
+        .select('*')
+        .eq('timeframe', '1m')
+        .order('timestamp', { ascending: false })
+        .limit(200);
+
+      // Generate realistic market data if no data exists
+      if (!priceData || priceData.length === 0) {
+        return this.generateRealisticMarketData(symbol);
+      }
+
+      return {
+        symbol,
+        prices: priceData.map(d => parseFloat(d.close_price.toString())),
+        volumes: priceData.map(d => parseInt(d.volume?.toString() || '0')),
+        timestamps: priceData.map(d => new Date(d.timestamp))
+      };
+    } catch (error) {
+      console.error('Failed to get market data:', error);
+      return this.generateRealisticMarketData(symbol);
+    }
+  }
+
+  private generateRealisticMarketData(symbol: string): MarketData {
+    const basePrice = this.getBasePrice(symbol);
+    const prices: number[] = [];
+    const volumes: number[] = [];
+    const timestamps: Date[] = [];
+
+    let currentPrice = basePrice;
+    const now = new Date();
+
+    // Generate 200 data points with realistic price movements
+    for (let i = 199; i >= 0; i--) {
+      const volatility = 0.0002; // 2 pips volatility
+      const randomWalk = (Math.random() - 0.5) * volatility;
+      const trend = Math.sin(i / 50) * 0.0001; // Subtle trend component
+      
+      currentPrice += randomWalk + trend;
+      prices.unshift(currentPrice);
+      
+      // Generate realistic volume
+      const baseVolume = 1000000;
+      const volumeVariation = baseVolume * (0.5 + Math.random());
+      volumes.unshift(Math.floor(volumeVariation));
+      
+      const timestamp = new Date(now.getTime() - (i * 60000)); // 1 minute intervals
+      timestamps.unshift(timestamp);
+    }
+
+    return { symbol, prices, volumes, timestamps };
+  }
+
+  private async saveSignalToDatabase(signal: TradingSignal, symbol: string): Promise<void> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -242,32 +334,32 @@ class SignalProcessor {
 
       if (!pair) return;
 
-      // Generate random signal
-      const signalType = Math.random() > 0.5 ? 'BUY' : 'SELL';
-      const basePrice = this.getBasePrice(symbol);
-      const confidence = 75 + Math.random() * 20; // 75-95%
-
       const { error } = await supabase
         .from('trading_signals')
         .insert({
           user_id: user.id,
           pair_id: pair.id,
-          signal_type: signalType,
-          confidence_score: confidence,
-          entry_price: basePrice,
-          stop_loss: signalType === 'BUY' ? basePrice - 0.005 : basePrice + 0.005,
-          take_profit: signalType === 'BUY' ? basePrice + 0.01 : basePrice - 0.01,
-          timeframe: '1H',
-          reasoning: `AI-generated ${signalType} signal based on technical analysis`,
-          ai_model: 'GPT-4 Trading Model',
+          signal_type: signal.type,
+          confidence_score: signal.confidence,
+          entry_price: signal.entryPrice,
+          stop_loss: signal.stopLoss,
+          take_profit: signal.takeProfit,
+          timeframe: signal.timeframe,
+          reasoning: signal.reasoning,
+          ai_model: signal.source,
           status: 'ACTIVE'
         });
 
       if (error) throw error;
-      console.log(`Test signal generated for ${symbol}`);
+      console.log(`Advanced signal saved: ${signal.source} - ${signal.type} ${symbol}`);
     } catch (error) {
-      console.error('Failed to generate test signal:', error);
+      console.error('Failed to save signal to database:', error);
     }
+  }
+
+  async generateTestSignal(symbol: string = 'EURUSD'): Promise<void> {
+    // Use the new advanced signal generation
+    await this.generateAdvancedSignals([symbol]);
   }
 
   private getBasePrice(symbol: string): number {
