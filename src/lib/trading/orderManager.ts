@@ -403,31 +403,3 @@ class OrderManager {
 }
 
 export const orderManager = new OrderManager();
-    
-    for (const position of positions) {
-      try {
-        await this.closePosition(position.ticket);
-      } catch (error) {
-        console.error(`Failed to close position ${position.ticket}:`, error);
-      }
-    }
-  }
-
-  async emergencyStop(): Promise<void> {
-    console.log('EMERGENCY STOP ACTIVATED');
-    
-    // Disable auto trading
-    this.setAutoTrading(false);
-    
-    // Close all positions
-    await this.closeAllPositions();
-    
-    // Log emergency stop
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      console.log('Emergency stop executed for user:', user.id);
-    }
-  }
-}
-
-export const orderManager = new OrderManager();

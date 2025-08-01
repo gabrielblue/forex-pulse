@@ -599,18 +599,37 @@ class ExnessAPI {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // In a real implementation, you would encrypt these credentials
-      // For now, we'll store them securely in the database
-      await supabase
+      // Check if account already exists
+      const { data: existingAccount } = await supabase
         .from('trading_accounts')
-        .upsert({
-          user_id: user.id,
-          account_number: credentials.accountNumber,
-          server: credentials.server,
-          is_demo: credentials.isDemo,
-          is_active: true
-        });
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('account_number', credentials.accountNumber)
+        .single();
 
+      if (existingAccount) {
+        // Update existing account
+        await supabase
+          .from('trading_accounts')
+          .update({
+            server: credentials.server,
+            is_demo: credentials.isDemo,
+            is_active: true,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingAccount.id);
+      } else {
+        // Create new account
+        await supabase
+          .from('trading_accounts')
+          .insert({
+            user_id: user.id,
+            account_number: credentials.accountNumber,
+            server: credentials.server,
+            is_demo: credentials.isDemo,
+            is_active: true
+          });
+      }
     } catch (error) {
       console.error('Failed to store credentials:', error);
     }
