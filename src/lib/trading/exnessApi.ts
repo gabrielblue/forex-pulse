@@ -72,6 +72,13 @@ class ExnessAPI {
         isDemo: credentials.isDemo
       });
 
+      // First validate credentials with test connection
+      const testResult = await this.testConnection(credentials);
+      if (!testResult.success) {
+        console.error('Connection failed validation:', testResult.message);
+        return false;
+      }
+
       // Validate credentials format
       if (!this.validateCredentials(credentials)) {
         throw new Error('Invalid credentials format');
@@ -344,15 +351,18 @@ class ExnessAPI {
 
   private async storePriceData(priceData: any): Promise<void> {
     try {
+      // Store in price_data table instead since market_data types aren't available yet
       await supabase
-        .from('market_data')
+        .from('price_data')
         .insert({
-          symbol: priceData.symbol,
-          bid: parseFloat(priceData.bid),
-          ask: parseFloat(priceData.ask),
-          spread: parseFloat(priceData.ask) - parseFloat(priceData.bid),
+          pair_id: null, // We'll need to map symbol to pair_id later
+          timestamp: new Date().toISOString(),
+          open_price: parseFloat(priceData.bid),
+          high_price: parseFloat(priceData.ask),
+          low_price: parseFloat(priceData.bid),
+          close_price: parseFloat(priceData.ask),
           volume: parseInt(priceData.volume || '0'),
-          timestamp: new Date().toISOString()
+          timeframe: '1m'
         });
     } catch (error) {
       console.error('Failed to store price data:', error);

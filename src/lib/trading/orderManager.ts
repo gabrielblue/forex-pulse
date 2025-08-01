@@ -168,7 +168,7 @@ class OrderManager {
     return { passed: true };
   }
 
-  private calculateRequiredMargin(orderRequest: OrderRequest, accountInfo: AccountInfo): number {
+  private calculateRequiredMargin(orderRequest: OrderRequest, accountInfo: any): number {
     // Simplified margin calculation
     // In reality, this would depend on the leverage and contract size
     const leverage = parseInt(accountInfo.leverage.split(':')[1] || '100');
@@ -398,6 +398,26 @@ class OrderManager {
     } catch (error) {
       console.error(`Cannot trade symbol ${symbol}:`, error);
       return false;
+    }
+  }
+
+  async emergencyStop(): Promise<void> {
+    console.log('EMERGENCY STOP ACTIVATED');
+    
+    try {
+      // Disable auto trading
+      this.setAutoTrading(false);
+      
+      // Close all positions
+      await this.closeAllPositions();
+      
+      // Log emergency stop
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        console.log('Emergency stop executed for user:', user.id);
+      }
+    } catch (error) {
+      console.error('Emergency stop failed:', error);
     }
   }
 }
