@@ -83,11 +83,18 @@ class OrderManager {
 
   async executeOrder(orderRequest: OrderRequest): Promise<string | null> {
     try {
-      console.log('Executing REAL order on Exness:', orderRequest);
+      const accountType = exnessAPI.getAccountType();
+      console.log(`💼 Executing ${accountType?.toUpperCase()} order on Exness:`, orderRequest);
 
       // Ensure we're connected to real Exness account
       if (!exnessAPI.isConnectedToExness()) {
-        throw new Error('Not connected to real Exness account. Please connect first.');
+        throw new Error('Not connected to Exness account. Please connect first.');
+      }
+
+      // Verify trading capabilities
+      const tradingCheck = await exnessAPI.verifyTradingCapabilities();
+      if (!tradingCheck.canTrade) {
+        throw new Error(`Trading not available: ${tradingCheck.issues.join(', ')}`);
       }
 
       // Enhanced risk checks for real money trading
@@ -131,15 +138,15 @@ class OrderManager {
       if (ticket) {
         await this.logOrderExecution(enhancedOrder, ticket, 'SUCCESS');
         await this.updatePerformanceMetrics();
-        console.log(`REAL order executed successfully on Exness: ${ticket}`);
+        console.log(`✅ ${accountType?.toUpperCase()} order executed successfully on Exness: ${ticket}`);
         return ticket;
       } else {
-        throw new Error('Real order execution failed - no ticket returned from Exness');
+        throw new Error('Order execution failed - no ticket returned from Exness');
       }
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('REAL order execution failed:', errorMessage);
+      console.error('❌ Order execution failed:', errorMessage);
       await this.logOrderExecution(orderRequest, null, 'FAILED', errorMessage);
       throw error;
     }
@@ -171,14 +178,17 @@ class OrderManager {
     try {
       // Check if Exness is connected for real trading
       if (!exnessAPI.isConnectedToExness()) {
-        return { allowed: false, reason: 'Not connected to real Exness account' };
+        return { allowed: false, reason: 'Not connected to Exness account' };
       }
 
       // Get real account status from Exness
       const accountStatus = await this.getAccountStatus();
       if (!accountStatus.accountInfo) {
-        return { allowed: false, reason: 'Unable to get real account information' };
+        return { allowed: false, reason: 'Unable to get account information' };
       }
+
+      const accountType = exnessAPI.getAccountType();
+      console.log(`🔍 Performing risk checks for ${accountType?.toUpperCase()} account...`);
 
       // Enhanced daily loss protection for real money
       if (this.riskParams.maxDailyLoss > 0) {
@@ -186,7 +196,8 @@ class OrderManager {
         const dailyLossPercentage = (Math.abs(dailyLoss) / accountStatus.accountInfo.balance) * 100;
         
         if (dailyLossPercentage >= this.riskParams.maxDailyLoss) {
-          await this.emergencyStop(); // Auto-stop trading if daily limit reached
+          console.warn('⚠️ Daily loss limit reached, stopping trading');
+          await this.emergencyStop();
           return { allowed: false, reason: `Daily loss limit reached: ${dailyLossPercentage.toFixed(2)}% (max: ${this.riskParams.maxDailyLoss}%)` };
         }
       }
@@ -548,7 +559,8 @@ class OrderManager {
   }
 
   async emergencyStop(): Promise<void> {
-    console.log('EMERGENCY STOP ACTIVATED');
+    const accountType = exnessAPI.getAccountType();
+    console.log(`🚨 EMERGENCY STOP ACTIVATED for ${accountType?.toUpperCase()} account`);
     
     try {
       // Disable auto trading
@@ -560,7 +572,7 @@ class OrderManager {
       // Log emergency stop
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        console.log('Emergency stop executed for user:', user.id);
+        console.log('🚨 Emergency stop executed for user:', user.id);
       }
     } catch (error) {
       console.error('Emergency stop failed:', error);

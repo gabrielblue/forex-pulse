@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ExternalLink, Key, Server, AlertTriangle, CheckCircle, Settings, Zap, Activity, Eye, EyeOff, TestTube } from "lucide-react";
+import { ExternalLink, Key, Server, AlertTriangle, CheckCircle, Settings, Zap, Activity, Eye, EyeOff, TestTube, Wifi, WifiOff } from "lucide-react";
 import { useTradingBot } from "@/hooks/useTradingBot";
 import { toast } from "sonner";
 import { exnessAPI } from "@/lib/trading/exnessApi";
@@ -62,9 +62,11 @@ export const ExnessIntegration = () => {
   const [credentials, setCredentials] = useState({
     accountNumber: "",
     password: "",
-    server: "ExnessServer-MT5"
+    server: "ExnessKE-MT5Trial01"
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [connectionInfo, setConnectionInfo] = useState<any>(null);
+  const [testResults, setTestResults] = useState<any>(null);
 
   const handleTestConnection = async () => {
     if (!credentials.accountNumber || !credentials.password) {
@@ -73,6 +75,8 @@ export const ExnessIntegration = () => {
     }
 
     setIsConnecting(true);
+    setTestResults(null);
+    
     try {
       const testResult = await exnessAPI.testConnection({
         accountNumber: credentials.accountNumber,
@@ -81,19 +85,31 @@ export const ExnessIntegration = () => {
         isDemo: credentials.server.includes('Demo')
       });
 
+      setTestResults(testResult);
+      
       if (testResult.success) {
-        toast.success(testResult.message);
+        toast.success(testResult.message, {
+          description: testResult.accountInfo ? 
+            `Balance: ${testResult.accountInfo.currency} ${testResult.accountInfo.balance?.toFixed(2)}` : 
+            undefined
+        });
       } else {
         toast.error(testResult.message);
       }
     } catch (error) {
       toast.error("Connection test failed: " + (error instanceof Error ? error.message : 'Unknown error'));
+      setTestResults({ success: false, message: error instanceof Error ? error.message : 'Unknown error' });
     } finally {
       setIsConnecting(false);
     }
   };
 
   const handleConnect = async () => {
+    if (!credentials.accountNumber || !credentials.password) {
+      toast.error("Please enter account number and password");
+      return;
+    }
+    
     setIsConnecting(true);
     clearError();
     
@@ -102,38 +118,56 @@ export const ExnessIntegration = () => {
         accountNumber: credentials.accountNumber,
         password: credentials.password,
         server: credentials.server,
-        isDemo: credentials.server.includes('Demo')
+        isDemo: credentials.server.includes('Trial') || credentials.server.includes('Demo')
       });
       
       if (connected) {
         setAccount(prev => ({ ...prev, connected: true }));
-        // Get real account information
+        
+        // Get real account information from Exness
         const accountInfo = await exnessAPI.getAccountInfo();
-        setRealAccountInfo(accountInfo);
-        setAccount(prev => ({
-          ...prev,
-          balance: accountInfo.balance,
-          equity: accountInfo.equity,
-          margin: accountInfo.margin,
-          freeMargin: accountInfo.freeMargin,
-          connected: true
-        }));
-        toast.success(`Successfully connected to Exness! Balance: $${accountInfo.balance.toFixed(2)}`);
+        if (accountInfo) {
+          setRealAccountInfo(accountInfo);
+          setAccount(prev => ({
+            ...prev,
+            balance: accountInfo.balance,
+            equity: accountInfo.equity,
+            margin: accountInfo.margin,
+            freeMargin: accountInfo.freeMargin,
+            connected: true,
+            accountType: accountInfo.isDemo ? "demo" : "live"
+          }));
+          
+          // Get connection info
+          const connInfo = exnessAPI.getConnectionInfo();
+          setConnectionInfo(connInfo);
+          
+          toast.success(`🎉 Connected to Exness ${accountInfo.isDemo ? 'DEMO' : 'LIVE'} Account!`, {
+            description: `Balance: ${accountInfo.currency} ${accountInfo.balance.toFixed(2)} | Server: ${accountInfo.server}`
+          });
+        } else {
+          throw new Error("Failed to get account information after connection");
+        }
       } else {
         toast.error("Failed to connect to Exness. Please check your credentials.");
       }
     } catch (err) {
-      toast.error("Connection failed: " + (err instanceof Error ? err.message : 'Unknown error'));
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      toast.error("❌ Connection failed: " + errorMessage);
+      console.error('Connection error:', err);
     } finally {
       setIsConnecting(false);
     }
   };
 
   const handleDisconnect = () => {
+    exnessAPI.disconnect();
     setAccount(prev => ({ ...prev, connected: false }));
     setRealAccountInfo(null);
-    exnessAPI.disconnect();
+    setConnectionInfo(null);
+    setTestResults(null);
     stopBot();
+    toast.success("Disconnected from Exness");
   };
 
   const handleBotToggle = async () => {
@@ -271,13 +305,36 @@ export const ExnessIntegration = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ExnessServer-MT5">ExnessServer-MT5 (Live)</SelectItem>
-                  <SelectItem value="ExnessServer-MT5Real">ExnessServer-MT5Real (Live)</SelectItem>
-                  <SelectItem value="ExnessServer-MT5Demo">ExnessServer-MT5Demo (Demo)</SelectItem>
-                  <SelectItem value="ExnessServer-Demo">ExnessServer-Demo (Demo)</SelectItem>
+                  <SelectItem value="ExnessKE-MT5Trial01">ExnessKE-MT5Trial01 (Demo)</SelectItem>
+                  <SelectItem value="ExnessKE-MT5Trial02">ExnessKE-MT5Trial02 (Demo)</SelectItem>
+                  <SelectItem value="ExnessKE-MT5Trial03">ExnessKE-MT5Trial03 (Demo)</SelectItem>
+                  <SelectItem value="ExnessKE-MT5Trial04">ExnessKE-MT5Trial04 (Demo)</SelectItem>
+                  <SelectItem value="ExnessKE-MT5Trial05">ExnessKE-MT5Trial05 (Demo)</SelectItem>
+                  <SelectItem value="ExnessKE-MT5Real01">ExnessKE-MT5Real01 (Live)</SelectItem>
+                  <SelectItem value="ExnessKE-MT5Real02">ExnessKE-MT5Real02 (Live)</SelectItem>
+                  <SelectItem value="ExnessKE-MT5Real03">ExnessKE-MT5Real03 (Live)</SelectItem>
+                  <SelectItem value="ExnessKE-MT5Real04">ExnessKE-MT5Real04 (Live)</SelectItem>
+                  <SelectItem value="ExnessKE-MT5Real05">ExnessKE-MT5Real05 (Live)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            
+            {/* Test Results */}
+            {testResults && (
+              <Alert variant={testResults.success ? "default" : "destructive"}>
+                <CheckCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Test Result:</strong> {testResults.message}
+                  {testResults.accountInfo && (
+                    <div className="mt-2 text-sm">
+                      <div>💰 Balance: {testResults.accountInfo.currency} {testResults.accountInfo.balance?.toFixed(2)}</div>
+                      <div>⚖️ Leverage: {testResults.accountInfo.leverage}</div>
+                      <div>🏷️ Type: {testResults.connectionType?.toUpperCase()}</div>
+                    </div>
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
             
             <div className="flex gap-3">
               <Button 
@@ -288,7 +345,7 @@ export const ExnessIntegration = () => {
               >
                 {isConnecting ? (
                   <>
-                    <Server className="w-4 h-4 mr-2 animate-pulse" />
+                    <Wifi className="w-4 h-4 mr-2 animate-pulse" />
                     Testing...
                   </>
                 ) : (
@@ -322,7 +379,77 @@ export const ExnessIntegration = () => {
       ) : (
         /* Connected Account Info */
         <>
+          {/* Connection Status */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wifi className="w-5 h-5 text-green-500" />
+                Connection Status
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {connectionInfo && (
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Account Type:</span>
+                    <Badge variant={connectionInfo.accountType === 'demo' ? 'secondary' : 'default'}>
+                      {connectionInfo.accountType?.toUpperCase()}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Server:</span>
+                    <span className="font-medium">{connectionInfo.server}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Account:</span>
+                    <span className="font-medium">{connectionInfo.accountNumber}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Status:</span>
+                    <span className="font-medium text-green-500">{connectionInfo.connectionStatus}</span>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm font-medium text-muted-foreground">Account Balance</div>
+                <div className="text-2xl font-bold text-foreground">
+                  {realAccountInfo ? `${realAccountInfo.currency} ${realAccountInfo.balance.toFixed(2)}` : `$${account.balance.toLocaleString()}`}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {realAccountInfo?.isDemo ? 'Demo Account' : 'Live Account'}
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm font-medium text-muted-foreground">Account Equity</div>
+                <div className="text-2xl font-bold text-foreground">
+                  {realAccountInfo ? `${realAccountInfo.currency} ${realAccountInfo.equity.toFixed(2)}` : `$${account.equity.toLocaleString()}`}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Current equity value
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm font-medium text-muted-foreground">Free Margin</div>
+                <div className="text-2xl font-bold text-green-500">
+                  {realAccountInfo ? `${realAccountInfo.currency} ${realAccountInfo.freeMargin.toFixed(2)}` : `$${account.freeMargin.toLocaleString()}`}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Available for trading
+                </div>
+              </CardContent>
+            </Card>
+            
             <Card>
               <CardContent className="p-4">
                 <div className="text-sm font-medium text-muted-foreground">Bot Status</div>
@@ -332,72 +459,6 @@ export const ExnessIntegration = () => {
                 <div className="text-xs text-muted-foreground mt-1">
                   {status.autoTradingEnabled ? 'Auto-trading ON' : 'Manual mode'}
                 </div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-sm font-medium text-muted-foreground">Total Trades</div>
-                <div className="text-2xl font-bold">{status.totalTrades}</div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  Win Rate: {status.winRate.toFixed(1)}%
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-sm font-medium text-muted-foreground">Daily P&L</div>
-                <div className={`text-2xl font-bold ${status.dailyPnL >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                  {status.dailyPnL >= 0 ? '+' : ''}${status.dailyPnL.toFixed(2)}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  Weekly: {status.weeklyPnL >= 0 ? '+' : ''}${status.weeklyPnL.toFixed(2)}
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-sm font-medium text-muted-foreground">Last Update</div>
-                <div className="text-2xl font-bold text-primary">
-                  {status.lastUpdate.toLocaleTimeString()}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">System time</div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-sm font-medium text-muted-foreground">Investment Amount</div>
-                <div className="text-2xl font-bold">${account.balance.toLocaleString()}</div>
-                <div className="text-xs text-muted-foreground mt-1">{account.currency}</div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-sm font-medium text-muted-foreground">Grid Profit</div>
-                <div className="text-2xl font-bold text-bullish">${account.equity.toLocaleString()}</div>
-                <div className="text-xs text-bullish mt-1">+{((account.equity - account.balance) / account.balance * 100).toFixed(2)}%</div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-sm font-medium text-muted-foreground">Variable P&L</div>
-                <div className={`text-2xl font-bold ${(account.equity - account.balance) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                  {(account.equity - account.balance) >= 0 ? '+' : ''}${(account.equity - account.balance).toFixed(2)}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">Unrealized profit/loss</div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-sm font-medium text-muted-foreground">P&L Ratio</div>
-                <div className="text-2xl font-bold text-accent">{status.winRate.toFixed(1)}%</div>
-                <div className="text-xs text-muted-foreground mt-1">Win rate from {status.totalTrades} trades</div>
               </CardContent>
             </Card>
           </div>
@@ -435,7 +496,7 @@ export const ExnessIntegration = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Settings className="w-5 h-5" />
-                Live Trading Controls
+                Trading Controls
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -443,7 +504,7 @@ export const ExnessIntegration = () => {
                 <div>
                   <div className="font-medium">Auto-Trading</div>
                   <div className="text-sm text-muted-foreground">
-                    Allow AI to execute trades automatically on your Exness account
+                    Allow AI to execute trades automatically on your {realAccountInfo?.isDemo ? 'demo' : 'live'} account
                   </div>
                 </div>
                 <Switch 
@@ -457,26 +518,30 @@ export const ExnessIntegration = () => {
                 <Alert>
                   <CheckCircle className="h-4 w-4" />
                   <AlertDescription>
-                    Auto-trading is <strong>ENABLED</strong>. The AI will execute trades based on your strategy settings and risk management rules.
+                    Auto-trading is <strong>ENABLED</strong> on your {realAccountInfo?.isDemo ? 'DEMO' : 'LIVE'} account. 
+                    The AI will execute trades based on your strategy settings and risk management rules.
                   </AlertDescription>
                 </Alert>
               )}
               
               <div className="flex gap-4">
                 <Button variant="outline" onClick={handleDisconnect}>
+                  <WifiOff className="w-4 h-4 mr-2" />
                   Disconnect Account
                 </Button>
-                <Button variant="outline" onClick={() => window.location.href = '/charts'}>
-                  View Trading History
+                <Button onClick={async () => {
+                  try {
+                    await generateTestSignal();
+                    toast.success("Test signal generated successfully!");
+                  } catch (error) {
+                    toast.error("Failed to generate test signal");
+                  }
+                }}>
+                  <Zap className="w-4 h-4 mr-2" />
+                  Generate Test Signal
                 </Button>
-                <Button onClick={() => toast.success("Manual trade feature coming soon!")}>
+                <Button variant="outline" onClick={() => toast.success("Manual trade feature coming soon!")}>
                   Manual Trade
-                </Button>
-                <Button variant="outline" onClick={() => window.location.href = '/news'}>
-                  View Signals
-                </Button>
-                <Button variant="outline" onClick={() => toast.success("Performance report generated!")}>
-                  Performance Report
                 </Button>
               </div>
             </CardContent>
@@ -488,18 +553,27 @@ export const ExnessIntegration = () => {
       <Alert>
         <AlertTriangle className="h-4 w-4" />
         <AlertDescription>
-          <strong>Real Exness Integration:</strong> This system now connects to the actual Exness API:
+          <strong>Enhanced Exness Integration:</strong> This system connects to real Exness MT5 accounts:
           <ul className="list-disc list-inside mt-2 space-y-1">
-            <li>🔐 Real Exness API authentication with your actual credentials</li>
-            <li>💰 Live account balance and equity from your Exness account</li>
-            <li>📊 Real-time market data via WebSocket connection</li>
-            <li>⚡ Actual trade execution on your Exness MT5 account</li>
-            <li>🛡️ Advanced risk management and position monitoring</li>
-            <li>📈 Smart AI-powered trading signals for profitable trades</li>
+            <li>🔐 <strong>Real Authentication:</strong> Direct connection to Exness MT5 servers</li>
+            <li>💰 <strong>Live Account Data:</strong> Real-time balance, equity, and margin information</li>
+            <li>📊 <strong>Market Data:</strong> Live price feeds via WebSocket connection</li>
+            <li>⚡ <strong>Trade Execution:</strong> Actual order placement and management</li>
+            <li>🛡️ <strong>Risk Management:</strong> Advanced position monitoring and limits</li>
+            <li>🎯 <strong>Demo & Live Support:</strong> Test with demo accounts before going live</li>
           </ul>
-          <div className="mt-3 p-2 bg-yellow-50 dark:bg-yellow-950 rounded border border-yellow-200 dark:border-yellow-800">
-            <strong>⚠️ Important:</strong> This will execute real trades on your Exness account. 
-            Start with demo account to test the system before using live funds.
+          <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950 rounded border border-blue-200 dark:border-blue-800">
+            <strong>💡 Getting Started:</strong>
+            <ol className="list-decimal list-inside mt-2 space-y-1 text-sm">
+              <li>Create an Exness account at <a href="https://exness.com" target="_blank" className="text-blue-600 underline">exness.com</a></li>
+              <li>Download MT5 and get your login credentials</li>
+              <li>Start with a demo account to test the system</li>
+              <li>Once comfortable, connect your live account for real trading</li>
+            </ol>
+          </div>
+          <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-950 rounded border border-yellow-200 dark:border-yellow-800">
+            <strong>⚠️ Risk Warning:</strong> Live trading involves real money. Always test thoroughly with demo accounts first. 
+            Never risk more than you can afford to lose.
           </div>
         </AlertDescription>
       </Alert>

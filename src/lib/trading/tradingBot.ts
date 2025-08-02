@@ -112,28 +112,42 @@ class TradingBot {
 
   async connectToExness(credentials: ExnessCredentials): Promise<boolean> {
     try {
-      // First test the connection
+      console.log('🤖 Bot connecting to Exness...', {
+        accountType: credentials.isDemo ? 'DEMO' : 'LIVE',
+        server: credentials.server
+      });
+      
+      // Test connection first
       const testResult = await exnessAPI.testConnection(credentials);
       if (!testResult.success) {
         throw new Error(testResult.message);
       }
 
-      // If test passes, establish full connection
+      // Establish full connection
       const connected = await exnessAPI.connect(credentials);
       this.status.isConnected = connected;
       
       if (connected) {
-        console.log('Successfully connected to Exness API');
+        console.log('✅ Bot successfully connected to Exness API');
         
-        // Get real account information
+        // Verify account information
         const accountInfo = await exnessAPI.getAccountInfo();
         if (accountInfo) {
-          console.log('Account Info:', {
+          console.log('📊 Account Info Verified:', {
             balance: accountInfo.balance,
             equity: accountInfo.equity,
             currency: accountInfo.currency,
-            leverage: accountInfo.leverage
+            leverage: accountInfo.leverage,
+            accountType: accountInfo.isDemo ? 'DEMO' : 'LIVE'
           });
+          
+          // Verify trading capabilities
+          const tradingCheck = await exnessAPI.verifyTradingCapabilities();
+          if (!tradingCheck.canTrade) {
+            console.warn('⚠️ Trading capabilities limited:', tradingCheck.issues);
+          } else {
+            console.log('✅ All trading capabilities verified');
+          }
         }
         
         await this.updateStatus();
@@ -141,7 +155,7 @@ class TradingBot {
       
       return connected;
     } catch (error) {
-      console.error('Failed to connect to Exness:', error);
+      console.error('❌ Bot failed to connect to Exness:', error);
       this.status.isConnected = false;
       return false;
     }
@@ -149,12 +163,18 @@ class TradingBot {
 
   async startBot(): Promise<void> {
     if (!this.status.isConnected) {
-      throw new Error('Bot must be connected to Exness API before starting. Please connect your account first.');
+      throw new Error('🔌 Bot must be connected to Exness API before starting. Please connect your account first.');
     }
 
     // Verify connection is still active
     if (!exnessAPI.isConnectedToExness()) {
-      throw new Error('Lost connection to Exness. Please reconnect your account.');
+      throw new Error('🔌 Lost connection to Exness. Please reconnect your account.');
+    }
+
+    // Verify trading capabilities before starting
+    const tradingCheck = await exnessAPI.verifyTradingCapabilities();
+    if (!tradingCheck.canTrade) {
+      throw new Error(`🚫 Cannot start trading: ${tradingCheck.issues.join(', ')}`);
     }
 
     try {
@@ -167,9 +187,10 @@ class TradingBot {
       // Start monitoring
       this.startMonitoring();
 
-      console.log('Trading bot started successfully');
+      const accountType = exnessAPI.getAccountType();
+      console.log(`🚀 Trading bot started successfully on ${accountType?.toUpperCase()} account`);
     } catch (error) {
-      console.error('Failed to start trading bot:', error);
+      console.error('❌ Failed to start trading bot:', error);
       throw error;
     }
   }
@@ -229,7 +250,7 @@ class TradingBot {
   private async performHealthChecks(): Promise<void> {
     // Check Exness connection
     if (!exnessAPI.isConnectedToExness()) {
-      console.warn('Lost connection to Exness API');
+      console.warn('⚠️ Lost connection to Exness API');
       this.status.isConnected = false;
       await this.stopBot();
       return;
@@ -238,17 +259,26 @@ class TradingBot {
     // Verify we can still get account info
     const accountInfo = await exnessAPI.getAccountInfo();
     if (!accountInfo) {
-      console.warn('Cannot fetch account information from Exness');
+      console.warn('⚠️ Cannot fetch account information from Exness');
       this.status.isConnected = false;
       await this.stopBot();
       return;
+    }
+
+    // Verify trading capabilities
+    const tradingCheck = await exnessAPI.verifyTradingCapabilities();
+    if (!tradingCheck.canTrade) {
+      console.warn('⚠️ Trading capabilities compromised:', tradingCheck.issues);
+      if (this.status.autoTradingEnabled) {
+        await this.enableAutoTrading(false);
+      }
     }
 
     // Check daily loss limits
     const dailyLoss = await this.getDailyLoss();
     
     if (Math.abs(dailyLoss) > (accountInfo.balance * this.configuration.maxDailyLoss / 100)) {
-      console.warn('Daily loss limit exceeded, stopping bot');
+      console.warn('⚠️ Daily loss limit exceeded, stopping bot');
       await this.emergencyStop('Daily loss limit exceeded');
       return;
     }
@@ -256,7 +286,7 @@ class TradingBot {
     // Check trading hours
     if (!this.isWithinTradingHours()) {
       if (this.status.autoTradingEnabled) {
-        console.log('Outside trading hours, disabling auto trading');
+        console.log('🕐 Outside trading hours, disabling auto trading');
         await this.enableAutoTrading(false);
       }
       return;
@@ -264,7 +294,7 @@ class TradingBot {
 
     // Re-enable auto trading if within hours and bot is active
     if (this.status.isActive && !this.status.autoTradingEnabled && this.isWithinTradingHours()) {
-      console.log('Within trading hours, enabling auto trading');
+      console.log('🕐 Within trading hours, enabling auto trading');
       await this.enableAutoTrading(true);
     }
   }
@@ -325,7 +355,8 @@ class TradingBot {
   }
 
   async emergencyStop(reason: string): Promise<void> {
-    console.log(`EMERGENCY STOP ACTIVATED: ${reason}`);
+    const accountType = exnessAPI.getAccountType();
+    console.log(`🚨 EMERGENCY STOP ACTIVATED on ${accountType?.toUpperCase()} account: ${reason}`);
     
     try {
       // Stop the bot
@@ -337,11 +368,11 @@ class TradingBot {
       // Log emergency stop
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        console.log(`Emergency stop executed for user ${user.id}: ${reason}`);
+        console.log(`🚨 Emergency stop executed for user ${user.id}: ${reason}`);
       }
       
     } catch (error) {
-      console.error('Emergency stop failed:', error);
+      console.error('❌ Emergency stop failed:', error);
     }
   }
 
@@ -394,10 +425,15 @@ class TradingBot {
   }
 
   async generateTestSignal(): Promise<void> {
+    const accountType = exnessAPI.getAccountType();
+    console.log(`🧪 Generating test signal for ${accountType?.toUpperCase()} account...`);
+    
     const randomPair = this.configuration.enabledPairs[
       Math.floor(Math.random() * this.configuration.enabledPairs.length)
     ];
     await signalProcessor.generateTestSignal(randomPair);
+    
+    console.log(`✅ Test signal generated for ${randomPair}`);
   }
 
   async getRecentTrades(limit: number = 10) {
