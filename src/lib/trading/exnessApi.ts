@@ -61,8 +61,10 @@ class ExnessAPI {
   private webSocket: WebSocket | null = null;
   private accountInfo: AccountInfo | null = null;
   private sessionToken: string | null = null;
-  private baseUrl: string = 'https://api.exness.com/v1';
+  private baseUrl: string = 'https://mt5-api.exness.com/v1';
+  private webApiUrl: string = 'https://my.exness.com/api/v1';
   private mt5Connection: any = null;
+  private heartbeatInterval: NodeJS.Timeout | null = null;
 
   async connect(credentials: ExnessCredentials): Promise<boolean> {
     try {
@@ -95,18 +97,14 @@ class ExnessAPI {
       this.sessionToken = authResult.token;
       this.isConnected = true;
 
-      // Get account information (use mock data for simulation)
-      this.accountInfo = {
-        balance: credentials.isDemo ? 10000 : this.getRealisticBalance(credentials.server),
-        equity: credentials.isDemo ? 10000 : this.getRealisticBalance(credentials.server),
-        margin: 0,
-        freeMargin: credentials.isDemo ? 10000 : this.getRealisticBalance(credentials.server),
-        marginLevel: 0,
-        currency: 'USD',
-        leverage: '1:100',
-        profit: 0,
-        credit: 0
-      };
+      // Get real account information from Exness API
+      const accountInfo = await this.fetchRealAccountInfo();
+      if (!accountInfo) {
+        throw new Error('Failed to fetch real account information from Exness');
+      }
+      
+      this.accountInfo = accountInfo;
+      console.log('Loaded real Exness account info:', this.accountInfo);
 
       // Initialize real-time data feed
       await this.initializeRealTimeConnection();
@@ -163,40 +161,53 @@ class ExnessAPI {
 
   private async authenticateWithExness(credentials: ExnessCredentials): Promise<{success: boolean, token?: string, error?: string}> {
     try {
-      console.log(`Authenticating with Exness MT5 Server: ${credentials.server}`);
+      console.log(`Authenticating with real Exness MT5 Server: ${credentials.server}`);
       
-      // For now, simulate successful authentication for valid servers
-      // In production, this would connect to actual Exness MT5 API
-      if (this.validateCredentials(credentials)) {
-        // Generate a mock session token
-        const sessionToken = `exness_token_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        
-        console.log('Authentication successful for server:', credentials.server);
-        
-        // Set realistic account balance based on account type
-        const balance = credentials.isDemo ? 10000 : this.getRealisticBalance(credentials.server);
-        
-        // Store account info
-        this.accountInfo = {
-          balance: balance,
-          equity: balance,
-          margin: 0,
-          freeMargin: balance,
-          marginLevel: 0,
-          currency: 'USD',
-          leverage: '1:100',
-          profit: 0,
-          credit: 0
+      if (!this.validateCredentials(credentials)) {
+        return {
+          success: false,
+          error: 'Invalid credentials format. Please check account number, password, and server.'
         };
+      }
 
+      // Real Exness API authentication
+      const authPayload = {
+        login: credentials.accountNumber,
+        password: credentials.password,
+        server: credentials.server,
+        demo: credentials.isDemo
+      };
+
+      const response = await fetch(`${this.baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'ForexPro-Bot/1.0'
+        },
+        body: JSON.stringify(authPayload)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Authentication failed:', response.status, errorText);
+        return {
+          success: false,
+          error: `Authentication failed: ${response.status} - ${errorText}`
+        };
+      }
+
+      const authResult = await response.json();
+      
+      if (authResult.success && authResult.token) {
+        console.log('Real Exness authentication successful');
         return {
           success: true,
-          token: sessionToken
+          token: authResult.token
         };
       } else {
         return {
           success: false,
-          error: 'Invalid credentials. Please check account number, password, and server.'
+          error: authResult.error || 'Authentication failed - invalid response from server'
         };
       }
 
@@ -204,7 +215,7 @@ class ExnessAPI {
       console.error('Authentication request failed:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Network error'
+        error: error instanceof Error ? error.message : 'Network connection error'
       };
     }
   }
@@ -221,54 +232,68 @@ class ExnessAPI {
     return 1000; // Default amount
   }
 
-  private async fetchAccountInfo(): Promise<AccountInfo | null> {
+  private async fetchRealAccountInfo(): Promise<AccountInfo | null> {
     if (!this.sessionToken) return null;
 
     try {
-      const response = await fetch(`${this.baseUrl}/account/info`, {
+      // Use real Exness API endpoint for account information
+      const response = await fetch(`${this.baseUrl}/trading/account`, {
+        method: 'GET',
         headers: {
           'Authorization': `Bearer ${this.sessionToken}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'User-Agent': 'ForexPro-Bot/1.0'
         }
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch account info: ${response.statusText}`);
+        throw new Error(`Failed to fetch real account info: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
       
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to get account information');
+      }
+
+      const account = data.account;
+      
       return {
-        balance: parseFloat(data.balance || '0'),
-        equity: parseFloat(data.equity || '0'),
-        margin: parseFloat(data.margin || '0'),
-        freeMargin: parseFloat(data.freeMargin || '0'),
-        marginLevel: parseFloat(data.marginLevel || '0'),
-        currency: data.currency || 'USD',
-        leverage: data.leverage || '1:100',
-        profit: parseFloat(data.profit || '0'),
-        credit: parseFloat(data.credit || '0')
+        balance: parseFloat(account.balance || '0'),
+        equity: parseFloat(account.equity || '0'),
+        margin: parseFloat(account.margin || '0'),
+        freeMargin: parseFloat(account.free_margin || account.freeMargin || '0'),
+        marginLevel: parseFloat(account.margin_level || account.marginLevel || '0'),
+        currency: account.currency || 'USD',
+        leverage: account.leverage || '1:100',
+        profit: parseFloat(account.profit || '0'),
+        credit: parseFloat(account.credit || '0')
       };
 
     } catch (error) {
-      console.error('Failed to fetch account info:', error);
+      console.error('Failed to fetch real account info:', error);
       return null;
     }
+  }
+
+  private async fetchAccountInfo(): Promise<AccountInfo | null> {
+    return this.fetchRealAccountInfo();
   }
 
   private async initializeRealTimeConnection(): Promise<void> {
     if (!this.sessionToken) return;
 
     try {
-      // Connect to Exness WebSocket for real-time data
-      const wsUrl = `wss://api.exness.com/v1/stream?token=${this.sessionToken}`;
+      // Connect to real Exness MT5 WebSocket for live data
+      const wsUrl = `wss://mt5-stream.exness.com/quotes?token=${this.sessionToken}`;
       
       this.webSocket = new WebSocket(wsUrl);
       
       this.webSocket.onopen = () => {
-        console.log('WebSocket connected to Exness');
+        console.log('Real-time WebSocket connected to Exness MT5');
         this.subscribeToMarketData();
         this.subscribeToAccountUpdates();
+        this.startHeartbeat();
       };
 
       this.webSocket.onmessage = (event) => {
@@ -279,18 +304,36 @@ class ExnessAPI {
         console.error('WebSocket error:', error);
       };
 
-      this.webSocket.onclose = () => {
-        console.log('WebSocket disconnected');
-        // Attempt to reconnect after 5 seconds
+      this.webSocket.onclose = (event) => {
+        console.log('WebSocket disconnected, code:', event.code);
+        this.stopHeartbeat();
+        
+        // Attempt to reconnect after 3 seconds for real trading
         setTimeout(() => {
           if (this.isConnected) {
+            console.log('Attempting to reconnect to Exness...');
             this.initializeRealTimeConnection();
           }
-        }, 5000);
+        }, 3000);
       };
 
     } catch (error) {
-      console.error('Failed to initialize WebSocket:', error);
+      console.error('Failed to initialize real-time connection:', error);
+    }
+  }
+
+  private startHeartbeat(): void {
+    this.heartbeatInterval = setInterval(() => {
+      if (this.webSocket?.readyState === WebSocket.OPEN) {
+        this.webSocket.send(JSON.stringify({ action: 'ping' }));
+      }
+    }, 30000); // Send heartbeat every 30 seconds
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
     }
   }
 
@@ -408,46 +451,58 @@ class ExnessAPI {
 
   async placeOrder(order: TradeOrder): Promise<string | null> {
     if (!this.isConnected || !this.sessionToken) {
-      throw new Error('Not connected to Exness');
+      throw new Error('Not connected to Exness - please connect first');
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/trading/order`, {
+      console.log('Placing real order on Exness:', order);
+
+      // Real Exness MT5 order placement
+      const orderPayload = {
+        symbol: order.symbol.replace('/', ''), // Remove slash for MT5 format (EURUSD not EUR/USD)
+        cmd: order.type === 'BUY' ? 0 : 1, // MT5 command: 0=BUY, 1=SELL
+        volume: order.volume,
+        price: order.price,
+        sl: order.stopLoss || 0,
+        tp: order.takeProfit || 0,
+        comment: order.comment || 'ForexPro-Bot',
+        magic: 987654321, // Unique magic number for our bot
+        deviation: 20, // Price deviation in points
+        type_filling: 1, // FOK (Fill or Kill)
+        type_time: 0 // Good Till Cancelled
+      };
+
+      const response = await fetch(`${this.baseUrl}/trading/order/send`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.sessionToken}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'User-Agent': 'ForexPro-Bot/1.0'
         },
-        body: JSON.stringify({
-          symbol: order.symbol,
-          cmd: order.type === 'BUY' ? 0 : 1, // MT5 command codes
-          volume: order.volume,
-          price: order.price,
-          sl: order.stopLoss || 0,
-          tp: order.takeProfit || 0,
-          comment: order.comment || 'ForexPro Bot',
-          magic: 12345, // Magic number for bot identification
-          deviation: 10 // Price deviation in points
-        })
+        body: JSON.stringify(orderPayload)
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Order failed: ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`Order failed: ${response.status} - ${errorText}`);
       }
 
       const result = await response.json();
       
-      if (result.success && result.ticket) {
+      if (result.success && result.order) {
+        console.log('Order successfully placed:', result.order);
+        
         // Store trade record in database
-        await this.storeTradeRecord(order, result.ticket, result.price);
-        return result.ticket.toString();
+        await this.storeTradeRecord(order, result.order.ticket, result.order.price);
+        
+        return result.order.ticket.toString();
       } else {
-        throw new Error(result.message || 'Order execution failed');
+        const errorMsg = result.error || result.description || 'Order execution failed';
+        throw new Error(`Order rejected: ${errorMsg}`);
       }
 
     } catch (error) {
-      console.error('Failed to place order:', error);
+      console.error('Failed to place real order:', error);
       throw error;
     }
   }
@@ -483,18 +538,25 @@ class ExnessAPI {
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/trading/positions`, {
+      // Get real open positions from Exness MT5
+      const response = await fetch(`${this.baseUrl}/trading/positions/open`, {
+        method: 'GET',
         headers: {
           'Authorization': `Bearer ${this.sessionToken}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'User-Agent': 'ForexPro-Bot/1.0'
         }
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch positions: ${response.statusText}`);
+        throw new Error(`Failed to fetch real positions: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to get positions');
+      }
       
       return data.positions?.map((pos: any) => ({
         ticket: parseInt(pos.ticket),
@@ -600,29 +662,39 @@ class ExnessAPI {
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/market/quote/${symbol}`, {
+      // Get real-time price from Exness MT5
+      const cleanSymbol = symbol.replace('/', ''); // Remove slash for MT5
+      const response = await fetch(`${this.baseUrl}/market/symbols/${cleanSymbol}/tick`, {
+        method: 'GET',
         headers: {
           'Authorization': `Bearer ${this.sessionToken}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'User-Agent': 'ForexPro-Bot/1.0'
         }
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to get price: ${response.statusText}`);
+        throw new Error(`Failed to get real price: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
       
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to get price data');
+      }
+
+      const tick = data.tick;
+      
       return {
         symbol: symbol,
-        bid: parseFloat(data.bid),
-        ask: parseFloat(data.ask),
-        spread: parseFloat(data.ask) - parseFloat(data.bid),
-        timestamp: new Date()
+        bid: parseFloat(tick.bid),
+        ask: parseFloat(tick.ask),
+        spread: parseFloat(tick.ask) - parseFloat(tick.bid),
+        timestamp: new Date(tick.time * 1000) // Convert Unix timestamp
       };
 
     } catch (error) {
-      console.error('Failed to get current price:', error);
+      console.error('Failed to get real current price:', error);
       return null;
     }
   }
@@ -701,12 +773,14 @@ class ExnessAPI {
     this.sessionToken = null;
     this.accountInfo = null;
     
+    this.stopHeartbeat();
+    
     if (this.webSocket) {
       this.webSocket.close();
       this.webSocket = null;
     }
     
-    console.log('Disconnected from Exness API');
+    console.log('Disconnected from real Exness API');
   }
 
   isConnectedToExness(): boolean {
