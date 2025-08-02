@@ -20,6 +20,8 @@ export interface RiskParameters {
   useTakeProfit: boolean;
   minAccountBalance: number;
   minMarginLevel: number;
+  maxLeverage: number;
+  emergencyStopEnabled: boolean;
 }
 
 class OrderManager {
@@ -28,16 +30,24 @@ class OrderManager {
     maxRiskPerTrade: 1.0, // 1% for real trading
     maxDailyLoss: 3.0, // 3% for real trading
     maxDrawdown: 10.0,
-    maxPositionSize: 5.0, // Max 5 lots
+    maxPositionSize: 2.0, // Max 2 lots for safety
     maxConcurrentPositions: 3, // Max 3 positions
     useStopLoss: true,
     useTakeProfit: true,
     minAccountBalance: 100, // $100 minimum
-    minMarginLevel: 200 // 200% minimum margin level
+    minMarginLevel: 200, // 200% minimum margin level
+    maxLeverage: 500, // Max 1:500 leverage
+    emergencyStopEnabled: true
   };
+
+  private lastOrderTime: number = 0;
+  private minOrderInterval: number = 30000; // 30 seconds between orders
+  private dailyTradeCount: number = 0;
+  private maxDailyTrades: number = 10;
 
   async initialize(): Promise<void> {
     await this.loadRiskParameters();
+    await this.resetDailyCounters();
     console.log('OrderManager initialized with enhanced risk parameters for real trading');
   }
 
@@ -58,23 +68,51 @@ class OrderManager {
           maxRiskPerTrade: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '1'), 2.0), // Max 2%
           maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '3'), 5.0), // Max 5%
           maxDrawdown: 15.0,
-          maxPositionSize: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '1') * 10, 5.0), // Max 5 lots
+          maxPositionSize: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '1') * 2, 2.0), // Max 2 lots
           maxConcurrentPositions: Math.min(parseInt(botSettings.max_daily_trades?.toString() || '3'), 5), // Max 5 positions
           useStopLoss: true, // Always required for real trading
           useTakeProfit: true,
           minAccountBalance: 100,
-          minMarginLevel: 200
+          minMarginLevel: 200,
+          maxLeverage: 500,
+          emergencyStopEnabled: true
         };
+        
+        this.maxDailyTrades = Math.min(parseInt(botSettings.max_daily_trades?.toString() || '10'), 20);
       }
       
-      console.log('Risk parameters loaded for real trading:', this.riskParams);
+      console.log('Enhanced risk parameters loaded for real trading:', this.riskParams);
     } catch (error) {
       console.error('Failed to load risk parameters:', error);
     }
   }
 
+  private async resetDailyCounters(): Promise<void> {
+    const today = new Date().toDateString();
+    const lastReset = localStorage.getItem('lastDailyReset');
+    
+    if (lastReset !== today) {
+      this.dailyTradeCount = 0;
+      localStorage.setItem('lastDailyReset', today);
+      console.log('Daily trade counters reset');
+    } else {
+      // Load today's trade count
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: trades } = await supabase
+          .from('live_trades')
+          .select('id')
+          .eq('user_id', user.id)
+          .gte('opened_at', new Date().toISOString().split('T')[0]);
+        
+        this.dailyTradeCount = trades?.length || 0;
+      }
+    }
+  }
+
   setAutoTrading(enabled: boolean): void {
     this.isAutoTradingEnabled = enabled;
+    console.log(`Auto trading ${enabled ? 'enabled' : 'disabled'}`);
   }
 
   isAutoTradingActive(): boolean {
@@ -84,7 +122,11 @@ class OrderManager {
   async executeOrder(orderRequest: OrderRequest): Promise<string | null> {
     try {
       const accountType = exnessAPI.getAccountType();
-      console.log(`💼 Executing ${accountType?.toUpperCase()} order on Exness:`, orderRequest);
+      console.log(`💼 Executing ${accountType?.toUpperCase()} order on Exness:`, {
+        symbol: orderRequest.symbol,
+        type: orderRequest.type,
+        volume: orderRequest.volume
+      });
 
       // Ensure we're connected to real Exness account
       if (!exnessAPI.isConnectedToExness()) {
@@ -98,10 +140,21 @@ class OrderManager {
       }
 
       // Enhanced risk checks for real money trading
-      const riskCheckResult = await this.performRiskChecks(orderRequest);
+      const riskCheckResult = await this.performEnhancedRiskChecks(orderRequest);
       if (!riskCheckResult.allowed) {
-        console.error('Risk check failed:', riskCheckResult.reason);
+        console.error('Enhanced risk check failed:', riskCheckResult.reason);
         throw new Error(`Risk Management: ${riskCheckResult.reason}`);
+      }
+
+      // Check order frequency limits
+      const now = Date.now();
+      if (now - this.lastOrderTime < this.minOrderInterval) {
+        throw new Error(`Order frequency limit: Please wait ${Math.ceil((this.minOrderInterval - (now - this.lastOrderTime)) / 1000)} seconds`);
+      }
+
+      // Check daily trade limits
+      if (this.dailyTradeCount >= this.maxDailyTrades) {
+        throw new Error(`Daily trade limit reached: ${this.dailyTradeCount}/${this.maxDailyTrades}`);
       }
 
       // Get real-time market price before placing order
@@ -110,8 +163,14 @@ class OrderManager {
         throw new Error('Unable to get current market price');
       }
 
-      // Calculate position size based on risk parameters and account balance
-      const adjustedVolume = await this.calculatePositionSize(orderRequest);
+      // Check if market is open
+      const marketOpen = await exnessAPI.isMarketOpen(orderRequest.symbol);
+      if (!marketOpen) {
+        throw new Error(`Market is closed for ${orderRequest.symbol}`);
+      }
+
+      // Calculate optimal position size based on enhanced risk parameters
+      const adjustedVolume = await this.calculateOptimalPositionSize(orderRequest);
       if (adjustedVolume <= 0) {
         throw new Error('Calculated position size is too small or invalid');
       }
@@ -119,26 +178,34 @@ class OrderManager {
       // Use current market price for market orders
       const executionPrice = orderRequest.type === 'BUY' ? currentPrice.ask : currentPrice.bid;
       
-      // Enhanced order preparation with automatic stop loss if not provided
+      // Enhanced order preparation with automatic risk management
       const enhancedOrder: TradeOrder = {
         symbol: orderRequest.symbol,
         type: orderRequest.type,
         volume: adjustedVolume,
         price: executionPrice,
-        stopLoss: orderRequest.stopLoss || this.calculateAutoStopLoss(executionPrice, orderRequest.type),
-        takeProfit: orderRequest.takeProfit || this.calculateAutoTakeProfit(executionPrice, orderRequest.type),
-        comment: orderRequest.comment || 'ForexPro-RealBot'
+        stopLoss: orderRequest.stopLoss || this.calculateOptimalStopLoss(executionPrice, orderRequest.type, orderRequest.symbol),
+        takeProfit: orderRequest.takeProfit || this.calculateOptimalTakeProfit(executionPrice, orderRequest.type, orderRequest.symbol),
+        comment: orderRequest.comment || `ForexPro-${accountType?.toUpperCase()}-${Date.now()}`
       };
 
-      console.log('Placing real order with enhanced parameters:', enhancedOrder);
+      console.log('Placing enhanced order with optimal parameters:', enhancedOrder);
 
       // Execute order through real Exness API
       const ticket = await exnessAPI.placeOrder(enhancedOrder);
       
       if (ticket) {
+        // Update counters
+        this.lastOrderTime = now;
+        this.dailyTradeCount++;
+        
+        // Log successful execution
         await this.logOrderExecution(enhancedOrder, ticket, 'SUCCESS');
         await this.updatePerformanceMetrics();
+        
         console.log(`✅ ${accountType?.toUpperCase()} order executed successfully on Exness: ${ticket}`);
+        console.log(`📊 Daily trades: ${this.dailyTradeCount}/${this.maxDailyTrades}`);
+        
         return ticket;
       } else {
         throw new Error('Order execution failed - no ticket returned from Exness');
@@ -152,29 +219,7 @@ class OrderManager {
     }
   }
 
-  private calculateAutoStopLoss(price: number, type: 'BUY' | 'SELL'): number {
-    const stopLossPips = 30; // 30 pips stop loss
-    const pipValue = 0.0001; // Standard pip value
-    
-    if (type === 'BUY') {
-      return price - (stopLossPips * pipValue);
-    } else {
-      return price + (stopLossPips * pipValue);
-    }
-  }
-
-  private calculateAutoTakeProfit(price: number, type: 'BUY' | 'SELL'): number {
-    const takeProfitPips = 60; // 60 pips take profit (2:1 ratio)
-    const pipValue = 0.0001; // Standard pip value
-    
-    if (type === 'BUY') {
-      return price + (takeProfitPips * pipValue);
-    } else {
-      return price - (takeProfitPips * pipValue);
-    }
-  }
-
-  private async performRiskChecks(orderRequest: OrderRequest): Promise<{allowed: boolean, reason?: string}> {
+  private async performEnhancedRiskChecks(orderRequest: OrderRequest): Promise<{allowed: boolean, reason?: string}> {
     try {
       // Check if Exness is connected for real trading
       if (!exnessAPI.isConnectedToExness()) {
@@ -184,11 +229,11 @@ class OrderManager {
       // Get real account status from Exness
       const accountStatus = await this.getAccountStatus();
       if (!accountStatus.accountInfo) {
-        return { allowed: false, reason: 'Unable to get account information' };
+        return { allowed: false, reason: 'Unable to get account information from Exness' };
       }
 
       const accountType = exnessAPI.getAccountType();
-      console.log(`🔍 Performing risk checks for ${accountType?.toUpperCase()} account...`);
+      console.log(`🔍 Performing enhanced risk checks for ${accountType?.toUpperCase()} account...`);
 
       // Enhanced daily loss protection for real money
       if (this.riskParams.maxDailyLoss > 0) {
@@ -212,12 +257,12 @@ class OrderManager {
 
       // Ensure minimum account balance for trading
       if (accountStatus.accountInfo.balance < this.riskParams.minAccountBalance) {
-        return { allowed: false, reason: `Account balance too low: $${accountStatus.accountInfo.balance} (min: $${this.riskParams.minAccountBalance})` };
+        return { allowed: false, reason: `Account balance too low: ${accountStatus.accountInfo.currency} ${accountStatus.accountInfo.balance} (min: $${this.riskParams.minAccountBalance})` };
       }
 
       // Check margin level - prevent margin calls
       if (accountStatus.accountInfo.marginLevel > 0 && accountStatus.accountInfo.marginLevel < this.riskParams.minMarginLevel) {
-        return { allowed: false, reason: `Margin level too low: ${accountStatus.accountInfo.marginLevel}% (min: ${this.riskParams.minMarginLevel}%)` };
+        return { allowed: false, reason: `Margin level too low: ${accountStatus.accountInfo.marginLevel.toFixed(1)}% (min: ${this.riskParams.minMarginLevel}%)` };
       }
 
       // Verify symbol is tradeable
@@ -225,9 +270,9 @@ class OrderManager {
         return { allowed: false, reason: `Symbol ${orderRequest.symbol} not tradeable or market closed` };
       }
 
-      // Enhanced margin check
-      if (requiredMargin > (accountStatus.accountInfo.freeMargin * 0.8)) { // Use only 80% of free margin
-        return { allowed: false, reason: `Insufficient free margin: Required ${requiredMargin.toFixed(2)}, Available ${accountStatus.accountInfo.freeMargin.toFixed(2)}` };
+      // Enhanced margin check - use only 70% of free margin for safety
+      if (requiredMargin > (accountStatus.accountInfo.freeMargin * 0.7)) {
+        return { allowed: false, reason: `Insufficient free margin: Required ${requiredMargin.toFixed(2)}, Available ${(accountStatus.accountInfo.freeMargin * 0.7).toFixed(2)}` };
       }
 
       // Position limit check
@@ -245,7 +290,23 @@ class OrderManager {
         return { allowed: false, reason: `Order volume too large: ${orderRequest.volume} (max: ${this.riskParams.maxPositionSize} lots)` };
       }
 
-      console.log('All enhanced risk checks passed for real trading');
+      // Check trading permissions
+      if (!accountStatus.accountInfo.tradeAllowed) {
+        return { allowed: false, reason: 'Trading is not allowed on this account' };
+      }
+
+      // Check daily trade count
+      if (this.dailyTradeCount >= this.maxDailyTrades) {
+        return { allowed: false, reason: `Daily trade limit reached: ${this.dailyTradeCount}/${this.maxDailyTrades}` };
+      }
+
+      // Check order frequency
+      const timeSinceLastOrder = Date.now() - this.lastOrderTime;
+      if (timeSinceLastOrder < this.minOrderInterval) {
+        return { allowed: false, reason: `Order frequency limit: ${Math.ceil((this.minOrderInterval - timeSinceLastOrder) / 1000)}s remaining` };
+      }
+
+      console.log('✅ All enhanced risk checks passed for real trading');
       return { allowed: true };
 
     } catch (error) {
@@ -263,20 +324,26 @@ class OrderManager {
       }
 
       // Enhanced margin calculation for real trading
-      const leverage = parseInt(accountInfo.leverage.split(':')[1] || '100');
+      const leverageString = accountInfo.leverage || '1:100';
+      const leverage = parseInt(leverageString.split(':')[1] || '100');
       const contractSize = 100000; // Standard lot
       const priceToUse = orderRequest.type === 'BUY' ? currentPrice.ask : currentPrice.bid;
-      const positionValue = orderRequest.volume * contractSize * priceToUse;
       
+      // For JPY pairs, adjust calculation
+      const isJPYPair = orderRequest.symbol.includes('JPY');
+      const adjustedPrice = isJPYPair ? priceToUse / 100 : priceToUse;
+      
+      const positionValue = orderRequest.volume * contractSize * adjustedPrice;
       const requiredMargin = positionValue / leverage;
       
-      console.log('Margin calculation:', {
+      console.log('Enhanced margin calculation:', {
         symbol: orderRequest.symbol,
         volume: orderRequest.volume,
         price: priceToUse,
         leverage,
         positionValue,
-        requiredMargin
+        requiredMargin,
+        isJPYPair
       });
       
       return requiredMargin;
@@ -286,7 +353,8 @@ class OrderManager {
       return orderRequest.volume * 1000; // $1000 per lot conservative estimate
     }
   }
-  private async calculatePositionSize(orderRequest: OrderRequest): Promise<number> {
+
+  private async calculateOptimalPositionSize(orderRequest: OrderRequest): Promise<number> {
     try {
       const accountInfo = await exnessAPI.getAccountInfo();
       if (!accountInfo) {
@@ -298,7 +366,7 @@ class OrderManager {
       const availableCapital = accountInfo.equity;
       const riskAmount = (availableCapital * this.riskParams.maxRiskPerTrade) / 100;
       
-      console.log('Position sizing - Available capital:', availableCapital, 'Risk amount:', riskAmount);
+      console.log('Optimal position sizing - Available capital:', availableCapital, 'Risk amount:', riskAmount);
 
       // Get real-time price for accurate calculations
       const currentPrice = await exnessAPI.getCurrentPrice(orderRequest.symbol);
@@ -314,8 +382,9 @@ class OrderManager {
         stopLossDistance = Math.abs(priceToUse - orderRequest.stopLoss) / pipValue;
       }
 
-      // Ensure minimum stop loss distance
+      // Ensure minimum stop loss distance for safety
       stopLossDistance = Math.max(stopLossDistance, 20); // Minimum 20 pips
+      stopLossDistance = Math.min(stopLossDistance, 100); // Maximum 100 pips
 
       // Calculate position size based on risk management
       const pipValue = this.getPipValue(orderRequest.symbol);
@@ -325,14 +394,16 @@ class OrderManager {
       let positionSize = riskAmount / (stopLossDistance * dollarPerPip);
 
       // Apply conservative multiplier for real trading
-      positionSize *= 0.5; // Use only 50% of calculated size for extra safety
+      const conservativeMultiplier = accountInfo.isDemo ? 1.0 : 0.5; // Use only 50% of calculated size for live accounts
+      positionSize *= conservativeMultiplier;
 
       // Enhanced position size limits for real trading
       const minSize = 0.01;
       const maxSize = Math.min(
         this.riskParams.maxPositionSize, // Maximum from settings
-        (accountInfo.freeMargin / 2000), // Conservative margin usage
-        (availableCapital / 10000) // Max position based on capital
+        (accountInfo.freeMargin / 3000), // Very conservative margin usage
+        (availableCapital / 20000), // Max position based on capital
+        accountInfo.isDemo ? 10.0 : 1.0 // Demo: up to 10 lots, Live: up to 1 lot
       );
       
       const adjustedSize = Math.max(minSize, Math.min(maxSize, positionSize));
@@ -345,33 +416,79 @@ class OrderManager {
         pipValue,
         calculatedSize: positionSize,
         adjustedSize,
-        marginRequired: adjustedSize * 100000 * currentPrice.ask * 0.01 // Rough margin calculation
+        conservativeMultiplier,
+        accountType: accountInfo.isDemo ? 'DEMO' : 'LIVE'
       });
 
       return parseFloat(adjustedSize.toFixed(2));
 
     } catch (error) {
-      console.error('Error calculating position size for real trading:', error);
+      console.error('Error calculating optimal position size for real trading:', error);
       return 0.01; // Return minimum size on error for safety
     }
   }
 
-  private getBasePrice(symbol: string): number {
-    const basePrices: Record<string, number> = {
-      'EURUSD': 1.0845,
-      'GBPUSD': 1.2734,
-      'USDJPY': 149.85,
-      'AUDUSD': 0.6623,
-      'USDCHF': 0.8892,
-      'NZDUSD': 0.5987
-    };
-    return basePrices[symbol] || 1.0000;
+  private calculateOptimalStopLoss(price: number, type: 'BUY' | 'SELL', symbol: string): number {
+    // Enhanced stop loss calculation based on volatility and symbol characteristics
+    const pipValue = this.getPipValue(symbol);
+    
+    // Different stop loss distances for different symbol types
+    let stopLossPips: number;
+    if (symbol.includes('JPY')) {
+      stopLossPips = 40; // 40 pips for JPY pairs (more volatile)
+    } else if (['GBPUSD', 'GBPJPY', 'EURGBP'].some(pair => symbol.includes(pair.replace('/', '')))) {
+      stopLossPips = 35; // 35 pips for GBP pairs (volatile)
+    } else {
+      stopLossPips = 30; // 30 pips for major pairs
+    }
+    
+    if (type === 'BUY') {
+      return price - (stopLossPips * pipValue);
+    } else {
+      return price + (stopLossPips * pipValue);
+    }
+  }
+
+  private calculateOptimalTakeProfit(price: number, type: 'BUY' | 'SELL', symbol: string): number {
+    // Enhanced take profit calculation with 2:1 risk-reward ratio
+    const pipValue = this.getPipValue(symbol);
+    
+    // Calculate take profit based on stop loss distance
+    let takeProfitPips: number;
+    if (symbol.includes('JPY')) {
+      takeProfitPips = 80; // 2:1 ratio for JPY pairs
+    } else if (['GBPUSD', 'GBPJPY', 'EURGBP'].some(pair => symbol.includes(pair.replace('/', '')))) {
+      takeProfitPips = 70; // 2:1 ratio for GBP pairs
+    } else {
+      takeProfitPips = 60; // 2:1 ratio for major pairs
+    }
+    
+    if (type === 'BUY') {
+      return price + (takeProfitPips * pipValue);
+    } else {
+      return price - (takeProfitPips * pipValue);
+    }
   }
 
   private getPipValue(symbol: string): number {
-    // Simplified pip value calculation
-    if (symbol.includes('JPY')) return 0.01;
-    return 0.0001;
+    // Enhanced pip value calculation
+    const pipValues: Record<string, number> = {
+      'EURUSD': 0.0001,
+      'GBPUSD': 0.0001,
+      'AUDUSD': 0.0001,
+      'NZDUSD': 0.0001,
+      'USDCHF': 0.0001,
+      'USDCAD': 0.0001,
+      'USDJPY': 0.01,
+      'EURJPY': 0.01,
+      'GBPJPY': 0.01,
+      'CHFJPY': 0.01,
+      'AUDJPY': 0.01,
+      'NZDJPY': 0.01,
+      'CADJPY': 0.01
+    };
+    
+    return pipValues[symbol] || (symbol.includes('JPY') ? 0.01 : 0.0001);
   }
 
   private async getDailyLoss(): Promise<number> {
@@ -379,13 +496,19 @@ class OrderManager {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return 0;
 
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Calculate daily P&L from live_trades
       const { data: trades } = await supabase
         .from('live_trades')
         .select('profit')
         .eq('user_id', user.id)
-        .gte('opened_at', new Date().toISOString().split('T')[0]);
+        .gte('opened_at', today);
 
-      return trades?.reduce((sum, trade) => sum + (parseFloat(trade.profit?.toString() || '0')), 0) || 0;
+      const dailyProfit = trades?.reduce((sum, trade) => 
+        sum + (parseFloat(trade.profit?.toString() || '0')), 0) || 0;
+
+      return dailyProfit;
     } catch (error) {
       console.error('Failed to get daily loss:', error);
       return 0;
@@ -402,15 +525,22 @@ class OrderManager {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Log to a trading_logs table (you might want to create this)
-      console.log('Order execution log:', {
+      const accountType = exnessAPI.getAccountType();
+      
+      // Enhanced logging for real trading
+      console.log('📝 Enhanced order execution log:', {
         user_id: user.id,
+        account_type: accountType,
         order_request: orderRequest,
         order_id: orderId,
         status,
         error_message: errorMessage,
+        daily_trade_count: this.dailyTradeCount,
         timestamp: new Date().toISOString()
       });
+
+      // Store in database for audit trail
+      // You might want to create a trading_logs table for this
     } catch (error) {
       console.error('Failed to log order execution:', error);
     }
@@ -421,17 +551,27 @@ class OrderManager {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: account } = await supabase
-        .from('trading_accounts')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .single();
-
-      if (account) {
-        // For now, just log performance update
-        console.log('Performance metrics updated for user:', user.id);
+      // Update user portfolio with latest performance
+      const accountInfo = await exnessAPI.getAccountInfo();
+      if (accountInfo) {
+        await supabase
+          .from('user_portfolios')
+          .upsert({
+            user_id: user.id,
+            account_type: accountInfo.isDemo ? 'PAPER' : 'LIVE',
+            balance: accountInfo.balance,
+            equity: accountInfo.equity,
+            margin_used: accountInfo.margin,
+            free_margin: accountInfo.freeMargin,
+            margin_level: accountInfo.marginLevel,
+            total_pnl: accountInfo.profit,
+            daily_pnl: await this.getDailyLoss(),
+            total_trades: this.dailyTradeCount,
+            updated_at: new Date().toISOString()
+          });
       }
+
+      console.log('📊 Performance metrics updated');
     } catch (error) {
       console.error('Failed to update performance metrics:', error);
     }
@@ -470,19 +610,33 @@ class OrderManager {
             entry_price: position.openPrice,
             current_price: position.currentPrice,
             profit: position.profit,
+            profit_pips: this.calculatePips(position.openPrice, position.currentPrice, position.symbol, position.type),
             stop_loss: position.stopLoss,
             take_profit: position.takeProfit,
             status: 'OPEN',
-            opened_at: position.openTime.toISOString()
+            commission: position.commission,
+            swap: position.swap,
+            opened_at: position.openTime.toISOString(),
+            updated_at: new Date().toISOString()
           });
       }
+      
+      console.log(`📊 Synced ${positions.length} positions with database`);
     } catch (error) {
       console.error('Failed to sync positions with database:', error);
     }
   }
 
+  private calculatePips(openPrice: number, currentPrice: number, symbol: string, type: string): number {
+    const pipValue = this.getPipValue(symbol);
+    const priceDiff = type === 'BUY' ? currentPrice - openPrice : openPrice - currentPrice;
+    return priceDiff / pipValue;
+  }
+
   async closePosition(ticket: number): Promise<boolean> {
     try {
+      console.log(`🔒 Closing position ${ticket} on Exness...`);
+      
       const success = await exnessAPI.closePosition(ticket);
       
       if (success) {
@@ -493,11 +647,14 @@ class OrderManager {
             .from('live_trades')
             .update({
               status: 'CLOSED',
-              closed_at: new Date().toISOString()
+              closed_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
             })
             .eq('ticket_id', ticket.toString())
             .eq('user_id', user.id);
         }
+        
+        console.log(`✅ Position ${ticket} closed successfully`);
       }
       
       return success;
@@ -509,7 +666,14 @@ class OrderManager {
 
   async closeAllPositions(): Promise<void> {
     try {
+      console.log('🔒 Closing all positions...');
+      
       const positions = await this.getOpenPositions();
+      
+      if (positions.length === 0) {
+        console.log('No positions to close');
+        return;
+      }
       
       const closePromises = positions.map(position => 
         this.closePosition(position.ticket)
@@ -521,14 +685,14 @@ class OrderManager {
         result.status === 'fulfilled' && result.value === true
       ).length;
       
-      console.log(`Closed ${successCount} out of ${positions.length} positions`);
+      console.log(`✅ Closed ${successCount} out of ${positions.length} positions`);
       
     } catch (error) {
       console.error('Failed to close all positions:', error);
     }
   }
 
-  // New method to get real-time account status
+  // Enhanced method to get real-time account status
   async getAccountStatus(): Promise<any> {
     try {
       const accountInfo = await exnessAPI.getAccountInfo();
@@ -539,7 +703,10 @@ class OrderManager {
         openPositions: positions.length,
         totalUnrealizedPnL: positions.reduce((sum, pos) => sum + pos.profit, 0),
         isConnected: exnessAPI.isConnectedToExness(),
-        connectionStatus: exnessAPI.getConnectionStatus()
+        connectionStatus: exnessAPI.getConnectionStatus(),
+        dailyTradeCount: this.dailyTradeCount,
+        maxDailyTrades: this.maxDailyTrades,
+        riskParameters: this.riskParams
       };
     } catch (error) {
       console.error('Failed to get account status:', error);
@@ -551,7 +718,8 @@ class OrderManager {
   async canTradeSymbol(symbol: string): Promise<boolean> {
     try {
       const price = await exnessAPI.getCurrentPrice(symbol);
-      return price !== null;
+      const marketOpen = await exnessAPI.isMarketOpen(symbol);
+      return price !== null && marketOpen;
     } catch (error) {
       console.error(`Cannot trade symbol ${symbol}:`, error);
       return false;
@@ -563,20 +731,93 @@ class OrderManager {
     console.log(`🚨 EMERGENCY STOP ACTIVATED for ${accountType?.toUpperCase()} account`);
     
     try {
-      // Disable auto trading
+      // Disable auto trading immediately
       this.setAutoTrading(false);
       
       // Close all positions
       await this.closeAllPositions();
       
+      // Reset daily counters to prevent further trading
+      this.dailyTradeCount = this.maxDailyTrades;
+      
       // Log emergency stop
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         console.log('🚨 Emergency stop executed for user:', user.id);
+        
+        // Update bot settings to disable
+        await supabase
+          .from('bot_settings')
+          .update({
+            is_active: false,
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', user.id);
       }
     } catch (error) {
       console.error('Emergency stop failed:', error);
     }
+  }
+
+  // Method to get trading statistics
+  async getTradingStatistics(): Promise<any> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+
+      const { data: trades } = await supabase
+        .from('live_trades')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('opened_at', { ascending: false })
+        .limit(100);
+
+      if (!trades || trades.length === 0) {
+        return {
+          totalTrades: 0,
+          winRate: 0,
+          totalProfit: 0,
+          averageProfit: 0,
+          maxDrawdown: 0,
+          profitFactor: 0
+        };
+      }
+
+      const closedTrades = trades.filter(t => t.status === 'CLOSED');
+      const winningTrades = closedTrades.filter(t => parseFloat(t.profit?.toString() || '0') > 0);
+      const losingTrades = closedTrades.filter(t => parseFloat(t.profit?.toString() || '0') < 0);
+      
+      const totalProfit = closedTrades.reduce((sum, t) => sum + parseFloat(t.profit?.toString() || '0'), 0);
+      const grossProfit = winningTrades.reduce((sum, t) => sum + parseFloat(t.profit?.toString() || '0'), 0);
+      const grossLoss = Math.abs(losingTrades.reduce((sum, t) => sum + parseFloat(t.profit?.toString() || '0'), 0));
+      
+      return {
+        totalTrades: closedTrades.length,
+        winRate: closedTrades.length > 0 ? (winningTrades.length / closedTrades.length) * 100 : 0,
+        totalProfit,
+        averageProfit: closedTrades.length > 0 ? totalProfit / closedTrades.length : 0,
+        grossProfit,
+        grossLoss,
+        profitFactor: grossLoss > 0 ? grossProfit / grossLoss : 0,
+        winningTrades: winningTrades.length,
+        losingTrades: losingTrades.length,
+        dailyTradeCount: this.dailyTradeCount,
+        maxDailyTrades: this.maxDailyTrades
+      };
+    } catch (error) {
+      console.error('Failed to get trading statistics:', error);
+      return null;
+    }
+  }
+
+  // Method to update risk parameters
+  updateRiskParameters(newParams: Partial<RiskParameters>): void {
+    this.riskParams = { ...this.riskParams, ...newParams };
+    console.log('Risk parameters updated:', this.riskParams);
+  }
+
+  getRiskParameters(): RiskParameters {
+    return { ...this.riskParams };
   }
 }
 

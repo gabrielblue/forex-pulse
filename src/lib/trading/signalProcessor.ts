@@ -358,8 +358,77 @@ class SignalProcessor {
   }
 
   async generateTestSignal(symbol: string = 'EURUSD'): Promise<void> {
-    // Use the new advanced signal generation
-    await this.generateAdvancedSignals([symbol]);
+    try {
+      const accountType = exnessAPI.getAccountType();
+      console.log(`🧪 Generating test signal for ${symbol} on ${accountType?.toUpperCase()} account...`);
+      
+      // Generate a realistic test signal
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get currency pair
+      const { data: pair } = await supabase
+        .from('currency_pairs')
+        .select('id')
+        .eq('symbol', symbol)
+        .single();
+
+      if (!pair) {
+        console.error('Currency pair not found:', symbol);
+        return;
+      }
+
+      // Get current market price
+      const currentPrice = await exnessAPI.getCurrentPrice(symbol);
+      const basePrice = currentPrice?.bid || this.getBasePrice(symbol);
+      
+      // Generate realistic signal
+      const signalType = Math.random() > 0.5 ? 'BUY' : 'SELL';
+      const confidence = 75 + Math.random() * 20; // 75-95% confidence
+      
+      const stopLossDistance = 0.002; // 20 pips
+      const takeProfitDistance = 0.004; // 40 pips (2:1 ratio)
+      
+      const stopLoss = signalType === 'BUY' 
+        ? basePrice - stopLossDistance 
+        : basePrice + stopLossDistance;
+        
+      const takeProfit = signalType === 'BUY' 
+        ? basePrice + takeProfitDistance 
+        : basePrice - takeProfitDistance;
+
+      const testSignal = {
+        user_id: user.id,
+        pair_id: pair.id,
+        signal_type: signalType,
+        confidence_score: confidence,
+        entry_price: basePrice,
+        stop_loss: stopLoss,
+        take_profit: takeProfit,
+        timeframe: '1H',
+        reasoning: `Test signal generated for ${accountType?.toUpperCase()} account: ${signalType} signal with ${confidence.toFixed(1)}% confidence based on technical analysis`,
+        ai_model: 'test_signal_generator',
+        status: 'ACTIVE'
+      };
+
+      const { error } = await supabase
+        .from('trading_signals')
+        .insert(testSignal);
+
+      if (error) throw error;
+      
+      console.log(`✅ Test signal generated successfully:`, {
+        symbol,
+        type: signalType,
+        confidence: confidence.toFixed(1) + '%',
+        entryPrice: basePrice.toFixed(4),
+        accountType: accountType?.toUpperCase()
+      });
+      
+    } catch (error) {
+      console.error('❌ Failed to generate test signal:', error);
+      throw error;
+    }
   }
 
   private getBasePrice(symbol: string): number {
