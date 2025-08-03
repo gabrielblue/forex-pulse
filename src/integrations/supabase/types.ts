@@ -158,6 +158,57 @@ export type Database = {
         }
         Relationships: []
       }
+      exness_sessions: {
+        Row: {
+          account_balance: number | null
+          account_currency: string | null
+          account_equity: number | null
+          account_free_margin: number | null
+          account_margin: number | null
+          created_at: string
+          expires_at: string | null
+          id: string
+          is_connected: boolean | null
+          login_id: number
+          server_name: string
+          session_token: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_balance?: number | null
+          account_currency?: string | null
+          account_equity?: number | null
+          account_free_margin?: number | null
+          account_margin?: number | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_connected?: boolean | null
+          login_id: number
+          server_name: string
+          session_token?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_balance?: number | null
+          account_currency?: string | null
+          account_equity?: number | null
+          account_free_margin?: number | null
+          account_margin?: number | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_connected?: boolean | null
+          login_id?: number
+          server_name?: string
+          session_token?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       live_trades: {
         Row: {
           closed_at: string | null
@@ -234,6 +285,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      market_data: {
+        Row: {
+          ask: number
+          bid: number
+          created_at: string
+          id: string
+          spread: number
+          symbol: string
+          timestamp: string
+          volume: number | null
+        }
+        Insert: {
+          ask: number
+          bid: number
+          created_at?: string
+          id?: string
+          spread: number
+          symbol: string
+          timestamp?: string
+          volume?: number | null
+        }
+        Update: {
+          ask?: number
+          bid?: number
+          created_at?: string
+          id?: string
+          spread?: number
+          symbol?: string
+          timestamp?: string
+          volume?: number | null
+        }
+        Relationships: []
       }
       news_sentiment: {
         Row: {
