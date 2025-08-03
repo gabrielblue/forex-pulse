@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { orderManager, OrderRequest } from './orderManager';
 import { professionalStrategies, MarketData, TechnicalIndicators } from './strategies/professionalStrategies';
+import { exnessAPI } from './exnessApi';
 
 export interface TradingSignal {
   id: string;

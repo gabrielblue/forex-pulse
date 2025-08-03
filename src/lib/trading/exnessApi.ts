@@ -275,8 +275,7 @@ class ExnessAPI {
               'X-Platform': 'MT5',
               'X-Client-Version': '2.0'
             },
-            body: JSON.stringify(authPayload),
-            timeout: 15000 // 15 second timeout
+            body: JSON.stringify(authPayload)
           });
 
           const responseText = await response.text();
@@ -363,8 +362,7 @@ class ExnessAPI {
               'User-Agent': 'ForexPro-TradingBot/2.0',
               'Accept': 'application/json',
               'X-API-Version': '1.0'
-            },
-            timeout: 10000
+            }
           });
 
           if (!response.ok) {
@@ -694,8 +692,7 @@ class ExnessAPI {
               'Accept': 'application/json',
               'X-API-Version': '1.0'
             },
-            body: JSON.stringify(orderPayload),
-            timeout: 15000
+            body: JSON.stringify(orderPayload)
           });
 
           const responseText = await response.text();
@@ -775,8 +772,7 @@ class ExnessAPI {
               'Content-Type': 'application/json',
               'User-Agent': 'ForexPro-TradingBot/2.0',
               'Accept': 'application/json'
-            },
-            timeout: 10000
+            }
           });
 
           if (!response.ok) {
@@ -856,8 +852,7 @@ class ExnessAPI {
               'Content-Type': 'application/json',
               'User-Agent': 'ForexPro-TradingBot/2.0'
             },
-            body: JSON.stringify(closePayload),
-            timeout: 15000
+            body: JSON.stringify(closePayload)
           });
 
           if (!response.ok) {
@@ -919,8 +914,7 @@ class ExnessAPI {
               'Authorization': `Bearer ${this.sessionToken}`,
               'Content-Type': 'application/json',
               'User-Agent': 'ForexPro-TradingBot/2.0'
-            },
-            timeout: 5000
+            }
           });
 
           if (!response.ok) {
@@ -1380,8 +1374,7 @@ class ExnessAPI {
           'Authorization': `Bearer ${this.sessionToken}`,
           'Content-Type': 'application/json',
           'User-Agent': 'ForexPro-TradingBot/2.0'
-        },
-        timeout: 10000
+        }
       });
 
       if (response.ok) {
@@ -1423,8 +1416,7 @@ class ExnessAPI {
         headers: {
           'Authorization': `Bearer ${this.sessionToken}`,
           'Content-Type': 'application/json'
-        },
-        timeout: 5000
+        }
       });
 
       if (response.ok) {
