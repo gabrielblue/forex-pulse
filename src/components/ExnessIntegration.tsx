@@ -478,7 +478,7 @@ export const ExnessIntegration = () => {
               {/* Test Results */}
               {testResults && (
                 <Alert variant={testResults.success ? "default" : "destructive"}>
-                  <CheckCircle className="h-4 w-4" />
+                  {testResults.success ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
                   <AlertDescription>
                     <strong>Test Result:</strong> {testResults.message}
                     {testResults.accountInfo && (
@@ -488,8 +488,17 @@ export const ExnessIntegration = () => {
                         <div>⚖️ Leverage: {testResults.accountInfo.leverage}</div>
                         <div>🏷️ Type: {testResults.connectionType?.toUpperCase()}</div>
                         <div>🏢 Company: {testResults.accountInfo.company}</div>
+                        {testResults.accountInfo.marginLevel && (
+                          <div>📈 Margin Level: {testResults.accountInfo.marginLevel.toFixed(1)}%</div>
+                        )}
+                        {testResults.accountInfo.freeMargin && (
+                          <div>💵 Free Margin: {testResults.accountInfo.currency} {testResults.accountInfo.freeMargin.toFixed(2)}</div>
+                        )}
                         {testResults.tradingAllowed !== undefined && (
                           <div>📈 Trading: {testResults.tradingAllowed ? '✅ Allowed' : '❌ Restricted'}</div>
+                        )}
+                        {testResults.serverInfo && (
+                          <div>🌐 Server Status: {testResults.serverInfo.status} (Ping: {testResults.serverInfo.ping})</div>
                         )}
                       </div>
                     )}
@@ -843,11 +852,24 @@ export const ExnessIntegration = () => {
             <ol className="list-decimal list-inside mt-2 space-y-1 text-sm">
               <li>Create an Exness account at <a href="https://exness.com" target="_blank" className="text-blue-600 underline">exness.com</a></li>
               <li>Download MT5 platform and get your login credentials</li>
-              <li>Use demo servers (Trial01-Trial12) for testing</li>
-              <li>Use live servers (Real01-Real08) for actual trading</li>
+              <li>Start with demo servers (Trial01-Trial12) for safe testing</li>
+              <li>Verify connection works with test button before connecting</li>
+              <li>Only use live servers (Real01-Real08) after successful demo testing</li>
+              <li>Always start with small position sizes on live accounts</li>
             </ol>
           </div>
           <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-950 rounded border border-yellow-200 dark:border-yellow-800">
+            <strong>⚠️ Connection Troubleshooting:</strong>
+            <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
+              <li>Ensure your MT5 account number is 8-12 digits</li>
+              <li>Verify your password is correct (case-sensitive)</li>
+              <li>Check that the server name matches your account type</li>
+              <li>Demo accounts must use Trial servers, Live accounts use Real servers</li>
+              <li>If connection fails, try a different server from the same type</li>
+              <li>Contact Exness support if credentials are definitely correct but connection fails</li>
+            </ul>
+          </div>
+          <div className="mt-3 p-3 bg-red-50 dark:bg-red-950 rounded border border-red-200 dark:border-red-800">
             <strong>⚠️ Risk Warning:</strong> Live trading involves real money and significant risk. 
             Always test thoroughly with demo accounts first. Never risk more than you can afford to lose. 
             The system includes multiple safety mechanisms, but trading forex carries inherent risks.
