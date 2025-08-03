@@ -1,1 +1,27 @@
 project_id = "ljjepgxndqpdztpscrnt"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = true
+port = 54324
+smtp_port = 54325
+pop3_port = 54326
+
+[functions.exness-proxy]
+verify_jwt = false
+
+[analytics]
+enabled = false

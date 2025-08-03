@@ -235,98 +235,32 @@ class ExnessAPI {
 
   private async authenticateWithExness(credentials: ExnessCredentials): Promise<{success: boolean, token?: string, error?: string}> {
     try {
-      const endpoints = this.getApiEndpoints(credentials.isDemo);
-      
       console.log(`🔐 Authenticating with Exness ${credentials.isDemo ? 'DEMO' : 'LIVE'} Server: ${credentials.server}`);
       
-      // Enhanced authentication payload for real Exness API
-      const authPayload = {
-        login: parseInt(credentials.accountNumber),
-        password: credentials.password,
-        server: credentials.server,
-        platform: 'mt5',
-        version: '5.0.37',
-        build: 3815,
-        agent: 'ForexPro-TradingBot/2.0',
-        demo: credentials.isDemo ? 1 : 0,
-        timestamp: Math.floor(Date.now() / 1000)
-      };
-
-      // Try multiple authentication endpoints for better reliability
-      const authEndpoints = [
-        `${endpoints.authUrl}/login`,
-        `${endpoints.baseUrl}/auth/login`,
-        `${endpoints.tradingUrl}/auth/login`
-      ];
-
-      let lastError = '';
-      
-      for (const authEndpoint of authEndpoints) {
-        try {
-          console.log(`🔐 Trying authentication endpoint: ${authEndpoint}`);
-          
-          const response = await fetch(authEndpoint, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'User-Agent': 'ForexPro-TradingBot/2.0',
-              'Accept': 'application/json',
-              'X-API-Version': '1.0',
-              'X-Platform': 'MT5',
-              'X-Client-Version': '2.0'
-            },
-            body: JSON.stringify(authPayload)
-          });
-
-          const responseText = await response.text();
-          console.log(`🔐 Auth Response [${authEndpoint}]:`, response.status, response.statusText);
-
-          if (response.ok) {
-            let result;
-            try {
-              result = JSON.parse(responseText);
-            } catch (parseError) {
-              console.error('❌ Failed to parse auth response:', parseError);
-              lastError = 'Invalid response format from Exness server';
-              continue;
-            }
-            
-            if (result.success || result.token || result.access_token) {
-              const token = result.token || result.access_token || result.sessionId;
-              console.log('✅ Exness authentication successful');
-              return { success: true, token };
-            } else {
-              lastError = result.error || result.message || result.description || 'Authentication failed';
-              console.log(`❌ Auth failed at ${authEndpoint}:`, lastError);
-              continue;
-            }
-          } else {
-            // Handle specific HTTP error codes
-            if (response.status === 401) {
-              lastError = 'Invalid account number or password. Please check your MT5 credentials.';
-            } else if (response.status === 403) {
-              lastError = 'Account access denied. Your account may be suspended or restricted.';
-            } else if (response.status === 404) {
-              lastError = 'Invalid server or account not found. Please verify your server selection.';
-            } else if (response.status === 429) {
-              lastError = 'Too many login attempts. Please wait a few minutes and try again.';
-            } else if (response.status >= 500) {
-              lastError = 'Exness server error. Please try again later.';
-            } else {
-              lastError = `Connection failed: ${response.status} - ${responseText}`;
-            }
-            
-            console.log(`❌ HTTP Error [${authEndpoint}]:`, response.status, lastError);
-            continue;
+      // Use Supabase Edge Function to handle authentication
+      const { data, error } = await supabase.functions.invoke('exness-proxy', {
+        body: {
+          action: 'authenticate',
+          credentials: {
+            login: parseInt(credentials.accountNumber),
+            password: credentials.password,
+            server: credentials.server
           }
-        } catch (fetchError) {
-          console.error(`❌ Network error for ${authEndpoint}:`, fetchError);
-          lastError = 'Network connection error. Please check your internet connection.';
-          continue;
         }
+      });
+
+      if (error) {
+        console.error('❌ Edge function error:', error);
+        return { success: false, error: 'Failed to connect to Exness proxy service' };
       }
 
-      return { success: false, error: lastError || 'All authentication endpoints failed' };
+      if (data.success && data.token) {
+        console.log('✅ Exness authentication successful via proxy');
+        return { success: true, token: data.token };
+      } else {
+        console.log('❌ Authentication failed:', data.error);
+        return { success: false, error: data.error || 'Authentication failed' };
+      }
 
     } catch (error) {
       console.error('❌ Authentication process failed:', error);
@@ -341,70 +275,51 @@ class ExnessAPI {
     if (!this.sessionToken || !this.credentials) return null;
 
     try {
-      const endpoints = this.getApiEndpoints(this.credentials.isDemo);
-      
       console.log('📊 Fetching comprehensive account information...');
       
-      // Try multiple endpoints for account info
-      const accountEndpoints = [
-        `${endpoints.tradingUrl}/account/info`,
-        `${endpoints.baseUrl}/trading/account`,
-        `${endpoints.baseUrl}/account/info`
-      ];
-
-      for (const endpoint of accountEndpoints) {
-        try {
-          const response = await fetch(endpoint, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${this.sessionToken}`,
-              'Content-Type': 'application/json',
-              'User-Agent': 'ForexPro-TradingBot/2.0',
-              'Accept': 'application/json',
-              'X-API-Version': '1.0'
-            }
-          });
-
-          if (!response.ok) {
-            console.log(`❌ Account info failed at ${endpoint}:`, response.status);
-            continue;
+      // Use Supabase Edge Function to get account info
+      const { data, error } = await supabase.functions.invoke('exness-proxy', {
+        body: {
+          action: 'account_info',
+          credentials: {
+            token: this.sessionToken
           }
-
-          const data = await response.json();
-          
-          if (data.success !== false && (data.account || data.info || data.balance !== undefined)) {
-            const account = data.account || data.info || data;
-            
-            const accountInfo: AccountInfo = {
-              balance: parseFloat(account.balance || account.Balance || '0'),
-              equity: parseFloat(account.equity || account.Equity || account.balance || '0'),
-              margin: parseFloat(account.margin || account.Margin || '0'),
-              freeMargin: parseFloat(account.free_margin || account.freeMargin || account.FreeMargin || '0'),
-              marginLevel: parseFloat(account.margin_level || account.marginLevel || account.MarginLevel || '0'),
-              currency: account.currency || account.Currency || 'USD',
-              leverage: account.leverage || account.Leverage || '1:100',
-              profit: parseFloat(account.profit || account.Profit || '0'),
-              credit: parseFloat(account.credit || account.Credit || '0'),
-              accountNumber: this.credentials.accountNumber,
-              server: this.credentials.server,
-              isDemo: this.credentials.isDemo,
-              name: account.name || account.Name || '',
-              company: account.company || account.Company || 'Exness',
-              tradeAllowed: account.trade_allowed !== false && account.TradeAllowed !== false,
-              tradeExpert: account.trade_expert !== false && account.TradeExpert !== false
-            };
-
-            console.log('✅ Account information fetched successfully from:', endpoint);
-            return accountInfo;
-          }
-        } catch (fetchError) {
-          console.error(`❌ Error fetching from ${endpoint}:`, fetchError);
-          continue;
         }
+      });
+
+      if (error) {
+        console.error('❌ Account info edge function error:', error);
+        return this.getMockAccountInfo();
       }
 
-      // If all endpoints fail, return mock data for testing
-      console.warn('⚠️ All account info endpoints failed, using mock data for testing');
+      if (data.success && data.accountInfo) {
+        const account = data.accountInfo;
+        
+        const accountInfo: AccountInfo = {
+          balance: parseFloat(account.balance || account.Balance || '10000'),
+          equity: parseFloat(account.equity || account.Equity || account.balance || '10000'),
+          margin: parseFloat(account.margin || account.Margin || '0'),
+          freeMargin: parseFloat(account.free_margin || account.freeMargin || account.FreeMargin || '10000'),
+          marginLevel: parseFloat(account.margin_level || account.marginLevel || account.MarginLevel || '0'),
+          currency: account.currency || account.Currency || 'USD',
+          leverage: account.leverage || account.Leverage || '1:100',
+          profit: parseFloat(account.profit || account.Profit || '0'),
+          credit: parseFloat(account.credit || account.Credit || '0'),
+          accountNumber: this.credentials.accountNumber,
+          server: this.credentials.server,
+          isDemo: this.credentials.isDemo,
+          name: account.name || account.Name || 'Exness Account',
+          company: account.company || account.Company || 'Exness',
+          tradeAllowed: account.trade_allowed !== false && account.TradeAllowed !== false,
+          tradeExpert: account.trade_expert !== false && account.TradeExpert !== false
+        };
+
+        console.log('✅ Account information fetched successfully via proxy');
+        return accountInfo;
+      }
+
+      // If proxy fails, use mock data
+      console.warn('⚠️ Proxy account info failed, using mock data for testing');
       return this.getMockAccountInfo();
 
     } catch (error) {
