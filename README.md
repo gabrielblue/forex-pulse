@@ -1,5 +1,18 @@
 # Welcome to your Lovable project
 
+## 🚀 Real Exness MT5 Integration Setup
+
+This project includes REAL MetaTrader 5 integration for live forex trading. To use real trading features:
+
+1. **Install Python dependencies**: `pip install -r requirements.txt`
+2. **Start MT5 Bridge**: `python mt5_bridge.py`
+3. **Open MT5 Terminal** and login to your Exness account
+4. **Connect in the app** using your real MT5 credentials
+
+See `MT5_SETUP_INSTRUCTIONS.md` for detailed setup instructions.
+
+⚠️ **IMPORTANT**: Always test with demo accounts first before using live accounts with real money.
+
 ## Project info
 
 **URL**: https://lovable.dev/projects/38592b26-5b86-46ca-b10b-1f2258472be4
