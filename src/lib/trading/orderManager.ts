@@ -121,22 +121,9 @@ class OrderManager {
 
   async executeOrder(orderRequest: OrderRequest): Promise<string | null> {
     try {
-      const accountType = exnessAPI.getAccountType();
-      console.log(`💼 Executing ${accountType?.toUpperCase()} order on Exness:`, {
-        symbol: orderRequest.symbol,
-        type: orderRequest.type,
-        volume: orderRequest.volume
-      });
-
       // Ensure we're connected to real Exness account
       if (!exnessAPI.isConnectedToExness()) {
         throw new Error('Not connected to Exness account. Please connect first.');
-      }
-
-      // Verify trading capabilities
-      const tradingCheck = await exnessAPI.verifyTradingCapabilities();
-      if (!tradingCheck.canTrade) {
-        throw new Error(`Trading not available: ${tradingCheck.issues.join(', ')}`);
       }
 
       // Enhanced risk checks for real money trading
@@ -146,65 +133,35 @@ class OrderManager {
         throw new Error(`Risk Management: ${riskCheckResult.reason}`);
       }
 
-      // Check order frequency limits
-      const now = Date.now();
-      if (now - this.lastOrderTime < this.minOrderInterval) {
-        throw new Error(`Order frequency limit: Please wait ${Math.ceil((this.minOrderInterval - (now - this.lastOrderTime)) / 1000)} seconds`);
-      }
-
-      // Check daily trade limits
-      if (this.dailyTradeCount >= this.maxDailyTrades) {
-        throw new Error(`Daily trade limit reached: ${this.dailyTradeCount}/${this.maxDailyTrades}`);
-      }
-
-      // Get real-time market price before placing order
-      const currentPrice = await exnessAPI.getCurrentPrice(orderRequest.symbol);
-      if (!currentPrice) {
-        throw new Error('Unable to get current market price');
-      }
-
-      // Check if market is open
-      const marketOpen = await exnessAPI.isMarketOpen(orderRequest.symbol);
-      if (!marketOpen) {
-        throw new Error(`Market is closed for ${orderRequest.symbol}`);
-      }
-
       // Calculate optimal position size based on enhanced risk parameters
       const adjustedVolume = await this.calculateOptimalPositionSize(orderRequest);
       if (adjustedVolume <= 0) {
         throw new Error('Calculated position size is too small or invalid');
       }
 
-      // Use current market price for market orders
-      const executionPrice = orderRequest.type === 'BUY' ? currentPrice.ask : currentPrice.bid;
-      
       // Enhanced order preparation with automatic risk management
       const enhancedOrder: TradeOrder = {
         symbol: orderRequest.symbol,
         type: orderRequest.type,
         volume: adjustedVolume,
-        price: executionPrice,
-        stopLoss: orderRequest.stopLoss || this.calculateOptimalStopLoss(executionPrice, orderRequest.type, orderRequest.symbol),
-        takeProfit: orderRequest.takeProfit || this.calculateOptimalTakeProfit(executionPrice, orderRequest.type, orderRequest.symbol),
-        comment: orderRequest.comment || `ForexPro-${accountType?.toUpperCase()}-${Date.now()}`
+        stopLoss: orderRequest.stopLoss,
+        takeProfit: orderRequest.takeProfit,
+        comment: orderRequest.comment || `ForexPro-${Date.now()}`
       };
-
-      console.log('Placing enhanced order with optimal parameters:', enhancedOrder);
 
       // Execute order through real Exness API
       const ticket = await exnessAPI.placeOrder(enhancedOrder);
       
       if (ticket) {
         // Update counters
-        this.lastOrderTime = now;
+        this.lastOrderTime = Date.now();
         this.dailyTradeCount++;
         
         // Log successful execution
         await this.logOrderExecution(enhancedOrder, ticket, 'SUCCESS');
         await this.updatePerformanceMetrics();
         
-        console.log(`✅ ${accountType?.toUpperCase()} order executed successfully on Exness: ${ticket}`);
-        console.log(`📊 Daily trades: ${this.dailyTradeCount}/${this.maxDailyTrades}`);
+        console.log(`✅ Order executed successfully: ${ticket}`);
         
         return ticket;
       } else {

@@ -116,60 +116,20 @@ class TradingBot {
 
   async connectToExness(credentials: ExnessCredentials): Promise<boolean> {
     try {
-      console.log('🤖 Bot connecting to Exness...', {
-        accountType: credentials.isDemo ? 'DEMO' : 'LIVE',
-        server: credentials.server,
-        accountNumber: credentials.accountNumber.substring(0, 4) + '****'
-      });
-      
-      // Test connection first
-      const testResult = await exnessAPI.testConnection(credentials);
-      if (!testResult.success) {
-        throw new Error(testResult.message);
-      }
-
-      console.log('✅ Connection test passed, establishing full connection...');
-
-      // Establish full connection
+      // Direct connection through exnessAPI
       const connected = await exnessAPI.connect(credentials);
       this.status.isConnected = connected;
       
       if (connected) {
-        console.log('✅ Bot successfully connected to Exness API');
-        
-        // Verify account information
-        const accountInfo = await exnessAPI.getAccountInfo();
-        if (accountInfo) {
-          console.log('📊 Account Info Verified by Bot:', {
-            balance: accountInfo.balance,
-            equity: accountInfo.equity,
-            currency: accountInfo.currency,
-            leverage: accountInfo.leverage,
-            accountType: accountInfo.isDemo ? 'DEMO' : 'LIVE',
-            tradingAllowed: accountInfo.tradeAllowed,
-            server: accountInfo.server
-          });
-          
-          // Verify trading capabilities
-          const tradingCheck = await exnessAPI.verifyTradingCapabilities();
-          if (!tradingCheck.canTrade) {
-            console.warn('⚠️ Trading capabilities limited:', tradingCheck.issues);
-          } else {
-            console.log('✅ All trading capabilities verified by bot');
-          }
-
-          // Start health monitoring
-          this.startHealthMonitoring();
-        }
-        
+        this.startHealthMonitoring();
         await this.updateStatus();
       }
       
       return connected;
     } catch (error) {
-      console.error('❌ Bot failed to connect to Exness:', error);
+      console.error('Bot connection failed:', error);
       this.status.isConnected = false;
-      return false;
+      throw error;
     }
   }
 

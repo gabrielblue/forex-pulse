@@ -151,17 +151,9 @@ export const LiveTradingDashboard = () => {
 
   const loadAccountInfo = async () => {
     try {
-      if (!exnessAPI.isConnectedToExness()) return;
-      
       const accountInfo = await exnessAPI.getAccountInfo();
       if (accountInfo) {
         setRealAccountInfo(accountInfo);
-        console.log('📊 Account info updated from Exness:', {
-          balance: accountInfo.balance,
-          equity: accountInfo.equity,
-          freeMargin: accountInfo.freeMargin,
-          marginLevel: accountInfo.marginLevel
-        });
       }
     } catch (error) {
       console.error('Failed to load account info:', error);

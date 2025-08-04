@@ -75,7 +75,8 @@ export const useTradingBot = () => {
       setIsLoading(true);
       setError(null);
       
-      const connected = await tradingBot.connectToExness(credentials);
+      // Connect directly through exnessAPI
+      const connected = await exnessAPI.connect(credentials);
       updateStatus();
       
       if (!connected) {

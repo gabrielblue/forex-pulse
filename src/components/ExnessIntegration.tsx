@@ -198,7 +198,8 @@ export const ExnessIntegration = () => {
         setConnectionProgress(prev => Math.min(prev + 5, 90));
       }, 300);
 
-      const connected = await connectToExness({
+      // Connect directly through exnessAPI instead of hook
+      const connected = await exnessAPI.connect({
         accountNumber: credentials.accountNumber,
         password: credentials.password,
         server: credentials.server,
@@ -209,31 +210,10 @@ export const ExnessIntegration = () => {
       setConnectionProgress(100);
       
       if (connected) {
-        // Get real account information from Exness
-        const accountInfo = await exnessAPI.getAccountInfo();
-        if (accountInfo) {
-          setRealAccountInfo(accountInfo);
-          
-          // Get comprehensive connection info
-          const connInfo = exnessAPI.getConnectionInfo();
-          setConnectionInfo(connInfo);
-          
-          toast.success(`🎉 Connected to Exness ${accountInfo.isDemo ? 'DEMO' : 'LIVE'} Account!`, {
-            description: `Balance: ${accountInfo.currency} ${accountInfo.balance.toFixed(2)} | Equity: ${accountInfo.currency} ${accountInfo.equity.toFixed(2)} | Server: ${accountInfo.server}`
-          });
-
-          // Verify trading capabilities
-          const tradingCheck = await exnessAPI.verifyTradingCapabilities();
-          if (!tradingCheck.canTrade) {
-            toast.warning("⚠️ Trading capabilities limited", {
-              description: tradingCheck.issues.join(', ')
-            });
-          } else {
-            toast.success("✅ All trading capabilities verified - ready to trade!");
-          }
-        } else {
-          toast.warning("⚠️ Connected but account info unavailable");
-        }
+        // Get real account information
+        await loadAccountInfo();
+        
+        toast.success(`🎉 Connected to Exness ${realAccountInfo?.isDemo ? 'DEMO' : 'LIVE'} Account!`);
       } else {
         toast.error("❌ Failed to connect to Exness. Please check your credentials.");
       }
@@ -248,13 +228,34 @@ export const ExnessIntegration = () => {
     }
   };
 
+  const loadAccountInfo = async () => {
+    try {
+      const accountInfo = await exnessAPI.getAccountInfo();
+      if (accountInfo) {
+        setRealAccountInfo(accountInfo);
+        
+        const connInfo = exnessAPI.getConnectionInfo();
+        setConnectionInfo(connInfo);
+        
+        // Verify trading capabilities
+        const tradingCheck = await exnessAPI.verifyTradingCapabilities();
+        if (!tradingCheck.canTrade) {
+          toast.warning("⚠️ Trading capabilities limited", {
+            description: tradingCheck.issues.join(', ')
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load account info:', error);
+    }
+  };
+
   const handleDisconnect = () => {
     exnessAPI.disconnect();
     setAccount(prev => ({ ...prev, connected: false }));
     setRealAccountInfo(null);
     setConnectionInfo(null);
     setTestResults(null);
-    stopBot();
     toast.success("🔌 Disconnected from Exness");
   };
 
