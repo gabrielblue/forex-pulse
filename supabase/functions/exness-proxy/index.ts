@@ -6,6 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+console.log('🚀 Exness Proxy Edge Function v2.0 loaded');
+
 const authenticateWithExness = async (credentials: any) => {
   try {
     console.log(`Testing connection for account ${credentials.login} on server ${credentials.server}`);

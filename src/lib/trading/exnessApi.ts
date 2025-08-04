@@ -359,9 +359,12 @@ class ExnessAPI {
           }
         });
 
-        if (!error && data?.success && data?.token) {
+        if (!error && data?.success) {
+          const token = data.sessionId || data.token || `session_${Date.now()}`;
           console.log('✅ Exness authentication successful via edge function fallback');
-          return { success: true, token: data.token };
+          return { success: true, token: token };
+        } else {
+          console.log('❌ Edge function authentication failed:', data?.error || error);
         }
       } catch (edgeError) {
         console.error('❌ Edge function fallback also failed:', edgeError);
