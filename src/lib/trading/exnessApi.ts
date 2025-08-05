@@ -20,6 +20,7 @@ export interface AccountInfo {
   profit: number;
   credit: number;
   company: string;
+  positions?: Position[];
 }
 
 export interface TradeOrder {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { tradingBot, BotStatus, BotConfiguration } from '@/lib/trading/tradingBot';
-import { ExnessCredentials } from '@/lib/trading/exnessApi';
+import { ExnessCredentials, exnessAPI } from '@/lib/trading/exnessApi';
 
 export const useTradingBot = () => {
   const [status, setStatus] = useState<BotStatus>({
