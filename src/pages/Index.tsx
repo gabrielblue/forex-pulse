@@ -10,6 +10,7 @@ import { MarketCharts } from "@/components/MarketCharts";
 import { AIPredictionSystem } from "@/components/AIPredictionSystem";
 import { ExnessIntegration } from "@/components/ExnessIntegration";
 import { LiveTradingDashboard } from "@/components/LiveTradingDashboard";
+import { EnhancedTradingBot } from "@/components/EnhancedTradingBot";
 import { initializeTradingSystem } from "@/lib/trading";
 import { useEffect } from "react";
 
@@ -68,9 +69,9 @@ const Index = () => {
           <AIPredictionSystem />
         </div>
 
-        {/* Trading Bot Dashboard */}
+        {/* Enhanced Trading Bot Dashboard */}
         <div className="mb-8">
-          <TradingBotDashboard />
+          <EnhancedTradingBot />
         </div>
 
         {/* Exness Integration */}
