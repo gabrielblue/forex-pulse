@@ -235,55 +235,32 @@ class SignalProcessor {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      console.log('🔍 Starting advanced signal generation with comprehensive analysis...');
-
       for (const symbol of symbols) {
-        console.log(`📊 Analyzing ${symbol}...`);
-        
-        // Import advanced analyzer dynamically to avoid circular dependency
-        const { advancedAnalyzer } = await import('./advancedAnalyzer');
-        
-        // Perform comprehensive analysis first
-        const comprehensiveAnalysis = await advancedAnalyzer.performComprehensiveAnalysis(symbol);
-        
-        // Generate signal from comprehensive analysis
-        const analysisSignal = await advancedAnalyzer.generateTradingSignalFromAnalysis(comprehensiveAnalysis);
-        
-        if (analysisSignal && analysisSignal.confidence > this.config.minConfidence) {
-          console.log(`✅ High-confidence signal from comprehensive analysis: ${analysisSignal.type} ${symbol} (${analysisSignal.confidence}%)`);
-          await this.saveSignalToDatabase(analysisSignal, symbol);
-        }
-
-        // Get market data for traditional strategies
+        // Get market data for the symbol
         const marketData = await this.getMarketData(symbol);
         const indicators = professionalStrategies.calculateTechnicalIndicators(
           marketData.prices, 
           marketData.volumes
         );
 
-        // Apply multiple strategies (only if comprehensive analysis didn't generate a high-confidence signal)
-        if (!analysisSignal || analysisSignal.confidence < 85) {
-          const strategies = [
-            () => professionalStrategies.scalpingStrategy(marketData, indicators),
-            () => professionalStrategies.swingTradingStrategy(marketData, indicators),
-            () => professionalStrategies.breakoutStrategy(marketData, indicators),
-            () => professionalStrategies.meanReversionStrategy(marketData, indicators),
-            () => professionalStrategies.gridTradingStrategy(marketData, indicators)
-          ];
+        // Apply multiple strategies
+        const strategies = [
+          () => professionalStrategies.scalpingStrategy(marketData, indicators),
+          () => professionalStrategies.swingTradingStrategy(marketData, indicators),
+          () => professionalStrategies.breakoutStrategy(marketData, indicators),
+          () => professionalStrategies.meanReversionStrategy(marketData, indicators),
+          () => professionalStrategies.gridTradingStrategy(marketData, indicators)
+        ];
 
-          for (const strategy of strategies) {
-            const signal = await strategy();
-            if (signal && signal.confidence > this.config.minConfidence) {
-              console.log(`📈 Traditional strategy signal: ${signal.type} ${symbol} from ${signal.source}`);
-              await this.saveSignalToDatabase(signal, symbol);
-            }
+        for (const strategy of strategies) {
+          const signal = await strategy();
+          if (signal && signal.confidence > this.config.minConfidence) {
+            await this.saveSignalToDatabase(signal, symbol);
           }
         }
       }
-      
-      console.log('✅ Advanced signal generation completed');
     } catch (error) {
-      console.error('❌ Failed to generate advanced signals:', error);
+      console.error('Failed to generate advanced signals:', error);
     }
   }
 
