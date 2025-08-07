@@ -783,7 +783,7 @@ class TradingBot {
           exnessConnected: exnessAPI.isConnectedToExness(),
           botActive: this.status.isActive,
           autoTradingEnabled: this.status.autoTradingEnabled,
-          tradingAllowed: accountStatus?.accountInfo?.tradeAllowed || false
+          tradingAllowed: accountStatus?.accountInfo?.tradeAllowed || false,
           marketAnalysisActive: this.marketAnalysisActive,
           sessionAlertsEnabled: this.sessionAlertsEnabled,
           chartAnalysisEnabled: this.chartAnalysisEnabled

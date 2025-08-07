@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -82,12 +83,12 @@ export const MarketAnalysisEngine = () => {
 
     // Generate analysis notes every 2 minutes
     const notesInterval = setInterval(() => {
-      generateAnalysisNotes();
+      addAnalysisNote();
     }, 120000);
 
     // Initial analysis
     performMarketAnalysis();
-    generateAnalysisNotes();
+    addAnalysisNote();
 
     return () => {
       clearInterval(analysisInterval);
@@ -187,7 +188,7 @@ export const MarketAnalysisEngine = () => {
     };
   };
 
-  const generateAnalysisNotes = () => {
+  const addAnalysisNote = () => {
     const noteTypes = ["OBSERVATION", "PATTERN", "SIGNAL", "WARNING"] as const;
     const importanceLevels = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
     
