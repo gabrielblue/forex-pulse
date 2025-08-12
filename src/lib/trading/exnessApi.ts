@@ -64,8 +64,8 @@ class ExnessAPI {
   private connectionInfo: any = null;
   private lastUpdate: Date = new Date();
 
-  // MT5 Bridge URL - should point to your local Python service
-  private readonly MT5_BRIDGE_URL = 'http://localhost:8001';
+  // MT5 Bridge URL - prefer environment override, fallback to localhost
+  private readonly MT5_BRIDGE_URL: string = (import.meta.env.VITE_MT5_BRIDGE_URL as string) || 'http://localhost:8001';
 
   async connect(credentials: ExnessCredentials): Promise<boolean> {
     try {
