@@ -21,7 +21,7 @@ smtp_port = 54325
 pop3_port = 54326
 
 [functions.exness-proxy]
-verify_jwt = false
+verify_jwt = true
 
 [analytics]
 enabled = false
