@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
+from enum import Enum
 
 app = FastAPI(title="MT5 Bridge Service", version="1.0.0")
 
@@ -47,6 +48,15 @@ class OrderRequest(BaseModel):
 
 class SessionRequest(BaseModel):
     session_id: str
+
+class Timeframe(str, Enum):
+    M1 = "M1"
+    M5 = "M5"
+    M15 = "M15"
+    M30 = "M30"
+    H1 = "H1"
+    H4 = "H4"
+    D1 = "D1"
 
 @app.on_event("startup")
 async def startup_event():
@@ -314,6 +324,58 @@ async def get_sessions():
         "active_sessions": len(sessions),
         "sessions": sessions
     }
+
+@app.get("/mt5/tick")
+async def get_tick(symbol: str):
+    try:
+        info = mt5.symbol_info_tick(symbol)
+        if info is None:
+            raise HTTPException(status_code=404, detail=f"No tick data for {symbol}")
+        return {
+            "symbol": symbol,
+            "bid": float(info.bid),
+            "ask": float(info.ask),
+            "last": float(info.last) if hasattr(info, 'last') else float(info.bid),
+            "time": int(info.time)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def map_timeframe(tf: Timeframe):
+    mapping = {
+        Timeframe.M1: mt5.TIMEFRAME_M1,
+        Timeframe.M5: mt5.TIMEFRAME_M5,
+        Timeframe.M15: mt5.TIMEFRAME_M15,
+        Timeframe.M30: mt5.TIMEFRAME_M30,
+        Timeframe.H1: mt5.TIMEFRAME_H1,
+        Timeframe.H4: mt5.TIMEFRAME_H4,
+        Timeframe.D1: mt5.TIMEFRAME_D1,
+    }
+    return mapping.get(tf, mt5.TIMEFRAME_M1)
+
+
+@app.get("/mt5/history")
+async def get_history(symbol: str, timeframe: Timeframe = Timeframe.M1, bars: int = 200):
+    try:
+        tf = map_timeframe(timeframe)
+        rates = mt5.copy_rates_from_pos(symbol, tf, 0, bars)
+        if rates is None:
+            raise HTTPException(status_code=404, detail=f"No history for {symbol}")
+        # Convert to serializable
+        ohlcv = []
+        for r in rates:
+            ohlcv.append({
+                "time": int(r['time']),
+                "open": float(r['open']),
+                "high": float(r['high']),
+                "low": float(r['low']),
+                "close": float(r['close']),
+                "tick_volume": int(r['tick_volume']) if 'tick_volume' in r.dtype.names else 0
+            })
+        return {"symbol": symbol, "timeframe": timeframe.value, "bars": len(ohlcv), "data": ohlcv}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     print("🚀 Starting MT5 Bridge Service...")

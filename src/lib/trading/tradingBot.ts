@@ -59,6 +59,7 @@ class TradingBot {
   };
 
   private monitoringInterval: NodeJS.Timeout | null = null;
+  private signalInterval: NodeJS.Timeout | null = null;
   private isPersistent: boolean = true; // Bot continues running across page navigation
   private healthCheckInterval: NodeJS.Timeout | null = null;
   private lastHealthCheck: Date = new Date();
@@ -230,6 +231,10 @@ class TradingBot {
         clearInterval(this.monitoringInterval);
         this.monitoringInterval = null;
       }
+      if (this.signalInterval) {
+        clearInterval(this.signalInterval);
+        this.signalInterval = null;
+      }
 
       // Stop health monitoring
       if (this.healthCheckInterval) {
@@ -296,6 +301,34 @@ class TradingBot {
         console.error('Bot monitoring error:', error);
       }
     }, 30000);
+
+    // Start simple signal engine loop (every 60s)
+    if (this.signalInterval) clearInterval(this.signalInterval);
+    this.signalInterval = setInterval(async () => {
+      try {
+        if (!this.status.isActive || !this.status.autoTradingEnabled) return;
+        if (!exnessAPI.isConnectedToExness()) return;
+        // Try a small set of pairs
+        const pairs = this.configuration.enabledPairs || ['EURUSD', 'GBPUSD', 'USDJPY'];
+        for (const symbol of pairs) {
+          const price = await exnessAPI.getCurrentPrice(symbol);
+          if (!price) continue;
+          // Very simple momentum check using last two closes from history
+          const history = await exnessAPI.getHistory(symbol, 'M1', 5);
+          if (!history || history.length < 3) continue;
+          const last = history[history.length - 1].close;
+          const prev = history[history.length - 2].close;
+          const change = (last - prev) / prev;
+          if (Math.abs(change) < 0.0002) continue; // ignore tiny moves
+          const type = change > 0 ? 'BUY' : 'SELL';
+          // Execute tiny trade size respecting risk manager downstream
+          await this.executeTradeWithAnalysis(symbol, type as 'BUY' | 'SELL', 0.01);
+          break; // one trade per cycle
+        }
+      } catch (e) {
+        console.error('Signal loop error:', e);
+      }
+    }, 60000);
   }
 
   private startHealthMonitoring(): void {

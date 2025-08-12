@@ -326,8 +326,21 @@ class ExnessAPI {
 
   async getCurrentPrice(symbol: string): Promise<MarketPrice | null> {
     try {
-      // For real implementation, you'd get this from MT5 Bridge
-      // For now, return realistic mock data
+      // Try real bridge first
+      if (this.isConnected) {
+        const resp = await fetch(`${this.MT5_BRIDGE_URL}/mt5/tick?symbol=${encodeURIComponent(symbol)}`);
+        if (resp.ok) {
+          const t = await resp.json();
+          return {
+            symbol,
+            bid: parseFloat(t.bid),
+            ask: parseFloat(t.ask),
+            spread: Math.abs(parseFloat(t.ask) - parseFloat(t.bid)),
+            timestamp: new Date()
+          };
+        }
+      }
+      // Fallback mock
       const basePrices: Record<string, number> = {
         'EURUSD': 1.0845,
         'GBPUSD': 1.2734,
@@ -351,6 +364,18 @@ class ExnessAPI {
       };
     } catch (error) {
       console.error('Failed to get current price:', error);
+      return null;
+    }
+  }
+
+  async getHistory(symbol: string, timeframe: string = 'M1', bars: number = 200): Promise<any[] | null> {
+    try {
+      const resp = await fetch(`${this.MT5_BRIDGE_URL}/mt5/history?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&bars=${bars}`);
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      return data.data || null;
+    } catch (e) {
+      console.error('Failed to get history:', e);
       return null;
     }
   }
