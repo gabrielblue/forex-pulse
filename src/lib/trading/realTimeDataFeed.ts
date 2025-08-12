@@ -1,5 +1,3 @@
-import { supabase } from '@/integrations/supabase/client';
-
 export interface PriceUpdate {
   symbol: string;
   bid: number;
@@ -78,7 +76,6 @@ class RealTimeDataFeed {
       this.config.symbols.forEach(symbol => {
         const priceUpdate = this.generatePriceUpdate(symbol);
         this.broadcastUpdate(priceUpdate);
-        this.storePriceUpdate(priceUpdate);
       });
     }, this.config.updateInterval);
   }
@@ -130,25 +127,6 @@ class RealTimeDataFeed {
     });
   }
 
-  private async storePriceUpdate(update: PriceUpdate): Promise<void> {
-    try {
-      // Store price data in price_data table instead of non-existent market_data
-      await supabase
-        .from('price_data')
-        .insert({
-          timestamp: update.timestamp.toISOString(),
-          open_price: update.bid,
-          high_price: update.ask,
-          low_price: update.bid,
-          close_price: (update.bid + update.ask) / 2,
-          volume: Math.floor(Math.random() * 1000000),
-          timeframe: '1m'
-        });
-    } catch (error) {
-      console.error('Failed to store price update:', error);
-    }
-  }
-
   subscribe(callback: (update: PriceUpdate) => void): () => void {
     this.subscribers.push(callback);
     
@@ -198,8 +176,8 @@ class RealTimeDataFeed {
 
   getConnectionStatus(): string {
     if (!this.isActive) return 'Disconnected';
-    if (this.websocket) return 'WebSocket Connected';
-    return 'Polling Active';
+    if (this.websocket) return 'Connected (WebSocket)';
+    return 'Connected (Polling)';
   }
 }
 
