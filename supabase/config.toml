@@ -21,7 +21,15 @@ smtp_port = 54325
 pop3_port = 54326
 
 [functions.exness-proxy]
-verify_jwt = false
+verify_jwt = true
 
 [analytics]
 enabled = false
+
+[auth]
+# Reduce OTP expiry to 5 minutes (300 seconds)
+otp_expiry_seconds = 300
+# Enable leaked password protection (HaveIBeenPwned)
+password_min_length = 12
+hibp_enabled = true
+rate_limit_email_sent = 60
