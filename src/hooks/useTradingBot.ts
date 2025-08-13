@@ -77,13 +77,23 @@ export const useTradingBot = () => {
       
       // Connect through tradingBot to ensure bot status updates correctly
       const connected = await tradingBot.connectToExness(credentials);
-      updateStatus();
       
       if (!connected) {
         setError('Failed to connect to Exness. Please check your credentials.');
+        updateStatus();
+        return false;
       }
       
-      return connected;
+      // Auto-start bot and enable auto trading after successful connection
+      try {
+        await tradingBot.startBot();
+        await tradingBot.enableAutoTrading(true);
+      } catch (e) {
+        console.error('Auto-start failed:', e);
+      }
+      
+      updateStatus();
+      return true;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Connection failed';
       setError(errorMessage);
