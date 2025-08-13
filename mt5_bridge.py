@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 from enum import Enum
+import os
 
 app = FastAPI(title="MT5 Bridge Service", version="1.0.0")
 
@@ -61,13 +62,17 @@ class Timeframe(str, Enum):
 @app.on_event("startup")
 async def startup_event():
     """Initialize MT5 connection on startup"""
-    if not mt5.initialize():
+    terminal_path = os.environ.get("MT5_TERMINAL_PATH")
+    init_ok = mt5.initialize(path=terminal_path) if terminal_path else mt5.initialize()
+    if not init_ok:
         print("❌ Failed to initialize MT5")
         raise RuntimeError("MT5 initialization failed")
     
     print("✅ MT5 Bridge Service started successfully")
     print(f"📊 MT5 Version: {mt5.version()}")
     print(f"🌐 Terminal Info: {mt5.terminal_info()}")
+    if terminal_path:
+        print(f"🛣️ Using terminal path: {terminal_path}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -91,14 +96,29 @@ async def connect_to_mt5(credentials: MT5Credentials):
     try:
         print(f"🔐 Attempting to connect to account {credentials.login} on {credentials.server}")
         
-        # Connect to MT5 account
+        # First attempt: normal login
         if not mt5.login(credentials.login, credentials.password, credentials.server):
             error = mt5.last_error()
             print(f"❌ MT5 login failed: {error}")
-            return {
-                "success": False,
-                "error": f"Login failed: {error[1] if error else 'Unknown error'}"
-            }
+            # Retry path: full reinitialize with credentials (helps with IPC issues)
+            try:
+                mt5.shutdown()
+                terminal_path = os.environ.get("MT5_TERMINAL_PATH")
+                reinit_ok = mt5.initialize(
+                    path=terminal_path,
+                    login=int(credentials.login),
+                    password=str(credentials.password),
+                    server=str(credentials.server)
+                ) if terminal_path else mt5.initialize(
+                    login=int(credentials.login),
+                    password=str(credentials.password),
+                    server=str(credentials.server)
+                )
+                if not reinit_ok:
+                    error2 = mt5.last_error()
+                    return {"success": False, "error": f"Login failed after reinit: {error2[1] if error2 else 'Unknown'}"}
+            except Exception as re:
+                return {"success": False, "error": f"Reinitialization failed: {str(re)}"}
         
         # Get account info
         account_info = mt5.account_info()
