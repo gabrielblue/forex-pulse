@@ -47,7 +47,7 @@ class TradingBot {
     minConfidence: 80,
     maxRiskPerTrade: 1, // Conservative 1% for real trading
     maxDailyLoss: 3, // Conservative 3% for real trading
-    enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY'],
+    enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY', 'USDCAD', 'AUDUSD', 'NZDUSD', 'EURJPY', 'GBPJPY', 'XAUUSD'],
     tradingHours: {
       start: '00:00',
       end: '23:59',
@@ -310,6 +310,8 @@ class TradingBot {
         if (!exnessAPI.isConnectedToExness()) return;
         // Try a small set of pairs
         const pairs = this.configuration.enabledPairs || ['EURUSD', 'GBPUSD', 'USDJPY'];
+        const maxTradesPerCycle = 2;
+        let placed = 0;
         for (const symbol of pairs) {
           const price = await exnessAPI.getCurrentPrice(symbol);
           if (!price) continue;
@@ -323,7 +325,8 @@ class TradingBot {
           const type = change > 0 ? 'BUY' : 'SELL';
           // Execute tiny trade size respecting risk manager downstream
           await this.executeTradeWithAnalysis(symbol, type as 'BUY' | 'SELL', 0.01);
-          break; // one trade per cycle
+          placed++;
+          if (placed >= maxTradesPerCycle) break; // cap trades per cycle
         }
       } catch (e) {
         console.error('Signal loop error:', e);
