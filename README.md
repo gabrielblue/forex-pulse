@@ -92,6 +92,7 @@ Create a `.env` file based on `.env.example` and set:
 ```
 VITE_SUPABASE_URL=your_project_url
 VITE_SUPABASE_ANON_KEY=your_anon_key
+VITE_MT5_BRIDGE_URL=<bridge_url_or_leave_default>
 ```
 
 Do not commit real keys. Never expose `SUPABASE_SERVICE_ROLE_KEY` in the frontend.

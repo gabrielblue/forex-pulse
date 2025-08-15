@@ -1,4 +1,4 @@
-MetaTrader5==5.0.45
+MetaTrader5==5.0.5200
 fastapi==0.104.1
 uvicorn==0.24.0
 pydantic==2.5.0
