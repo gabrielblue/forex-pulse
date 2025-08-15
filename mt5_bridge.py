@@ -361,6 +361,42 @@ async def get_tick(symbol: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/mt5/terminal")
+async def get_terminal_info():
+    try:
+        info = mt5.terminal_info()
+        version = mt5.version()
+        return {
+            "version": version,
+            "terminal_info": str(info)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/mt5/symbols")
+async def list_symbols(mask: Optional[str] = None, selected_only: bool = False):
+    try:
+        if mask:
+            symbols = mt5.symbols_get(mask)
+        else:
+            symbols = mt5.symbols_get()
+        if symbols is None:
+            return {"symbols": []}
+        data = []
+        for s in symbols:
+            if selected_only and not s.select:
+                continue
+            data.append({
+                "name": s.name,
+                "path": s.path,
+                "visible": bool(s.visible),
+                "select": bool(s.select),
+                "trade_mode": int(getattr(s, 'trade_mode', 0))
+            })
+        return {"count": len(data), "symbols": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 def map_timeframe(tf: Timeframe):
     mapping = {
