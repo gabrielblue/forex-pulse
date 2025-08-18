@@ -230,10 +230,17 @@ async def place_order(order: OrderRequest):
         # Get symbol info
         symbol_info = mt5.symbol_info(order.symbol)
         if symbol_info is None:
-            return {
-                "success": False,
-                "error": f"Symbol {order.symbol} not found"
-            }
+            # Try to select the symbol in Market Watch
+            selected = mt5.symbol_select(order.symbol, True)
+            if not selected:
+                return {
+                    "success": False,
+                    "error": f"Symbol {order.symbol} not found or cannot be selected"
+                }
+            symbol_info = mt5.symbol_info(order.symbol)
+        # Ensure symbol is visible/tradable
+        if symbol_info is not None and not symbol_info.visible:
+            mt5.symbol_select(order.symbol, True)
         
         # Get current prices
         tick = mt5.symbol_info_tick(order.symbol)
