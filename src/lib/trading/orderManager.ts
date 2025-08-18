@@ -31,7 +31,7 @@ class OrderManager {
     maxDailyLoss: 3.0, // 3% for real trading
     maxDrawdown: 10.0,
     maxPositionSize: 2.0, // Max 2 lots for safety
-    maxConcurrentPositions: 3, // Max 3 positions
+    maxConcurrentPositions: 10, // Allow up to 10 concurrent positions across symbols
     useStopLoss: true,
     useTakeProfit: true,
     minAccountBalance: 100, // $100 minimum
@@ -41,9 +41,9 @@ class OrderManager {
   };
 
   private lastOrderTime: number = 0;
-  private minOrderInterval: number = 30000; // 30 seconds between orders
+  private minOrderInterval: number = 5000; // 5 seconds between orders to allow more frequent entries
   private dailyTradeCount: number = 0;
-  private maxDailyTrades: number = 10;
+  private maxDailyTrades: number = 30; // allow more trades per day when signals warrant
 
   async initialize(): Promise<void> {
     await this.loadRiskParameters();
@@ -69,7 +69,7 @@ class OrderManager {
           maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '3'), 5.0), // Max 5%
           maxDrawdown: 15.0,
           maxPositionSize: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '1') * 2, 2.0), // Max 2 lots
-          maxConcurrentPositions: Math.min(parseInt(botSettings.max_daily_trades?.toString() || '3'), 5), // Max 5 positions
+          maxConcurrentPositions: Math.min(parseInt(botSettings.max_daily_trades?.toString() || '10'), 15), // Allow more concurrent positions
           useStopLoss: true, // Always required for real trading
           useTakeProfit: true,
           minAccountBalance: 100,
@@ -257,7 +257,7 @@ class OrderManager {
         return { allowed: false, reason: `Daily trade limit reached: ${this.dailyTradeCount}/${this.maxDailyTrades}` };
       }
 
-      // Check order frequency
+      // Check order frequency (more relaxed to allow multiple symbols in quick succession)
       const timeSinceLastOrder = Date.now() - this.lastOrderTime;
       if (timeSinceLastOrder < this.minOrderInterval) {
         return { allowed: false, reason: `Order frequency limit: ${Math.ceil((this.minOrderInterval - timeSinceLastOrder) / 1000)}s remaining` };

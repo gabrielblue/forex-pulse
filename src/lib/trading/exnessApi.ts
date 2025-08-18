@@ -334,7 +334,16 @@ class ExnessAPI {
         'USDJPY': 149.85,
         'AUDUSD': 0.6623,
         'USDCHF': 0.8892,
-        'NZDUSD': 0.5987
+        'NZDUSD': 0.5987,
+        'USDCAD': 1.3650,
+        'EURJPY': 162.35,
+        'GBPJPY': 191.25,
+        'EURGBP': 0.8520,
+        'AUDJPY': 99.45,
+        'NZDJPY': 92.10,
+        'CADJPY': 109.80,
+        'EURCHF': 0.9550,
+        'GBPCHF': 1.1320
       };
 
       const basePrice = basePrices[symbol] || 1.0000;

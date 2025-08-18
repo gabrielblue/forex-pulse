@@ -63,7 +63,7 @@ class SignalProcessor {
   }
 
   private startSignalMonitoring(): void {
-    // Monitor for new signals every 30 seconds
+    // Monitor for new signals every 10 seconds
     setInterval(async () => {
       if (this.isProcessing) return;
       
@@ -75,7 +75,7 @@ class SignalProcessor {
       } finally {
         this.isProcessing = false;
       }
-    }, 30000);
+    }, 10000);
   }
 
   private async processNewSignals(): Promise<void> {
@@ -93,13 +93,22 @@ class SignalProcessor {
         .eq('user_id', user.id)
         .eq('status', 'ACTIVE')
         .gte('confidence_score', this.config.minConfidence)
-        .in('timeframe', this.config.enabledTimeframes);
+        .in('timeframe', this.config.enabledTimeframes)
+        .order('created_at', { ascending: false })
+        .limit(50);
 
       if (!signals || signals.length === 0) return;
 
-      for (const signal of signals) {
-        await this.processSignal(signal);
+      // Avoid duplicate execution: only one per symbol at a time
+      const latestBySymbol: Record<string, any> = {};
+      for (const s of signals) {
+        const sym = s.currency_pairs?.symbol;
+        if (!sym) continue;
+        if (!latestBySymbol[sym]) latestBySymbol[sym] = s;
       }
+
+      const tasks = Object.values(latestBySymbol).map((signal) => this.processSignal(signal));
+      await Promise.allSettled(tasks);
     } catch (error) {
       console.error('Failed to process new signals:', error);
     }

@@ -47,7 +47,10 @@ class TradingBot {
     minConfidence: 80,
     maxRiskPerTrade: 1, // Conservative 1% for real trading
     maxDailyLoss: 3, // Conservative 3% for real trading
-    enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY'],
+    enabledPairs: [
+      'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'USDCAD',
+      'EURJPY', 'GBPJPY', 'EURGBP', 'AUDJPY', 'NZDJPY', 'CADJPY', 'EURCHF', 'GBPCHF'
+    ],
     tradingHours: {
       start: '00:00',
       end: '23:59',
@@ -62,6 +65,7 @@ class TradingBot {
   private isPersistent: boolean = true; // Bot continues running across page navigation
   private healthCheckInterval: NodeJS.Timeout | null = null;
   private lastHealthCheck: Date = new Date();
+  private signalGenerationInterval: NodeJS.Timeout | null = null;
 
   // Enhanced capabilities
   private marketAnalysisActive: boolean = false;
@@ -120,7 +124,10 @@ class TradingBot {
           minConfidence: parseFloat(botSettings.min_confidence_score?.toString() || '80'),
           maxRiskPerTrade: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '1'), 2.0), // Cap at 2%
           maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '3'), 5.0), // Cap at 5%
-          enabledPairs: botSettings.allowed_pairs || ['EURUSD', 'GBPUSD', 'USDJPY'],
+          enabledPairs: botSettings.allowed_pairs || [
+            'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'USDCAD',
+            'EURJPY', 'GBPJPY', 'EURGBP', 'AUDJPY', 'NZDJPY', 'CADJPY', 'EURCHF', 'GBPCHF'
+          ],
           tradingHours: botSettings.trading_hours as any || {
             start: '00:00',
             end: '23:59',
@@ -208,6 +215,12 @@ class TradingBot {
         await marketAnalyzer.startContinuousAnalysis();
       }
 
+      // Start continuous signal generation across enabled pairs
+      this.startSignalGenerationLoop();
+
+      // Enable auto trading immediately when starting (within trading hours safeguards still apply)
+      await this.enableAutoTrading(true);
+
       const accountType = exnessAPI.getAccountType();
       console.log(`🚀 Trading bot started successfully on ${accountType?.toUpperCase()} account`);
       console.log(`💰 Account Balance: ${accountInfo.currency} ${accountInfo.balance.toFixed(2)}`);
@@ -242,6 +255,9 @@ class TradingBot {
         this.marketAnalysisActive = false;
         await marketAnalyzer.stopContinuousAnalysis();
       }
+
+      // Stop signal generation
+      this.stopSignalGenerationLoop();
 
       // Disable auto trading
       orderManager.setAutoTrading(false);
@@ -308,6 +324,31 @@ class TradingBot {
         console.error('Health check error:', error);
       }
     }, 120000);
+  }
+
+  private startSignalGenerationLoop(): void {
+    if (this.signalGenerationInterval) {
+      clearInterval(this.signalGenerationInterval);
+    }
+    // Generate advanced signals every 15 seconds for all enabled pairs
+    this.signalGenerationInterval = setInterval(async () => {
+      try {
+        if (!this.status.isActive || !this.status.isConnected) return;
+        if (!this.isWithinTradingHours()) return;
+        const symbols = this.configuration.enabledPairs || [];
+        if (symbols.length === 0) return;
+        await signalProcessor.generateAdvancedSignals(symbols);
+      } catch (error) {
+        console.error('Signal generation loop error:', error);
+      }
+    }, 15000);
+  }
+
+  private stopSignalGenerationLoop(): void {
+    if (this.signalGenerationInterval) {
+      clearInterval(this.signalGenerationInterval);
+      this.signalGenerationInterval = null;
+    }
   }
 
   private async performHealthChecks(): Promise<void> {
