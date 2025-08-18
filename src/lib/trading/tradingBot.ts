@@ -335,7 +335,9 @@ class TradingBot {
       try {
         if (!this.status.isActive || !this.status.isConnected) return;
         if (!this.isWithinTradingHours()) return;
-        const symbols = this.configuration.enabledPairs || [];
+        const symbols = this.configuration.enabledPairs && this.configuration.enabledPairs.length > 0
+          ? this.configuration.enabledPairs
+          : ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD'];
         if (symbols.length === 0) return;
         await signalProcessor.generateAdvancedSignals(symbols);
       } catch (error) {

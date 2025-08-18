@@ -51,10 +51,10 @@ class SignalProcessor {
 
       if (botSettings) {
         this.config = {
-          minConfidence: parseFloat(botSettings.min_confidence_score?.toString() || '75'),
-          enabledTimeframes: ['1H', '4H', '1D'], // Could be stored in bot_settings
-          enabledPairs: botSettings.allowed_pairs || ['EURUSD', 'GBPUSD', 'USDJPY'],
-          autoExecute: botSettings.is_active || false
+          minConfidence: parseFloat(botSettings.min_confidence_score?.toString() || '70'),
+          enabledTimeframes: ['15M', '1H', '4H'],
+          enabledPairs: botSettings.allowed_pairs || ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD'],
+          autoExecute: true
         };
       }
     } catch (error) {

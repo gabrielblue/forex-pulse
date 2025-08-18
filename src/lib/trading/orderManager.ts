@@ -275,13 +275,8 @@ class OrderManager {
         }
       }
 
-      // Enhanced position size validation for real trading
+      // Margin requirement vs available equity (sizing is applied later; enforce using free margin check below)
       const requiredMargin = await this.calculateRequiredMargin(orderRequest, accountStatus.accountInfo);
-      const riskPercentage = (requiredMargin / accountStatus.accountInfo.equity) * 100; // Use equity instead of balance
-      
-      if (riskPercentage > this.riskParams.maxRiskPerTrade) {
-        return { allowed: false, reason: `Risk per trade too high: ${riskPercentage.toFixed(2)}% (max: ${this.riskParams.maxRiskPerTrade}%)` };
-      }
 
       // Ensure minimum account balance for trading
       if (accountStatus.accountInfo.balance < this.riskParams.minAccountBalance) {

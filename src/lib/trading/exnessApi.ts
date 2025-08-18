@@ -151,7 +151,7 @@ class ExnessAPI {
   }
 
   private mapMT5AccountInfo(mt5Info: any): AccountInfo {
-    return {
+    const info: AccountInfo = {
       accountNumber: mt5Info.login?.toString() || '',
       balance: parseFloat(mt5Info.balance?.toString() || '0'),
       equity: parseFloat(mt5Info.equity?.toString() || '0'),
@@ -167,6 +167,25 @@ class ExnessAPI {
       credit: parseFloat(mt5Info.credit?.toString() || '0'),
       company: mt5Info.company || 'Exness'
     };
+    // Map positions if provided by bridge
+    if (Array.isArray(mt5Info.positions)) {
+      info.positions = mt5Info.positions.map((p: any) => ({
+        ticket: Number(p.ticket),
+        ticketId: String(p.ticket),
+        symbol: p.symbol,
+        type: p.type === 0 ? 'BUY' : 'SELL',
+        volume: parseFloat(p.volume?.toString() || '0'),
+        openPrice: parseFloat(p.price_open?.toString() || '0'),
+        currentPrice: parseFloat(p.price_open?.toString() || '0'),
+        profit: parseFloat(p.profit?.toString() || '0'),
+        stopLoss: p.sl ? parseFloat(p.sl.toString()) : undefined,
+        takeProfit: p.tp ? parseFloat(p.tp.toString()) : undefined,
+        openTime: new Date(),
+        commission: 0,
+        swap: 0
+      }));
+    }
+    return info;
   }
 
   async testConnection(credentials: ExnessCredentials): Promise<{success: boolean, message: string, accountInfo?: any, connectionType?: string}> {
