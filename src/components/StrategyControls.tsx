@@ -63,6 +63,8 @@ export const StrategyControls = () => {
             <Label htmlFor="confidence">Minimum Signal Confidence</Label>
             <div className="px-3">
               <Slider
+                id="confidence"
+                aria-labelledby="confidence"
                 value={strategy.signalConfidence}
                 onValueChange={(value) => setStrategy(prev => ({ ...prev, signalConfidence: value }))}
                 max={100}
