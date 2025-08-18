@@ -271,35 +271,55 @@ class ExnessAPI {
     try {
       console.log('📈 Placing real order on Exness:', order);
 
-      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/place_order`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      // Try symbol as-is and with common broker suffix variations
+      const candidateSymbols = [
+        order.symbol,
+        `${order.symbol}.m`,
+        `${order.symbol}.M`,
+        `${order.symbol}.mini`,
+        `${order.symbol}-m`
+      ];
+
+      for (const candidate of candidateSymbols) {
+        const payload = {
           session_id: this.sessionId,
-          symbol: order.symbol,
+          symbol: candidate,
           type: order.type === 'BUY' ? 0 : 1,
           volume: order.volume,
           price: order.price,
           sl: order.stopLoss,
           tp: order.takeProfit,
           comment: order.comment || 'ForexPro Order'
-        })
-      });
+        };
 
-      if (!response.ok) {
-        throw new Error(`Order placement failed: ${response.status}`);
+        const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/place_order`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          continue;
+        }
+
+        const result = await response.json();
+        if (result.success && result.data) {
+          console.log('✅ Order placed successfully:', result.data.ticket, 'symbol used:', candidate);
+          return result.data.ticket.toString();
+        }
+
+        // If symbol not found, try next variation
+        if (result.error && `${result.error}`.toLowerCase().includes('symbol')) {
+          continue;
+        }
+
+        // Other errors: throw
+        if (result.error) {
+          throw new Error(result.error);
+        }
       }
 
-      const result = await response.json();
-      
-      if (result.success && result.data) {
-        console.log('✅ Order placed successfully:', result.data.ticket);
-        return result.data.ticket.toString();
-      } else {
-        throw new Error(result.error || 'Order placement failed');
-      }
+      throw new Error(`Order placement failed: no valid symbol variation for ${order.symbol}`);
     } catch (error) {
       console.error('Failed to place real order:', error);
       throw error;

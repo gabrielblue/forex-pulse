@@ -242,7 +242,7 @@ class SignalProcessor {
   async generateAdvancedSignals(symbols: string[] = ['EURUSD', 'GBPUSD', 'USDJPY']): Promise<void> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      // Proceed even if user is not authenticated so live execution can still run; DB writes will be skipped
 
       for (const symbol of symbols) {
         // Get market data for the symbol
@@ -264,7 +264,19 @@ class SignalProcessor {
         for (const strategy of strategies) {
           const signal = await strategy();
           if (signal && signal.confidence > this.config.minConfidence) {
-            await this.saveSignalToDatabase(signal, symbol);
+            // Best-effort: save to DB if user is present
+            if (user) {
+              await this.saveSignalToDatabase(signal, symbol);
+            }
+
+            // Direct auto-execution path to avoid reliance on DB pipeline
+            if (this.config.autoExecute && orderManager.isAutoTradingActive()) {
+              try {
+                await this.executeSignal(signal);
+              } catch (execErr) {
+                console.error('Auto-execution failed for generated signal:', execErr);
+              }
+            }
           }
         }
       }
