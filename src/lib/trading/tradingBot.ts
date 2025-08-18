@@ -459,17 +459,8 @@ class TradingBot {
   }
 
   private isWithinTradingHours(): boolean {
-    const now = new Date();
-    const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
-    
-    // Check if it's weekend (Forex market is closed)
-    const dayOfWeek = now.getDay();
-    if (dayOfWeek === 0 || dayOfWeek === 6) { // Sunday or Saturday
-      return false;
-    }
-    
-    return currentTime >= this.configuration.tradingHours.start && 
-           currentTime <= this.configuration.tradingHours.end;
+    // User requested 24/7 trading; always return true here
+    return true;
   }
 
   private async getDailyLoss(): Promise<number> {

@@ -422,15 +422,7 @@ class ExnessAPI {
   }
 
   async isMarketOpen(symbol: string): Promise<boolean> {
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    
-    // Forex market is closed on weekends
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      return false;
-    }
-    
-    // Simplified market hours check
+    // Treat market as open at all times for user-requested behavior
     return true;
   }
 
