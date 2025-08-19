@@ -437,13 +437,13 @@ export const ExnessIntegration = () => {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="server">MT5 Server</Label>
+                <Label id="server-label">MT5 Server</Label>
                 <Select 
                   value={credentials.server} 
                   onValueChange={(value) => setCredentials(prev => ({ ...prev, server: value }))}
                   disabled={isConnecting || isTesting}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="server-trigger" aria-labelledby="server-label">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

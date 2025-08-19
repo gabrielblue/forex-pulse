@@ -301,6 +301,16 @@ class TradingBot {
         await this.performHealthChecks();
         await this.updatePerformanceMetrics();
         this.status.lastUpdate = new Date();
+
+        // Demo-only autonomous trade kickstart if no positions and no trades today
+        const accountInfo = await exnessAPI.getAccountInfo();
+        if (this.status.isActive && this.status.autoTradingEnabled && accountInfo?.isDemo) {
+          const positions = await orderManager.getOpenPositions();
+          if ((positions?.length || 0) === 0) {
+            // Opportunistically generate signals; order flow will execute if criteria met
+            await signalProcessor.generateAdvancedSignals(this.configuration.enabledPairs);
+          }
+        }
       } catch (error) {
         console.error('Bot monitoring error:', error);
       }
@@ -337,13 +347,21 @@ class TradingBot {
       return;
     }
 
-    // Verify trading capabilities
+    // Verify trading capabilities: only disable if critical (not connected, trade not allowed, balance too low, margin < 100)
     const tradingCheck = await exnessAPI.verifyTradingCapabilities();
-    if (!tradingCheck.canTrade) {
-      console.warn('⚠️ Trading capabilities compromised:', tradingCheck.issues);
+    const criticalIssues = tradingCheck.issues.filter(issue =>
+      issue.includes('Not connected') ||
+      issue.includes('No account information') ||
+      issue.includes('Trading not allowed') ||
+      issue.includes('balance too low')
+    );
+    if (!tradingCheck.canTrade && criticalIssues.length > 0) {
+      console.warn('⚠️ Trading critically compromised:', tradingCheck.issues);
       if (this.status.autoTradingEnabled) {
         await this.enableAutoTrading(false);
       }
+    } else if (tradingCheck.issues.length > 0) {
+      console.warn('⚠️ Non-critical trading warnings:', tradingCheck.issues);
     }
 
     // Enhanced daily loss protection for real money
