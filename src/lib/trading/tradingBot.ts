@@ -283,6 +283,15 @@ class TradingBot {
     
     const accountType = exnessAPI.getAccountType();
     console.log(`${enabled ? '🤖 Auto trading enabled' : '✋ Auto trading disabled'} on ${accountType?.toUpperCase()} account`);
+
+    // When enabling auto trading, proactively generate signals once to kickstart flow
+    if (enabled) {
+      try {
+        await signalProcessor.generateAdvancedSignals(this.configuration.enabledPairs);
+      } catch (e) {
+        console.warn('Auto trading enabled but failed to pre-generate signals:', e);
+      }
+    }
   }
 
   private startMonitoring(): void {
