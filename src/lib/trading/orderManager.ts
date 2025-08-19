@@ -231,9 +231,9 @@ class OrderManager {
         return { allowed: false, reason: `Account balance too low: ${accountStatus.accountInfo.currency} ${accountStatus.accountInfo.balance} (min: $${this.riskParams.minAccountBalance})` };
       }
 
-      // Check margin level - prevent margin calls
-      if (accountStatus.accountInfo.marginLevel > 0 && accountStatus.accountInfo.marginLevel < this.riskParams.minMarginLevel) {
-        return { allowed: false, reason: `Margin level too low: ${accountStatus.accountInfo.marginLevel.toFixed(1)}% (min: ${this.riskParams.minMarginLevel}%)` };
+      // Check margin level - hard stop only if below 100%; otherwise warn via logs
+      if (accountStatus.accountInfo.marginLevel > 0 && accountStatus.accountInfo.marginLevel < 100) {
+        return { allowed: false, reason: `Critical margin level: ${accountStatus.accountInfo.marginLevel.toFixed(1)}% (< 100%)` };
       }
 
       // Verify symbol is tradeable
@@ -241,9 +241,10 @@ class OrderManager {
         return { allowed: false, reason: `Symbol ${orderRequest.symbol} not tradeable or market closed` };
       }
 
-      // Enhanced margin check - use only 70% of free margin for safety
-      if (requiredMargin > (accountStatus.accountInfo.freeMargin * 0.7)) {
-        return { allowed: false, reason: `Insufficient free margin: Required ${requiredMargin.toFixed(2)}, Available ${(accountStatus.accountInfo.freeMargin * 0.7).toFixed(2)}` };
+      // Enhanced margin check - use only 50% of free margin for safety in live, 70% in demo
+      const freeMarginCap = (accountStatus.accountInfo.freeMargin) * (accountStatus.accountInfo.isDemo ? 0.7 : 0.5);
+      if (requiredMargin > freeMarginCap) {
+        return { allowed: false, reason: `Insufficient free margin: Required ${requiredMargin.toFixed(2)}, Allowed ${freeMarginCap.toFixed(2)}` };
       }
 
       // Position limit check

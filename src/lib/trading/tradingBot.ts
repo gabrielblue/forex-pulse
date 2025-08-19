@@ -358,7 +358,7 @@ class TradingBot {
       }
     }
 
-    // Check margin level
+    // Check margin level – warn below 200%, stop only if < 100%
     if (accountInfo.marginLevel > 0 && accountInfo.marginLevel < 200) {
       console.warn(`⚠️ Low margin level: ${accountInfo.marginLevel.toFixed(1)}%`);
       if (accountInfo.marginLevel < 100) {

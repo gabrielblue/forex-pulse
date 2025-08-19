@@ -471,13 +471,18 @@ class ExnessAPI {
         issues.push('Account balance too low');
       }
       
-      if (this.accountInfo.marginLevel > 0 && this.accountInfo.marginLevel < 200) {
-        issues.push('Margin level too low');
+      // Margin level guidance: warn below 200%, hard-stop only if < 100%
+      if (this.accountInfo.marginLevel > 0) {
+        if (this.accountInfo.marginLevel < 200) {
+          issues.push('Margin level too low');
+        }
       }
     }
 
     return {
-      canTrade: issues.length === 0,
+      // Allow trading if connected, info exists, tradeAllowed, balance ok, and margin level not critically low (< 100%)
+      canTrade: !!(this.isConnected && this.accountInfo && this.accountInfo.tradeAllowed && this.accountInfo.balance >= 100 &&
+        (this.accountInfo.marginLevel === 0 || this.accountInfo.marginLevel >= 100)),
       issues
     };
   }
