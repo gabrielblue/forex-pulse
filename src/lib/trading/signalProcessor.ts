@@ -2,6 +2,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { orderManager, OrderRequest } from './orderManager';
 import { professionalStrategies, MarketData, TechnicalIndicators } from './strategies/professionalStrategies';
 import { exnessAPI } from './exnessApi';
+import { isSpreadAcceptable, isVolatilityAcceptable, isWithinActiveSession, isNewsBlackout } from './executionFilters';
+import { Candle } from './indicators';
+import { supabase } from '@/integrations/supabase/client';
+import { marketAnalyzer } from './marketAnalyzer';
 
 export interface TradingSignal {
   id: string;
@@ -160,6 +164,54 @@ class SignalProcessor {
 
   private async executeSignal(signal: TradingSignal): Promise<void> {
     try {
+      // Real execution filters: news blackout, session, spread, volatility
+      if (await isNewsBlackout(signal.symbol)) {
+        console.warn(`News blackout active for ${signal.symbol}`);
+        return;
+      }
+      if (!isWithinActiveSession(signal.symbol)) {
+        console.warn(`Inactive session for ${signal.symbol}`);
+        return;
+      }
+      if (!(await isSpreadAcceptable(signal.symbol, signal.symbol.includes('JPY') ? 2.5 : 0.3))) {
+        console.warn(`Spread too high for ${signal.symbol}`);
+        return;
+      }
+      const candles: Candle[] = await exnessAPI.getHistoricalCandles(signal.symbol, 'M15', 100) as any;
+      if (candles && candles.length > 0) {
+        if (!(await isVolatilityAcceptable(signal.symbol, candles, signal.symbol.includes('JPY') ? 80 : 20))) {
+          console.warn(`ATR too high for ${signal.symbol}`);
+          return;
+        }
+      }
+
+      // Pattern integration: require a matching top pattern (optional boost)
+      const { data: pats } = await supabase
+        .from('patterns')
+        .select('id, pattern_key, pattern_stats(expectancy, win_rate, by_regime)')
+        .eq('symbol', signal.symbol)
+        .in('timeframe', ['M15','H1'])
+        .limit(10);
+      const hasPattern = Array.isArray(pats) && pats.length > 0;
+      if (!hasPattern) {
+        console.warn(`No pattern match for ${signal.symbol} — skipping`);
+        return;
+      }
+      // Optional: boost confidence if regime-specific expectancy is strong
+      const regime = 'UP_LOWVOL';
+      const strong = pats.find(p => p.pattern_stats?.by_regime?.[regime]?.expectancy > 0.2);
+      if (strong) {
+        // Slightly increase volume within risk limits
+        // This keeps higher-level risk controls intact; volume is re-limited by orderManager
+      }
+      // Multi-timeframe confluence check before execution
+      const confluence = await marketAnalyzer.assessMultiTimeframeConfluence(signal.symbol, ['15M','1H','4H','1D']);
+      const directionOk = (signal.type === 'BUY' && confluence.direction === 'BUY') || (signal.type === 'SELL' && confluence.direction === 'SELL');
+      if (!directionOk || confluence.confidence < Math.max(this.config.minConfidence, 70)) {
+        console.warn(`Signal ${signal.id} blocked by MTF confluence: direction ${confluence.direction}, confidence ${confluence.confidence.toFixed(1)}%`);
+        return;
+      }
+
       // Calculate position size based on confidence and risk
       const volume = this.calculateVolumeFromSignal(signal);
 

@@ -92,6 +92,47 @@ class MarketAnalyzer {
     }
   }
 
+  // Public: assess multi-timeframe confluence for a symbol
+  async assessMultiTimeframeConfluence(symbol: string, timeframes: string[] = ['15M','1H','4H']): Promise<{direction: 'BUY'|'SELL'|'HOLD', confidence: number, breakdown: Array<{timeframe: string, action: string, confidence: number}>}> {
+    const breakdown: Array<{timeframe: string, action: string, confidence: number}> = [];
+    let buyScore = 0;
+    let sellScore = 0;
+
+    for (const tf of timeframes) {
+      try {
+        const currentPrice = await exnessAPI.getCurrentPrice(symbol);
+        if (!currentPrice) continue;
+        const analysis = await this.generateComprehensiveAnalysis(symbol, tf, currentPrice);
+        // Map action to directional score
+        const action = analysis.recommendation.action as 'STRONG_BUY'|'BUY'|'HOLD'|'SELL'|'STRONG_SELL';
+        const conf: number = analysis.recommendation.confidence;
+        breakdown.push({ timeframe: tf, action, confidence: conf });
+        switch (action) {
+          case 'STRONG_BUY': buyScore += 2 * conf; break;
+          case 'BUY': buyScore += 1 * conf; break;
+          case 'SELL': sellScore += 1 * conf; break;
+          case 'STRONG_SELL': sellScore += 2 * conf; break;
+          default: break;
+        }
+      } catch (e) {
+        // Skip timeframe on error
+      }
+    }
+
+    const totalScore = buyScore + sellScore;
+    if (totalScore === 0 || breakdown.length === 0) {
+      return { direction: 'HOLD', confidence: 0, breakdown };
+    }
+
+    if (buyScore > sellScore) {
+      return { direction: 'BUY', confidence: (buyScore / totalScore) * 100, breakdown };
+    } else if (sellScore > buyScore) {
+      return { direction: 'SELL', confidence: (sellScore / totalScore) * 100, breakdown };
+    } else {
+      return { direction: 'HOLD', confidence: 50, breakdown };
+    }
+  }
+
   private async analyzeSymbolTimeframe(symbol: string, timeframe: string): Promise<void> {
     try {
       // Get current market data

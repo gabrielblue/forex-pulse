@@ -57,15 +57,34 @@ export interface MarketPrice {
   timestamp: Date;
 }
 
+export interface Candle {
+  time: number; // epoch seconds
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number; // tick volume
+  spread?: number;
+}
+
 class ExnessAPI {
   private sessionId: string | null = null;
   private accountInfo: AccountInfo | null = null;
   private isConnected: boolean = false;
   private connectionInfo: any = null;
   private lastUpdate: Date = new Date();
+  private lastCredentials: ExnessCredentials | null = null;
+  private heartbeatInterval: any = null;
+  private reconnectTimeout: any = null;
+  private reconnectBackoffMs: number = 2000;
+  private readonly reconnectBackoffMaxMs: number = 300000; // 5 min max
 
-  // MT5 Bridge URL - should point to your local Python service
-  private readonly MT5_BRIDGE_URL = 'http://localhost:8001';
+  // MT5 Bridge URL - configurable via Vite env or Node env
+  private readonly MT5_BRIDGE_URL: string = (
+    (typeof process !== 'undefined' && ((process as any).env?.VITE_MT5_BRIDGE_URL || (process as any).env?.MT5_BRIDGE_URL)) ||
+    (typeof window !== 'undefined' && (window as any).__MT5_BRIDGE_URL) ||
+    'http://localhost:8001'
+  );
 
   async connect(credentials: ExnessCredentials): Promise<boolean> {
     try {
@@ -105,6 +124,7 @@ class ExnessAPI {
         this.accountInfo = this.mapMT5AccountInfo(result.account_info);
         this.isConnected = true;
         this.lastUpdate = new Date();
+        this.lastCredentials = credentials;
         
         this.connectionInfo = {
           connectionStatus: 'Connected',
@@ -124,6 +144,7 @@ class ExnessAPI {
           isDemo: this.accountInfo.isDemo
         });
 
+        this.startHeartbeat();
         return true;
       } else {
         throw new Error(result.error || 'Connection failed');
@@ -151,7 +172,7 @@ class ExnessAPI {
   }
 
   private mapMT5AccountInfo(mt5Info: any): AccountInfo {
-    return {
+    const mapped: AccountInfo = {
       accountNumber: mt5Info.login?.toString() || '',
       balance: parseFloat(mt5Info.balance?.toString() || '0'),
       equity: parseFloat(mt5Info.equity?.toString() || '0'),
@@ -166,6 +187,34 @@ class ExnessAPI {
       profit: parseFloat(mt5Info.profit?.toString() || '0'),
       credit: parseFloat(mt5Info.credit?.toString() || '0'),
       company: mt5Info.company || 'Exness'
+    };
+
+    // Map positions if present in payload
+    if (Array.isArray(mt5Info.positions)) {
+      mapped.positions = mt5Info.positions.map((p: any) => this.mapMT5Position(p));
+    }
+
+    return mapped;
+  }
+
+  private mapMT5Position(p: any): Position {
+    // Bridge may provide numeric type (0 buy / 1 sell)
+    const type = (p.type === 0 || p.type === 'BUY') ? 'BUY' : 'SELL';
+    const openTime = p.openTime ? new Date(p.openTime) : (p.time ? new Date(p.time * 1000) : new Date());
+    return {
+      ticket: Number(p.ticket),
+      ticketId: String(p.ticket),
+      symbol: p.symbol,
+      type,
+      volume: Number(p.volume),
+      openPrice: Number(p.price_open ?? p.openPrice ?? 0),
+      currentPrice: Number(p.price_current ?? p.currentPrice ?? 0),
+      profit: Number(p.profit ?? 0),
+      stopLoss: p.sl !== undefined ? Number(p.sl) : undefined,
+      takeProfit: p.tp !== undefined ? Number(p.tp) : undefined,
+      openTime,
+      commission: Number(p.commission ?? 0),
+      swap: Number(p.swap ?? 0)
     };
   }
 
@@ -259,6 +308,8 @@ class ExnessAPI {
       }
     } catch (error) {
       console.error('Failed to get real account info:', error);
+      // Mark disconnected to trigger reconnect loop
+      this.isConnected = false;
       return null;
     }
   }
@@ -312,12 +363,17 @@ class ExnessAPI {
     }
 
     try {
-      const accountInfo = await this.getAccountInfo();
-      if (!accountInfo) return [];
-
-      // For now, return positions from the account info response
-      // In a full implementation, you'd have a separate endpoint for positions
-      return accountInfo.positions || [];
+      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/positions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: this.sessionId })
+      });
+      if (!response.ok) throw new Error(`Failed to get positions: ${response.status}`);
+      const result = await response.json();
+      if (result.success && Array.isArray(result.data)) {
+        return result.data.map((p: any) => this.mapMT5Position(p));
+      }
+      return [];
     } catch (error) {
       console.error('Failed to get positions:', error);
       return [];
@@ -326,29 +382,20 @@ class ExnessAPI {
 
   async getCurrentPrice(symbol: string): Promise<MarketPrice | null> {
     try {
-      // For real implementation, you'd get this from MT5 Bridge
-      // For now, return realistic mock data
-      const basePrices: Record<string, number> = {
-        'EURUSD': 1.0845,
-        'GBPUSD': 1.2734,
-        'USDJPY': 149.85,
-        'AUDUSD': 0.6623,
-        'USDCHF': 0.8892,
-        'NZDUSD': 0.5987
-      };
-
-      const basePrice = basePrices[symbol] || 1.0000;
-      const spread = symbol.includes('JPY') ? 0.015 : 0.00015;
-      const bid = basePrice - spread / 2;
-      const ask = basePrice + spread / 2;
-
-      return {
-        symbol,
-        bid,
-        ask,
-        spread,
-        timestamp: new Date()
-      };
+      const url = `${this.MT5_BRIDGE_URL}/mt5/price?symbol=${encodeURIComponent(symbol)}`;
+      const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(5000) });
+      if (!response.ok) throw new Error(`Price request failed: ${response.status}`);
+      const result = await response.json();
+      if (result.success && result.data) {
+        return {
+          symbol: result.data.symbol,
+          bid: Number(result.data.bid),
+          ask: Number(result.data.ask),
+          spread: Number(result.data.spread),
+          timestamp: new Date(result.data.timestamp)
+        };
+      }
+      return null;
     } catch (error) {
       console.error('Failed to get current price:', error);
       return null;
@@ -361,14 +408,78 @@ class ExnessAPI {
     }
 
     try {
-      console.log('🔒 Closing position:', ticket);
-      
-      // In a real implementation, you'd call the MT5 Bridge to close the position
-      // For now, simulate success
-      console.log('✅ Position closed successfully');
-      return true;
+      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/close_position`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: this.sessionId, ticket })
+      });
+      if (!response.ok) throw new Error(`Failed to close position: ${response.status}`);
+      const result = await response.json();
+      return Boolean(result.success);
     } catch (error) {
       console.error('Failed to close position:', error);
+      return false;
+    }
+  }
+
+  async getHistoricalCandles(symbol: string, timeframe: 'M1'|'M5'|'M15'|'M30'|'H1'|'H4'|'D1', count: number = 200): Promise<Candle[]> {
+    if (!this.isConnected || !this.sessionId) return [];
+    try {
+      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/history`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: this.sessionId, symbol, timeframe, count })
+      });
+      if (!response.ok) throw new Error(`Failed to get history: ${response.status}`);
+      const result = await response.json();
+      if (result.success && Array.isArray(result.data)) {
+        return result.data.map((c: any) => ({
+          time: Number(c.time),
+          open: Number(c.open),
+          high: Number(c.high),
+          low: Number(c.low),
+          close: Number(c.close),
+          volume: Number(c.tick_volume ?? c.volume ?? 0),
+          spread: c.spread !== undefined ? Number(c.spread) : undefined,
+        }));
+      }
+      return [];
+    } catch (e) {
+      console.error('Failed to get historical candles:', e);
+      return [];
+    }
+  }
+
+  async modifyPosition(ticket: number, params: { stopLoss?: number; takeProfit?: number }): Promise<boolean> {
+    if (!this.isConnected || !this.sessionId) return false;
+    try {
+      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/modify_position`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: this.sessionId, ticket, sl: params.stopLoss, tp: params.takeProfit })
+      });
+      if (!response.ok) throw new Error(`Failed to modify position: ${response.status}`);
+      const result = await response.json();
+      return Boolean(result.success);
+    } catch (e) {
+      console.error('Failed to modify position:', e);
+      return false;
+    }
+  }
+
+  async closePartial(ticket: number, volume: number): Promise<boolean> {
+    if (!this.isConnected || !this.sessionId) return false;
+    try {
+      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/close_partial`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: this.sessionId, ticket, volume })
+      });
+      if (!response.ok) throw new Error(`Failed to partial close: ${response.status}`);
+      const result = await response.json();
+      return Boolean(result.success);
+    } catch (e) {
+      console.error('Failed to partial close:', e);
       return false;
     }
   }
@@ -447,7 +558,64 @@ class ExnessAPI {
     this.sessionId = null;
     this.accountInfo = null;
     this.connectionInfo = null;
+    this.stopHeartbeat();
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
     console.log('🔌 Disconnected from Exness');
+  }
+
+  // Heartbeat and auto-reconnect
+  startAutoReconnect(): void {
+    this.startHeartbeat();
+  }
+
+  private startHeartbeat(): void {
+    if (this.heartbeatInterval) return;
+    this.heartbeatInterval = setInterval(async () => {
+      try {
+        if (!this.isConnected) {
+          await this.attemptReconnect();
+          return;
+        }
+        const info = await this.getAccountInfo();
+        if (!info) {
+          this.isConnected = false;
+          await this.attemptReconnect();
+        }
+      } catch (e) {
+        this.isConnected = false;
+        await this.attemptReconnect();
+      }
+    }, 30000);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+  }
+
+  private async attemptReconnect(): Promise<void> {
+    if (!this.lastCredentials) return;
+    if (this.reconnectTimeout) return; // Already scheduled
+    const backoff = this.reconnectBackoffMs;
+    console.warn(`🔄 Attempting reconnect in ${(backoff / 1000).toFixed(0)}s...`);
+    this.reconnectTimeout = setTimeout(async () => {
+      this.reconnectTimeout = null;
+      try {
+        const ok = await this.connect(this.lastCredentials as ExnessCredentials);
+        if (ok) {
+          console.log('✅ Reconnected to Exness');
+          this.reconnectBackoffMs = 2000;
+          return;
+        }
+      } catch {}
+      this.reconnectBackoffMs = Math.min(this.reconnectBackoffMs * 2, this.reconnectBackoffMaxMs);
+      await this.attemptReconnect();
+    }, backoff);
   }
 }
 

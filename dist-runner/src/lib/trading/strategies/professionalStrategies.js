@@ -1,0 +1,334 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.professionalStrategies = exports.ProfessionalTradingStrategies = void 0;
+class ProfessionalTradingStrategies {
+    // 1. Scalping Strategy - High frequency, quick profits
+    async scalpingStrategy(marketData, indicators) {
+        const { rsi, macd, ema20, ema50 } = indicators;
+        const currentPrice = marketData.prices[marketData.prices.length - 1];
+        // RSI oversold/overbought with MACD confirmation
+        if (rsi < 30 && macd.value > macd.signal && ema20 > ema50) {
+            return {
+                id: this.generateSignalId(),
+                symbol: marketData.symbol,
+                type: 'BUY',
+                confidence: 85,
+                entryPrice: currentPrice,
+                stopLoss: currentPrice - (0.0005 * this.getPipValue(marketData.symbol)),
+                takeProfit: currentPrice + (0.001 * this.getPipValue(marketData.symbol)),
+                timeframe: '1M',
+                reasoning: 'Scalping: RSI oversold with bullish MACD crossover',
+                source: 'Scalping Strategy'
+            };
+        }
+        if (rsi > 70 && macd.value < macd.signal && ema20 < ema50) {
+            return {
+                id: this.generateSignalId(),
+                symbol: marketData.symbol,
+                type: 'SELL',
+                confidence: 85,
+                entryPrice: currentPrice,
+                stopLoss: currentPrice + (0.0005 * this.getPipValue(marketData.symbol)),
+                takeProfit: currentPrice - (0.001 * this.getPipValue(marketData.symbol)),
+                timeframe: '1M',
+                reasoning: 'Scalping: RSI overbought with bearish MACD crossover',
+                source: 'Scalping Strategy'
+            };
+        }
+        return null;
+    }
+    // 2. Swing Trading Strategy - Medium term positions
+    async swingTradingStrategy(marketData, indicators) {
+        const { ema20, ema50, sma200, bollinger, rsi } = indicators;
+        const currentPrice = marketData.prices[marketData.prices.length - 1];
+        // Golden Cross with trend confirmation
+        if (ema20 > ema50 && ema50 > sma200 && currentPrice > bollinger.middle && rsi > 50) {
+            return {
+                id: this.generateSignalId(),
+                symbol: marketData.symbol,
+                type: 'BUY',
+                confidence: 90,
+                entryPrice: currentPrice,
+                stopLoss: ema50,
+                takeProfit: currentPrice + ((currentPrice - ema50) * 2),
+                timeframe: '4H',
+                reasoning: 'Swing: Golden cross with strong uptrend confirmation',
+                source: 'Swing Trading Strategy'
+            };
+        }
+        // Death Cross with trend confirmation
+        if (ema20 < ema50 && ema50 < sma200 && currentPrice < bollinger.middle && rsi < 50) {
+            return {
+                id: this.generateSignalId(),
+                symbol: marketData.symbol,
+                type: 'SELL',
+                confidence: 90,
+                entryPrice: currentPrice,
+                stopLoss: ema50,
+                takeProfit: currentPrice - ((ema50 - currentPrice) * 2),
+                timeframe: '4H',
+                reasoning: 'Swing: Death cross with strong downtrend confirmation',
+                source: 'Swing Trading Strategy'
+            };
+        }
+        return null;
+    }
+    // 3. Breakout Strategy - Momentum trading
+    async breakoutStrategy(marketData, indicators) {
+        const { bollinger, atr, rsi } = indicators;
+        const currentPrice = marketData.prices[marketData.prices.length - 1];
+        const recentPrices = marketData.prices.slice(-20);
+        const resistance = Math.max(...recentPrices);
+        const support = Math.min(...recentPrices);
+        // Bollinger Band breakout with volume confirmation
+        if (currentPrice > bollinger.upper && rsi < 80) {
+            return {
+                id: this.generateSignalId(),
+                symbol: marketData.symbol,
+                type: 'BUY',
+                confidence: 88,
+                entryPrice: currentPrice,
+                stopLoss: bollinger.middle,
+                takeProfit: currentPrice + (atr * 2),
+                timeframe: '1H',
+                reasoning: 'Breakout: Bollinger band upper breakout with momentum',
+                source: 'Breakout Strategy'
+            };
+        }
+        if (currentPrice < bollinger.lower && rsi > 20) {
+            return {
+                id: this.generateSignalId(),
+                symbol: marketData.symbol,
+                type: 'SELL',
+                confidence: 88,
+                entryPrice: currentPrice,
+                stopLoss: bollinger.middle,
+                takeProfit: currentPrice - (atr * 2),
+                timeframe: '1H',
+                reasoning: 'Breakout: Bollinger band lower breakout with momentum',
+                source: 'Breakout Strategy'
+            };
+        }
+        return null;
+    }
+    // 4. Mean Reversion Strategy
+    async meanReversionStrategy(marketData, indicators) {
+        const { bollinger, rsi, stochastic } = indicators;
+        const currentPrice = marketData.prices[marketData.prices.length - 1];
+        // Oversold conditions with mean reversion signals
+        if (currentPrice < bollinger.lower && rsi < 25 && stochastic.k < 20) {
+            return {
+                id: this.generateSignalId(),
+                symbol: marketData.symbol,
+                type: 'BUY',
+                confidence: 87,
+                entryPrice: currentPrice,
+                stopLoss: currentPrice - (indicators.atr * 1.5),
+                takeProfit: bollinger.middle,
+                timeframe: '1H',
+                reasoning: 'Mean Reversion: Multiple oversold indicators suggest reversal',
+                source: 'Mean Reversion Strategy'
+            };
+        }
+        // Overbought conditions with mean reversion signals
+        if (currentPrice > bollinger.upper && rsi > 75 && stochastic.k > 80) {
+            return {
+                id: this.generateSignalId(),
+                symbol: marketData.symbol,
+                type: 'SELL',
+                confidence: 87,
+                entryPrice: currentPrice,
+                stopLoss: currentPrice + (indicators.atr * 1.5),
+                takeProfit: bollinger.middle,
+                timeframe: '1H',
+                reasoning: 'Mean Reversion: Multiple overbought indicators suggest reversal',
+                source: 'Mean Reversion Strategy'
+            };
+        }
+        return null;
+    }
+    // 5. Grid Trading Strategy
+    async gridTradingStrategy(marketData, indicators) {
+        const currentPrice = marketData.prices[marketData.prices.length - 1];
+        const { atr, ema20 } = indicators;
+        const gridSize = atr * 0.5;
+        const distanceFromEMA = Math.abs(currentPrice - ema20);
+        // Create grid levels around EMA
+        if (distanceFromEMA > gridSize && currentPrice < ema20) {
+            return {
+                id: this.generateSignalId(),
+                symbol: marketData.symbol,
+                type: 'BUY',
+                confidence: 75,
+                entryPrice: currentPrice,
+                stopLoss: currentPrice - (gridSize * 2),
+                takeProfit: ema20,
+                timeframe: '15M',
+                reasoning: 'Grid: Price below EMA, buying at grid level',
+                source: 'Grid Trading Strategy'
+            };
+        }
+        if (distanceFromEMA > gridSize && currentPrice > ema20) {
+            return {
+                id: this.generateSignalId(),
+                symbol: marketData.symbol,
+                type: 'SELL',
+                confidence: 75,
+                entryPrice: currentPrice,
+                stopLoss: currentPrice + (gridSize * 2),
+                takeProfit: ema20,
+                timeframe: '15M',
+                reasoning: 'Grid: Price above EMA, selling at grid level',
+                source: 'Grid Trading Strategy'
+            };
+        }
+        return null;
+    }
+    // 6. News-Based Strategy
+    async newsBasedStrategy(marketData, newsImpact) {
+        if (newsImpact === 'HIGH') {
+            // Avoid trading during high impact news
+            return null;
+        }
+        const currentPrice = marketData.prices[marketData.prices.length - 1];
+        const recentVolume = marketData.volumes.slice(-5).reduce((a, b) => a + b, 0);
+        const avgVolume = marketData.volumes.reduce((a, b) => a + b, 0) / marketData.volumes.length;
+        // Trade on medium impact news with volume confirmation
+        if (newsImpact === 'MEDIUM' && recentVolume > avgVolume * 1.5) {
+            const priceChange = (currentPrice - marketData.prices[marketData.prices.length - 6]) / marketData.prices[marketData.prices.length - 6];
+            if (priceChange > 0.001) { // Positive momentum
+                return {
+                    id: this.generateSignalId(),
+                    symbol: marketData.symbol,
+                    type: 'BUY',
+                    confidence: 82,
+                    entryPrice: currentPrice,
+                    stopLoss: currentPrice - (0.002 * this.getPipValue(marketData.symbol)),
+                    takeProfit: currentPrice + (0.004 * this.getPipValue(marketData.symbol)),
+                    timeframe: '5M',
+                    reasoning: 'News: Medium impact news with positive momentum and volume',
+                    source: 'News-Based Strategy'
+                };
+            }
+        }
+        return null;
+    }
+    // Risk Management Functions
+    calculatePositionSize(accountBalance, riskPerTrade, stopLossDistance) {
+        const riskAmount = accountBalance * (riskPerTrade / 100);
+        return Math.min(riskAmount / stopLossDistance, accountBalance * 0.1); // Max 10% of balance
+    }
+    // Utility Functions
+    generateSignalId() {
+        return `signal_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    }
+    getPipValue(symbol) {
+        const pipValues = {
+            'EURUSD': 0.0001,
+            'GBPUSD': 0.0001,
+            'USDJPY': 0.01,
+            'AUDUSD': 0.0001,
+            'USDCHF': 0.0001,
+            'NZDUSD': 0.0001,
+            'USDCAD': 0.0001,
+            'EURJPY': 0.01,
+            'GBPJPY': 0.01,
+            'CHFJPY': 0.01
+        };
+        return pipValues[symbol] || 0.0001;
+    }
+    // Technical Indicators Calculator
+    calculateTechnicalIndicators(prices, volumes) {
+        return {
+            rsi: this.calculateRSI(prices, 14),
+            macd: this.calculateMACD(prices),
+            ema20: this.calculateEMA(prices, 20),
+            ema50: this.calculateEMA(prices, 50),
+            sma200: this.calculateSMA(prices, 200),
+            bollinger: this.calculateBollingerBands(prices, 20, 2),
+            stochastic: this.calculateStochastic(prices, 14),
+            atr: this.calculateATR(prices, 14)
+        };
+    }
+    calculateRSI(prices, period) {
+        if (prices.length < period + 1)
+            return 50;
+        let gains = 0;
+        let losses = 0;
+        for (let i = 1; i <= period; i++) {
+            const change = prices[prices.length - i] - prices[prices.length - i - 1];
+            if (change > 0)
+                gains += change;
+            else
+                losses -= change;
+        }
+        const avgGain = gains / period;
+        const avgLoss = losses / period;
+        if (avgLoss === 0)
+            return 100;
+        const rs = avgGain / avgLoss;
+        return 100 - (100 / (1 + rs));
+    }
+    calculateEMA(prices, period) {
+        if (prices.length < period)
+            return prices[prices.length - 1];
+        const multiplier = 2 / (period + 1);
+        let ema = prices.slice(0, period).reduce((a, b) => a + b, 0) / period;
+        for (let i = period; i < prices.length; i++) {
+            ema = (prices[i] * multiplier) + (ema * (1 - multiplier));
+        }
+        return ema;
+    }
+    calculateSMA(prices, period) {
+        if (prices.length < period)
+            return prices[prices.length - 1];
+        const recentPrices = prices.slice(-period);
+        return recentPrices.reduce((a, b) => a + b, 0) / period;
+    }
+    calculateMACD(prices) {
+        const ema12 = this.calculateEMA(prices, 12);
+        const ema26 = this.calculateEMA(prices, 26);
+        const macdValue = ema12 - ema26;
+        // Simple signal line calculation (normally would use EMA of MACD)
+        const signal = macdValue * 0.9; // Simplified
+        const histogram = macdValue - signal;
+        return { value: macdValue, signal, histogram };
+    }
+    calculateBollingerBands(prices, period, stdDev) {
+        const sma = this.calculateSMA(prices, period);
+        const recentPrices = prices.slice(-period);
+        const variance = recentPrices.reduce((sum, price) => sum + Math.pow(price - sma, 2), 0) / period;
+        const standardDeviation = Math.sqrt(variance);
+        return {
+            upper: sma + (standardDeviation * stdDev),
+            middle: sma,
+            lower: sma - (standardDeviation * stdDev)
+        };
+    }
+    calculateStochastic(prices, period) {
+        if (prices.length < period)
+            return { k: 50, d: 50 };
+        const recentPrices = prices.slice(-period);
+        const highest = Math.max(...recentPrices);
+        const lowest = Math.min(...recentPrices);
+        const current = prices[prices.length - 1];
+        const k = ((current - lowest) / (highest - lowest)) * 100;
+        const d = k * 0.9; // Simplified D% calculation
+        return { k, d };
+    }
+    calculateATR(prices, period) {
+        if (prices.length < period + 1)
+            return 0.001;
+        let trSum = 0;
+        for (let i = prices.length - period; i < prices.length - 1; i++) {
+            const high = prices[i];
+            const low = prices[i];
+            const prevClose = prices[i - 1];
+            const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
+            trSum += tr;
+        }
+        return trSum / period;
+    }
+}
+exports.ProfessionalTradingStrategies = ProfessionalTradingStrategies;
+exports.professionalStrategies = new ProfessionalTradingStrategies();
