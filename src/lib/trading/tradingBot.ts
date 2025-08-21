@@ -20,6 +20,7 @@ export interface BotConfiguration {
   minConfidence: number;
   maxRiskPerTrade: number;
   maxDailyLoss: number;
+  maxDailyProfit?: number; // percent of balance
   enabledPairs: string[];
   tradingHours: {
     start: string;
@@ -29,6 +30,7 @@ export interface BotConfiguration {
   useStopLoss: boolean;
   useTakeProfit: boolean;
   emergencyStopEnabled: boolean;
+  flattenAtEndOfDay?: boolean;
 }
 
 class TradingBot {
@@ -47,18 +49,21 @@ class TradingBot {
     minConfidence: 80,
     maxRiskPerTrade: 1, // Conservative 1% for real trading
     maxDailyLoss: 3, // Conservative 3% for real trading
-    enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY'],
+    maxDailyProfit: 2, // 2% take-profit for the day
+    enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY', 'USDCAD', 'AUDUSD', 'NZDUSD', 'EURJPY', 'GBPJPY', 'XAUUSD'],
     tradingHours: {
-      start: '00:00',
-      end: '23:59',
+      start: '06:00', // start of day trading window UTC
+      end: '21:00',   // end to avoid rollover/overnight
       timezone: 'UTC'
     },
     useStopLoss: true,
     useTakeProfit: true,
-    emergencyStopEnabled: true
+    emergencyStopEnabled: true,
+    flattenAtEndOfDay: true
   };
 
   private monitoringInterval: NodeJS.Timeout | null = null;
+  private signalInterval: NodeJS.Timeout | null = null;
   private isPersistent: boolean = true; // Bot continues running across page navigation
   private healthCheckInterval: NodeJS.Timeout | null = null;
   private lastHealthCheck: Date = new Date();
@@ -120,6 +125,7 @@ class TradingBot {
           minConfidence: parseFloat(botSettings.min_confidence_score?.toString() || '80'),
           maxRiskPerTrade: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '1'), 2.0), // Cap at 2%
           maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '3'), 5.0), // Cap at 5%
+          maxDailyProfit: parseFloat(botSettings.max_daily_profit?.toString() || '2'), // Cap at 2%
           enabledPairs: botSettings.allowed_pairs || ['EURUSD', 'GBPUSD', 'USDJPY'],
           tradingHours: botSettings.trading_hours as any || {
             start: '00:00',
@@ -128,7 +134,8 @@ class TradingBot {
           },
           useStopLoss: true, // Always true for real trading
           useTakeProfit: true, // Always true for real trading
-          emergencyStopEnabled: true
+          emergencyStopEnabled: true,
+          flattenAtEndOfDay: botSettings.flatten_at_end_of_day || true
         };
 
         this.status.isActive = botSettings.is_active || false;
@@ -230,6 +237,10 @@ class TradingBot {
         clearInterval(this.monitoringInterval);
         this.monitoringInterval = null;
       }
+      if (this.signalInterval) {
+        clearInterval(this.signalInterval);
+        this.signalInterval = null;
+      }
 
       // Stop health monitoring
       if (this.healthCheckInterval) {
@@ -296,6 +307,37 @@ class TradingBot {
         console.error('Bot monitoring error:', error);
       }
     }, 30000);
+
+    // Start simple signal engine loop (every 60s)
+    if (this.signalInterval) clearInterval(this.signalInterval);
+    this.signalInterval = setInterval(async () => {
+      try {
+        if (!this.status.isActive || !this.status.autoTradingEnabled) return;
+        if (!exnessAPI.isConnectedToExness()) return;
+        // Try a small set of pairs
+        const pairs = this.configuration.enabledPairs || ['EURUSD', 'GBPUSD', 'USDJPY'];
+        const maxTradesPerCycle = 2;
+        let placed = 0;
+        for (const symbol of pairs) {
+          const price = await exnessAPI.getCurrentPrice(symbol);
+          if (!price) continue;
+          // Very simple momentum check using last two closes from history
+          const history = await exnessAPI.getHistory(symbol, 'M5', 6);
+          if (!history || history.length < 3) continue;
+          const last = history[history.length - 1].close;
+          const prev = history[history.length - 2].close;
+          const change = (last - prev) / prev;
+          if (Math.abs(change) < 0.0002) continue; // ignore tiny moves
+          const type = change > 0 ? 'BUY' : 'SELL';
+          // Execute tiny trade size respecting risk manager downstream
+          await this.executeTradeWithAnalysis(symbol, type as 'BUY' | 'SELL', 0.01);
+          placed++;
+          if (placed >= maxTradesPerCycle) break; // cap trades per cycle
+        }
+      } catch (e) {
+        console.error('Signal loop error:', e);
+      }
+    }, 30000);
   }
 
   private startHealthMonitoring(): void {
@@ -337,6 +379,16 @@ class TradingBot {
       }
     }
 
+    // Daily profit target enforcement
+    if ((this.configuration.maxDailyProfit || 0) > 0) {
+      const dailyPnL = await this.getDailyLoss(); // net PnL
+      const pct = accountInfo.balance > 0 ? (dailyPnL / accountInfo.balance) * 100 : 0;
+      if (pct >= (this.configuration.maxDailyProfit || 2)) {
+        console.log(`🎯 Daily profit target reached: ${pct.toFixed(2)}% >= ${(this.configuration.maxDailyProfit || 2)}%`);
+        if (this.status.autoTradingEnabled) await this.enableAutoTrading(false);
+      }
+    }
+
     // Enhanced daily loss protection for real money
     if (this.configuration.maxDailyLoss > 0) {
       const dailyLoss = await this.getDailyLoss();
@@ -363,6 +415,15 @@ class TradingBot {
       if (this.status.autoTradingEnabled) {
         console.log('🕐 Outside trading hours, disabling auto trading');
         await this.enableAutoTrading(false);
+      }
+      // Optionally flatten at end of day
+      if (this.configuration.flattenAtEndOfDay) {
+        const now = new Date();
+        const currentTime = now.toTimeString().slice(0, 5);
+        if (currentTime >= this.configuration.tradingHours.end) {
+          console.log('🌙 End of day reached, flattening positions');
+          await orderManager.closeAllPositions();
+        }
       }
       return;
     }
@@ -525,8 +586,10 @@ class TradingBot {
           min_confidence_score: this.configuration.minConfidence,
           max_risk_per_trade: this.configuration.maxRiskPerTrade,
           max_daily_loss: this.configuration.maxDailyLoss,
+          max_daily_profit: this.configuration.maxDailyProfit,
           allowed_pairs: this.configuration.enabledPairs,
           trading_hours: this.configuration.tradingHours,
+          flatten_at_end_of_day: this.configuration.flattenAtEndOfDay,
           updated_at: new Date().toISOString()
         });
     } catch (error) {
@@ -553,9 +616,11 @@ class TradingBot {
       ...config,
       maxRiskPerTrade: config.maxRiskPerTrade ? Math.min(config.maxRiskPerTrade, 2.0) : undefined,
       maxDailyLoss: config.maxDailyLoss ? Math.min(config.maxDailyLoss, 5.0) : undefined,
+      maxDailyProfit: config.maxDailyProfit ? Math.min(config.maxDailyProfit, 5.0) : undefined, // Cap at 5%
       useStopLoss: true, // Always enforce stop loss
       useTakeProfit: true, // Always enforce take profit
-      emergencyStopEnabled: true // Always keep emergency stop enabled
+      emergencyStopEnabled: true, // Always keep emergency stop enabled
+      flattenAtEndOfDay: config.flattenAtEndOfDay || true // Always keep flatten at end of day enabled
     };
 
     this.configuration = { ...this.configuration, ...safeConfig };

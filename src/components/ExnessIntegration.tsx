@@ -198,8 +198,8 @@ export const ExnessIntegration = () => {
         setConnectionProgress(prev => Math.min(prev + 5, 90));
       }, 300);
 
-      // Connect directly through exnessAPI instead of hook
-      const connected = await exnessAPI.connect({
+      // Connect via hook to ensure trading bot status updates properly
+      const connected = await connectToExness({
         accountNumber: credentials.accountNumber,
         password: credentials.password,
         server: credentials.server,

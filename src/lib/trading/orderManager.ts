@@ -22,6 +22,15 @@ export interface RiskParameters {
   minMarginLevel: number;
   maxLeverage: number;
   emergencyStopEnabled: boolean;
+  // New advanced risk controls
+  atrPeriod?: number; // for ATR sizing
+  atrStopLossMultiplier?: number; // SL = ATR * m
+  atrTakeProfitMultiplier?: number; // TP = ATR * m
+  trailingStopAtrMultiplier?: number; // Placeholder for future trailing
+  maxSpreadPips?: number; // entry spread limit
+  maxSlippagePoints?: number; // MT5 deviation points
+  maxExposurePerCurrency?: number; // e.g., 200% of balance exposure cap per currency
+  maxTotalExposure?: number; // total exposure cap across portfolio
 }
 
 class OrderManager {
@@ -37,7 +46,15 @@ class OrderManager {
     minAccountBalance: 100, // $100 minimum
     minMarginLevel: 200, // 200% minimum margin level
     maxLeverage: 500, // Max 1:500 leverage
-    emergencyStopEnabled: true
+    emergencyStopEnabled: true,
+    atrPeriod: 14,
+    atrStopLossMultiplier: 1.5,
+    atrTakeProfitMultiplier: 3.0,
+    trailingStopAtrMultiplier: 1.0,
+    maxSpreadPips: 2.0,
+    maxSlippagePoints: 20,
+    maxExposurePerCurrency: 300, // as % of balance notionally
+    maxTotalExposure: 600
   };
 
   private lastOrderTime: number = 0;
@@ -75,7 +92,15 @@ class OrderManager {
           minAccountBalance: 100,
           minMarginLevel: 200,
           maxLeverage: 500,
-          emergencyStopEnabled: true
+          emergencyStopEnabled: true,
+          atrPeriod: 14,
+          atrStopLossMultiplier: 1.5,
+          atrTakeProfitMultiplier: 3.0,
+          trailingStopAtrMultiplier: 1.0,
+          maxSpreadPips: 2.0,
+          maxSlippagePoints: 20,
+          maxExposurePerCurrency: 300, // as % of balance notionally
+          maxTotalExposure: 600
         };
         
         this.maxDailyTrades = Math.min(parseInt(botSettings.max_daily_trades?.toString() || '10'), 20);
@@ -126,6 +151,20 @@ class OrderManager {
         throw new Error('Not connected to Exness account. Please connect first.');
       }
 
+      // Spread filter
+      const tick = await exnessAPI.getCurrentPrice(orderRequest.symbol);
+      if (!tick) throw new Error('No current price available');
+      const spreadPips = this.convertPriceToPips(orderRequest.symbol, tick.spread);
+      if (this.riskParams.maxSpreadPips && spreadPips > this.riskParams.maxSpreadPips) {
+        return Promise.reject(new Error(`Spread too wide (${spreadPips.toFixed(2)} pips > ${this.riskParams.maxSpreadPips} pips)`));
+      }
+
+      // Portfolio exposure checks
+      const exposureOk = await this.checkExposureLimits(orderRequest.symbol, orderRequest.volume);
+      if (!exposureOk.allowed) {
+        return Promise.reject(new Error(`Exposure limit reached: ${exposureOk.reason}`));
+      }
+
       // Enhanced risk checks for real money trading
       const riskCheckResult = await this.performEnhancedRiskChecks(orderRequest);
       if (!riskCheckResult.allowed) {
@@ -140,12 +179,14 @@ class OrderManager {
       }
 
       // Enhanced order preparation with automatic risk management
+      const atr = await this.getAtr(orderRequest.symbol, this.riskParams.atrPeriod || 14);
+      const slTp = this.deriveStopsFromAtr(orderRequest.symbol, orderRequest.type, atr, tick, orderRequest.stopLoss, orderRequest.takeProfit);
       const enhancedOrder: TradeOrder = {
         symbol: orderRequest.symbol,
         type: orderRequest.type,
         volume: adjustedVolume,
-        stopLoss: orderRequest.stopLoss,
-        takeProfit: orderRequest.takeProfit,
+        stopLoss: slTp.stopLoss,
+        takeProfit: slTp.takeProfit,
         comment: orderRequest.comment || `ForexPro-${Date.now()}`
       };
 
@@ -325,30 +366,32 @@ class OrderManager {
       
       console.log('Optimal position sizing - Available capital:', availableCapital, 'Risk amount:', riskAmount);
 
-      // Get real-time price for accurate calculations
+      // Volatility targeting via ATR
+      const atr = await this.getAtr(orderRequest.symbol, this.riskParams.atrPeriod || 14);
+      // Fallback to price-based if ATR missing
       const currentPrice = await exnessAPI.getCurrentPrice(orderRequest.symbol);
-      if (!currentPrice) {
-        throw new Error('Unable to get current market price for position sizing');
-      }
+      if (!currentPrice) throw new Error('Unable to get current market price for position sizing');
 
-      // Calculate stop loss distance in pips
-      let stopLossDistance = 30; // Default 30 pips
-      if (orderRequest.stopLoss) {
+      // Calculate stop loss distance using ATR when available
+      let stopLossDistancePips = 30; // default
+      if (atr && atr > 0) {
+        stopLossDistancePips = this.convertPriceToPips(orderRequest.symbol, atr * (this.riskParams.atrStopLossMultiplier || 1.5));
+      } else if (orderRequest.stopLoss) {
         const pipValue = this.getPipValue(orderRequest.symbol);
         const priceToUse = orderRequest.type === 'BUY' ? currentPrice.ask : currentPrice.bid;
-        stopLossDistance = Math.abs(priceToUse - orderRequest.stopLoss) / pipValue;
+        stopLossDistancePips = Math.abs(priceToUse - (orderRequest.stopLoss || priceToUse)) / pipValue;
       }
 
       // Ensure minimum stop loss distance for safety
-      stopLossDistance = Math.max(stopLossDistance, 20); // Minimum 20 pips
-      stopLossDistance = Math.min(stopLossDistance, 100); // Maximum 100 pips
+      stopLossDistancePips = Math.max(stopLossDistancePips, 20); // Minimum 20 pips
+      stopLossDistancePips = Math.min(stopLossDistancePips, 150); // Maximum 150 pips
 
       // Calculate position size based on risk management
       const pipValue = this.getPipValue(orderRequest.symbol);
       const dollarPerPip = pipValue * 100000; // Standard lot pip value
       
       // Position size = Risk Amount / (Stop Loss Distance * Dollar Per Pip)
-      let positionSize = riskAmount / (stopLossDistance * dollarPerPip);
+      let positionSize = riskAmount / (stopLossDistancePips * dollarPerPip);
 
       // Apply conservative multiplier for real trading
       const conservativeMultiplier = accountInfo.isDemo ? 1.0 : 0.5; // Use only 50% of calculated size for live accounts
@@ -368,7 +411,7 @@ class OrderManager {
       console.log('Enhanced position size calculation:', {
         availableCapital,
         riskAmount,
-        stopLossDistance,
+        stopLossDistancePips,
         currentPrice: currentPrice.ask,
         pipValue,
         calculatedSize: positionSize,
@@ -442,10 +485,86 @@ class OrderManager {
       'CHFJPY': 0.01,
       'AUDJPY': 0.01,
       'NZDJPY': 0.01,
-      'CADJPY': 0.01
+      'CADJPY': 0.01,
+      'XAUUSD': 0.1,
     };
     
-    return pipValues[symbol] || (symbol.includes('JPY') ? 0.01 : 0.0001);
+    return pipValues[symbol] || (symbol.includes('JPY') ? 0.01 : symbol.includes('XAU') ? 0.1 : 0.0001);
+  }
+
+  private convertPriceToPips(symbol: string, priceDiff: number): number {
+    const pip = this.getPipValue(symbol);
+    return priceDiff / pip;
+  }
+
+  private async getAtr(symbol: string, period: number): Promise<number> {
+    try {
+      const history = await exnessAPI.getHistory(symbol, 'M15', Math.max(period + 1, 30));
+      if (!history || history.length < period + 1) return 0;
+      let trs: number[] = [];
+      for (let i = 1; i < history.length; i++) {
+        const prevClose = history[i - 1].close;
+        const high = history[i].high;
+        const low = history[i].low;
+        const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
+        trs.push(tr);
+      }
+      const atr = trs.slice(-period).reduce((a, b) => a + b, 0) / period;
+      return atr;
+    } catch (e) {
+      console.error('ATR calc failed', e);
+      return 0;
+    }
+  }
+
+  private deriveStopsFromAtr(symbol: string, type: 'BUY' | 'SELL', atr: number, tick: any, existingSL?: number, existingTP?: number) {
+    const pip = this.getPipValue(symbol);
+    const price = type === 'BUY' ? tick.ask : tick.bid;
+    const slMult = this.riskParams.atrStopLossMultiplier || 1.5;
+    const tpMult = this.riskParams.atrTakeProfitMultiplier || 3.0;
+    const slDist = atr > 0 ? atr * slMult : 30 * pip;
+    const tpDist = atr > 0 ? atr * tpMult : 60 * pip;
+    const stopLoss = existingSL ?? (type === 'BUY' ? price - slDist : price + slDist);
+    const takeProfit = existingTP ?? (type === 'BUY' ? price + tpDist : price - tpDist);
+    return { stopLoss, takeProfit };
+  }
+
+  private async checkExposureLimits(symbol: string, newVolume: number): Promise<{allowed: boolean, reason?: string}> {
+    try {
+      const positions = await exnessAPI.getPositions();
+      // Estimate exposure by counter currency (simplified by using notional in quote currency)
+      const exposureByCcy: Record<string, number> = {};
+      let totalExposure = 0;
+      for (const pos of positions) {
+        const quote = this.getQuoteCurrency(pos.symbol);
+        const price = pos.currentPrice || pos.openPrice;
+        const notional = (pos.volume || 0) * 100000 * (quote === 'JPY' ? price / 100 : price);
+        exposureByCcy[quote] = (exposureByCcy[quote] || 0) + Math.abs(notional);
+        totalExposure += Math.abs(notional);
+      }
+      const newQuote = this.getQuoteCurrency(symbol);
+      const newTick = await exnessAPI.getCurrentPrice(symbol);
+      const newNotional = newVolume * 100000 * (newQuote === 'JPY' ? (newTick?.ask || 0) / 100 : (newTick?.ask || 0));
+      const byCcy = (exposureByCcy[newQuote] || 0) + Math.abs(newNotional);
+
+      // Very conservative proxy using balance (needs real balance in account info)
+      const accountInfo = await exnessAPI.getAccountInfo();
+      const balance = accountInfo?.balance || 0;
+      const maxPerCcy = (this.riskParams.maxExposurePerCurrency || 300) / 100 * balance * 100; // rough USD proxy
+      const maxTotal = (this.riskParams.maxTotalExposure || 600) / 100 * balance * 100;
+      if (byCcy > maxPerCcy) return { allowed: false, reason: `${newQuote} exposure cap exceeded` };
+      if (totalExposure + Math.abs(newNotional) > maxTotal) return { allowed: false, reason: `Total exposure cap exceeded` };
+      return { allowed: true };
+    } catch (e) {
+      console.error('Exposure check failed', e);
+      return { allowed: true };
+    }
+  }
+
+  private getQuoteCurrency(symbol: string): string {
+    if (symbol.startsWith('XAU')) return 'USD';
+    if (symbol.length >= 6) return symbol.slice(3, 6);
+    return 'USD';
   }
 
   private async getDailyLoss(): Promise<number> {

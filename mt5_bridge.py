@@ -15,6 +15,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
+from enum import Enum
+import os
 
 app = FastAPI(title="MT5 Bridge Service", version="1.0.0")
 
@@ -48,16 +50,29 @@ class OrderRequest(BaseModel):
 class SessionRequest(BaseModel):
     session_id: str
 
+class Timeframe(str, Enum):
+    M1 = "M1"
+    M5 = "M5"
+    M15 = "M15"
+    M30 = "M30"
+    H1 = "H1"
+    H4 = "H4"
+    D1 = "D1"
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize MT5 connection on startup"""
-    if not mt5.initialize():
+    terminal_path = os.environ.get("MT5_TERMINAL_PATH")
+    init_ok = mt5.initialize(path=terminal_path) if terminal_path else mt5.initialize()
+    if not init_ok:
         print("❌ Failed to initialize MT5")
         raise RuntimeError("MT5 initialization failed")
     
     print("✅ MT5 Bridge Service started successfully")
     print(f"📊 MT5 Version: {mt5.version()}")
     print(f"🌐 Terminal Info: {mt5.terminal_info()}")
+    if terminal_path:
+        print(f"🛣️ Using terminal path: {terminal_path}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -81,14 +96,29 @@ async def connect_to_mt5(credentials: MT5Credentials):
     try:
         print(f"🔐 Attempting to connect to account {credentials.login} on {credentials.server}")
         
-        # Connect to MT5 account
+        # First attempt: normal login
         if not mt5.login(credentials.login, credentials.password, credentials.server):
             error = mt5.last_error()
             print(f"❌ MT5 login failed: {error}")
-            return {
-                "success": False,
-                "error": f"Login failed: {error[1] if error else 'Unknown error'}"
-            }
+            # Retry path: full reinitialize with credentials (helps with IPC issues)
+            try:
+                mt5.shutdown()
+                terminal_path = os.environ.get("MT5_TERMINAL_PATH")
+                reinit_ok = mt5.initialize(
+                    path=terminal_path,
+                    login=int(credentials.login),
+                    password=str(credentials.password),
+                    server=str(credentials.server)
+                ) if terminal_path else mt5.initialize(
+                    login=int(credentials.login),
+                    password=str(credentials.password),
+                    server=str(credentials.server)
+                )
+                if not reinit_ok:
+                    error2 = mt5.last_error()
+                    return {"success": False, "error": f"Login failed after reinit: {error2[1] if error2 else 'Unknown'}"}
+            except Exception as re:
+                return {"success": False, "error": f"Reinitialization failed: {str(re)}"}
         
         # Get account info
         account_info = mt5.account_info()
@@ -314,6 +344,94 @@ async def get_sessions():
         "active_sessions": len(sessions),
         "sessions": sessions
     }
+
+@app.get("/mt5/tick")
+async def get_tick(symbol: str):
+    try:
+        info = mt5.symbol_info_tick(symbol)
+        if info is None:
+            raise HTTPException(status_code=404, detail=f"No tick data for {symbol}")
+        return {
+            "symbol": symbol,
+            "bid": float(info.bid),
+            "ask": float(info.ask),
+            "last": float(info.last) if hasattr(info, 'last') else float(info.bid),
+            "time": int(info.time)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/mt5/terminal")
+async def get_terminal_info():
+    try:
+        info = mt5.terminal_info()
+        version = mt5.version()
+        return {
+            "version": version,
+            "terminal_info": str(info)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/mt5/symbols")
+async def list_symbols(mask: Optional[str] = None, selected_only: bool = False):
+    try:
+        if mask:
+            symbols = mt5.symbols_get(mask)
+        else:
+            symbols = mt5.symbols_get()
+        if symbols is None:
+            return {"symbols": []}
+        data = []
+        for s in symbols:
+            if selected_only and not s.select:
+                continue
+            data.append({
+                "name": s.name,
+                "path": s.path,
+                "visible": bool(s.visible),
+                "select": bool(s.select),
+                "trade_mode": int(getattr(s, 'trade_mode', 0))
+            })
+        return {"count": len(data), "symbols": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def map_timeframe(tf: Timeframe):
+    mapping = {
+        Timeframe.M1: mt5.TIMEFRAME_M1,
+        Timeframe.M5: mt5.TIMEFRAME_M5,
+        Timeframe.M15: mt5.TIMEFRAME_M15,
+        Timeframe.M30: mt5.TIMEFRAME_M30,
+        Timeframe.H1: mt5.TIMEFRAME_H1,
+        Timeframe.H4: mt5.TIMEFRAME_H4,
+        Timeframe.D1: mt5.TIMEFRAME_D1,
+    }
+    return mapping.get(tf, mt5.TIMEFRAME_M1)
+
+
+@app.get("/mt5/history")
+async def get_history(symbol: str, timeframe: Timeframe = Timeframe.M1, bars: int = 200):
+    try:
+        tf = map_timeframe(timeframe)
+        rates = mt5.copy_rates_from_pos(symbol, tf, 0, bars)
+        if rates is None:
+            raise HTTPException(status_code=404, detail=f"No history for {symbol}")
+        # Convert to serializable
+        ohlcv = []
+        for r in rates:
+            ohlcv.append({
+                "time": int(r['time']),
+                "open": float(r['open']),
+                "high": float(r['high']),
+                "low": float(r['low']),
+                "close": float(r['close']),
+                "tick_volume": int(r['tick_volume']) if 'tick_volume' in r.dtype.names else 0
+            })
+        return {"symbol": symbol, "timeframe": timeframe.value, "bars": len(ohlcv), "data": ohlcv}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     print("🚀 Starting MT5 Bridge Service...")
