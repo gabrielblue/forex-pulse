@@ -4,6 +4,7 @@ import { orderManager } from './orderManager';
 import { signalProcessor } from './signalProcessor';
 import { marketAnalyzer } from './marketAnalyzer';
 import { worldClassStrategies } from './strategies/worldClassStrategies';
+import { monitoring } from './monitoring';
 
 export interface BotStatus {
   isActive: boolean;
@@ -410,6 +411,8 @@ class TradingBot {
       if (!testPrice) {
         console.warn('⚠️ Cannot access market data for EURUSD');
       }
+      // Monitoring hooks
+      await monitoring.attributePnL();
       
       console.log('✅ Comprehensive health check completed');
     } catch (error) {

@@ -65,6 +65,11 @@ class HistoryRequest(BaseModel):
     count: int = 200
     end_time: Optional[int] = None  # epoch seconds
 
+class ClosePartialRequest(BaseModel):
+    session_id: str
+    ticket: int
+    volume: float
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize MT5 connection on startup"""
@@ -429,6 +434,58 @@ async def modify_position(req: ModifyPositionRequest):
     except Exception as e:
         print(f"❌ Exception modifying position: {e}")
         return {"success": False, "error": f"Failed to modify position: {str(e)}"}
+
+@app.post("/mt5/close_partial")
+async def close_partial(req: ClosePartialRequest):
+    """Partially close a position by volume"""
+    try:
+        if req.session_id not in sessions:
+            return {"success": False, "error": "Invalid session ID"}
+
+        positions = mt5.positions_get(ticket=req.ticket)
+        if positions is None or len(positions) == 0:
+            return {"success": False, "error": f"Position {req.ticket} not found"}
+
+        pos = positions[0]
+        symbol = pos.symbol
+        tick = mt5.symbol_info_tick(symbol)
+        if not tick:
+            return {"success": False, "error": f"No tick for {symbol}"}
+
+        if req.volume <= 0 or req.volume >= float(pos.volume):
+            return {"success": False, "error": "Invalid partial volume"}
+
+        if pos.type == mt5.POSITION_TYPE_BUY:
+            close_type = mt5.ORDER_TYPE_SELL
+            price = float(tick.bid)
+        else:
+            close_type = mt5.ORDER_TYPE_BUY
+            price = float(tick.ask)
+
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "position": req.ticket,
+            "symbol": symbol,
+            "volume": req.volume,
+            "type": close_type,
+            "price": price,
+            "deviation": 20,
+            "magic": 12345,
+            "comment": "Partial close by API",
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+
+        result = mt5.order_send(request)
+        if result is None:
+            return {"success": False, "error": "Order send failed"}
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            return {"success": False, "error": f"Partial close failed: {result.comment}"}
+
+        return {"success": True, "data": {"partial_closed": True, "ticket": req.ticket, "volume": req.volume}}
+    except Exception as e:
+        print(f"❌ Exception partial close: {e}")
+        return {"success": False, "error": f"Failed to partial close: {str(e)}"}
 
 def _map_timeframe(tf: str):
     tf = tf.upper()

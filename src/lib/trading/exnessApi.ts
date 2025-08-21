@@ -467,6 +467,23 @@ class ExnessAPI {
     }
   }
 
+  async closePartial(ticket: number, volume: number): Promise<boolean> {
+    if (!this.isConnected || !this.sessionId) return false;
+    try {
+      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/close_partial`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: this.sessionId, ticket, volume })
+      });
+      if (!response.ok) throw new Error(`Failed to partial close: ${response.status}`);
+      const result = await response.json();
+      return Boolean(result.success);
+    } catch (e) {
+      console.error('Failed to partial close:', e);
+      return false;
+    }
+  }
+
   async isMarketOpen(symbol: string): Promise<boolean> {
     const now = new Date();
     const dayOfWeek = now.getDay();
