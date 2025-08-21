@@ -74,20 +74,48 @@ export async function minePatterns(symbols: string[] = ['EURUSD','GBPUSD','USDJP
 }
 
 export async function evaluatePatternStats(symbol: string, timeframe: Timeframe) {
-  // Placeholder: here you would backtest occurrences and compute expectancy/win rate
+  const f = await extractFeatures(symbol, timeframe, 800);
+  if (!f.closes.length) return;
+  const w = 30;
+  const windows = windowFeatures(f, w);
+  const keyByIdx: Record<number,string> = {};
+  windows.forEach(wi => { keyByIdx[wi.idx] = wi.key; });
+
   const { data: pats } = await supabase
     .from('patterns')
     .select('id, pattern_key')
     .eq('symbol', symbol)
     .eq('timeframe', timeframe)
-    .limit(20);
+    .limit(100);
   if (!pats) return;
+
+  const pip = symbol.includes('JPY') ? 0.01 : 0.0001;
+  const horizon = 10; // bars to evaluate outcome
+
   for (const p of pats) {
+    const occurrences: number[] = [];
+    for (const wi of windows) {
+      if (wi.key === p.pattern_key) occurrences.push(wi.idx);
+    }
+    let wins = 0;
+    let totalPnL = 0;
+    let count = 0;
+    for (const idx of occurrences) {
+      if (idx + 1 >= f.closes.length || idx + 1 + horizon >= f.closes.length) continue;
+      const entry = f.closes[idx + 1];
+      const exit = f.closes[idx + 1 + horizon];
+      const pnlPips = (exit - entry) / pip; // long-only outcome for evaluation
+      totalPnL += pnlPips;
+      if (pnlPips > 0) wins++;
+      count++;
+    }
+    const expectancy = count ? totalPnL / count : 0;
+    const winRate = count ? (wins / count) * 100 : 0;
     await supabase.from('pattern_stats').upsert({
       pattern_id: p.id,
-      expectancy: 0.1,
-      win_rate: 55,
-      sample_size: 100,
+      expectancy,
+      win_rate: winRate,
+      sample_size: count,
       last_updated: new Date().toISOString()
     });
   }
@@ -95,6 +123,9 @@ export async function evaluatePatternStats(symbol: string, timeframe: Timeframe)
 
 export async function runPatternMiner() {
   await minePatterns();
-  await evaluatePatternStats('EURUSD','M15');
+  // Evaluate for a few popular pairs/timeframes
+  const syms: string[] = ['EURUSD','GBPUSD','USDJPY'];
+  const tfs: Timeframe[] = ['M15','H1'];
+  for (const s of syms) for (const tf of tfs) await evaluatePatternStats(s, tf);
 }
 
