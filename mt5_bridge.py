@@ -58,6 +58,13 @@ class ModifyPositionRequest(BaseModel):
     sl: Optional[float] = None
     tp: Optional[float] = None
 
+class HistoryRequest(BaseModel):
+    session_id: str
+    symbol: str
+    timeframe: str  # e.g., M1, M5, M15, M30, H1, H4, D1
+    count: int = 200
+    end_time: Optional[int] = None  # epoch seconds
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize MT5 connection on startup"""
@@ -422,6 +429,55 @@ async def modify_position(req: ModifyPositionRequest):
     except Exception as e:
         print(f"❌ Exception modifying position: {e}")
         return {"success": False, "error": f"Failed to modify position: {str(e)}"}
+
+def _map_timeframe(tf: str):
+    tf = tf.upper()
+    mapping = {
+        'M1': mt5.TIMEFRAME_M1,
+        'M5': mt5.TIMEFRAME_M5,
+        'M15': mt5.TIMEFRAME_M15,
+        'M30': mt5.TIMEFRAME_M30,
+        'H1': mt5.TIMEFRAME_H1,
+        'H4': mt5.TIMEFRAME_H4,
+        'D1': mt5.TIMEFRAME_D1,
+    }
+    return mapping.get(tf, mt5.TIMEFRAME_M15)
+
+@app.post("/mt5/history")
+async def get_history(req: HistoryRequest):
+    """Get historical candles (OHLCV)"""
+    try:
+        if req.session_id not in sessions:
+            return {"success": False, "error": "Invalid session ID"}
+
+        timeframe = _map_timeframe(req.timeframe)
+        if not mt5.symbol_select(req.symbol, True):
+            return {"success": False, "error": f"Symbol {req.symbol} not available"}
+
+        end_ts = req.end_time or int(time.time())
+        end_dt = datetime.fromtimestamp(end_ts)
+        rates = mt5.copy_rates_from(req.symbol, timeframe, end_dt, req.count)
+        if rates is None:
+            err = mt5.last_error()
+            return {"success": False, "error": f"Failed to get history: {err}"}
+
+        candles = []
+        for r in rates:
+            candles.append({
+                "time": int(r['time']),
+                "open": float(r['open']),
+                "high": float(r['high']),
+                "low": float(r['low']),
+                "close": float(r['close']),
+                "tick_volume": int(r['tick_volume']),
+                "spread": int(r['spread']),
+                "real_volume": int(r.get('real_volume', 0)),
+            })
+
+        return {"success": True, "data": candles}
+    except Exception as e:
+        print(f"❌ Exception getting history: {e}")
+        return {"success": False, "error": f"Failed to get history: {str(e)}"}
 
 @app.post("/mt5/place_order")
 async def place_order(order: OrderRequest):

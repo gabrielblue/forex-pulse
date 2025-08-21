@@ -57,6 +57,16 @@ export interface MarketPrice {
   timestamp: Date;
 }
 
+export interface Candle {
+  time: number; // epoch seconds
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number; // tick volume
+  spread?: number;
+}
+
 class ExnessAPI {
   private sessionId: string | null = null;
   private accountInfo: AccountInfo | null = null;
@@ -409,6 +419,34 @@ class ExnessAPI {
     } catch (error) {
       console.error('Failed to close position:', error);
       return false;
+    }
+  }
+
+  async getHistoricalCandles(symbol: string, timeframe: 'M1'|'M5'|'M15'|'M30'|'H1'|'H4'|'D1', count: number = 200): Promise<Candle[]> {
+    if (!this.isConnected || !this.sessionId) return [];
+    try {
+      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/history`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: this.sessionId, symbol, timeframe, count })
+      });
+      if (!response.ok) throw new Error(`Failed to get history: ${response.status}`);
+      const result = await response.json();
+      if (result.success && Array.isArray(result.data)) {
+        return result.data.map((c: any) => ({
+          time: Number(c.time),
+          open: Number(c.open),
+          high: Number(c.high),
+          low: Number(c.low),
+          close: Number(c.close),
+          volume: Number(c.tick_volume ?? c.volume ?? 0),
+          spread: c.spread !== undefined ? Number(c.spread) : undefined,
+        }));
+      }
+      return [];
+    } catch (e) {
+      console.error('Failed to get historical candles:', e);
+      return [];
     }
   }
 
