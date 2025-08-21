@@ -105,6 +105,77 @@ class SignalProcessor {
     }
   }
 
+  // Ensure signals exist periodically when auto-execution is enabled
+  private startAutoSignalGeneration(): void {
+    // Generate and save signals every 90 seconds if none exist meeting criteria
+    setInterval(async () => {
+      try {
+        if (!this.config.autoExecute) return;
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // Check if we have any active signals above threshold
+        const { data: existingSignals } = await supabase
+          .from('trading_signals')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('status', 'ACTIVE')
+          .gte('confidence_score', this.config.minConfidence)
+          .limit(1);
+
+        if (existingSignals && existingSignals.length > 0) return;
+
+        // Generate advanced signals across enabled pairs
+        await this.generateAdvancedSignals(this.config.enabledPairs);
+      } catch (err) {
+        console.error('Auto signal generation error:', err);
+      }
+    }, 90000);
+  }
+
+  private parseBaseQuote(symbol: string): { base: string; quote: string } {
+    if (symbol.includes('/') && symbol.length >= 7) {
+      const [base, quote] = symbol.split('/');
+      return { base: base.toUpperCase(), quote: quote.toUpperCase() };
+    }
+    // Assume 6-letter Forex symbol like EURUSD
+    const upper = symbol.toUpperCase();
+    return { base: upper.slice(0, 3), quote: upper.slice(3, 6) };
+  }
+
+  private async ensureCurrencyPair(symbol: string): Promise<string | null> {
+    try {
+      const { data: pair } = await supabase
+        .from('currency_pairs')
+        .select('id')
+        .eq('symbol', symbol)
+        .single();
+      if (pair?.id) return pair.id;
+
+      const { base, quote } = this.parseBaseQuote(symbol);
+      const { data: inserted, error } = await supabase
+        .from('currency_pairs')
+        .insert({
+          symbol,
+          display_name: symbol,
+          base_currency: base,
+          quote_currency: quote,
+          is_major: ['EURUSD','GBPUSD','USDJPY','AUDUSD','USDCHF','USDCAD','NZDUSD'].includes(symbol)
+        })
+        .select('id')
+        .single();
+      if (error) {
+        console.error('Failed to create currency pair:', error);
+        return null;
+      }
+      return inserted?.id ?? null;
+    } catch (err) {
+      console.error('ensureCurrencyPair error:', err);
+      return null;
+    }
+  }
+
   private async processSignal(signalData: any): Promise<void> {
     try {
       const signal: TradingSignal = {
@@ -326,20 +397,15 @@ class SignalProcessor {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Get currency pair
-      const { data: pair } = await supabase
-        .from('currency_pairs')
-        .select('id')
-        .eq('symbol', symbol)
-        .single();
-
-      if (!pair) return;
+      // Ensure currency pair exists
+      const pairId = await this.ensureCurrencyPair(symbol);
+      if (!pairId) return;
 
       const { error } = await supabase
         .from('trading_signals')
         .insert({
           user_id: user.id,
-          pair_id: pair.id,
+          pair_id: pairId,
           signal_type: signal.type,
           confidence_score: signal.confidence,
           entry_price: signal.entryPrice,
@@ -367,17 +433,9 @@ class SignalProcessor {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Get currency pair
-      const { data: pair } = await supabase
-        .from('currency_pairs')
-        .select('id')
-        .eq('symbol', symbol)
-        .single();
-
-      if (!pair) {
-        console.error('Currency pair not found:', symbol);
-        return;
-      }
+      // Ensure currency pair exists
+      const pairId = await this.ensureCurrencyPair(symbol);
+      if (!pairId) return;
 
       // Get current market price
       const currentPrice = await exnessAPI.getCurrentPrice(symbol);
@@ -400,7 +458,7 @@ class SignalProcessor {
 
       const testSignal = {
         user_id: user.id,
-        pair_id: pair.id,
+        pair_id: pairId,
         signal_type: signalType,
         confidence_score: confidence,
         entry_price: basePrice,
@@ -467,6 +525,11 @@ class SignalProcessor {
           is_active: enabled,
           updated_at: new Date().toISOString()
         });
+
+      if (enabled) {
+        // Kick off auto signal generation loop as a safety net
+        this.startAutoSignalGeneration();
+      }
     } catch (error) {
       console.error('Failed to update auto execution setting:', error);
     }

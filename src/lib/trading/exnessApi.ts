@@ -151,21 +151,49 @@ class ExnessAPI {
   }
 
   private mapMT5AccountInfo(mt5Info: any): AccountInfo {
+    const positions: Position[] | undefined = Array.isArray(mt5Info.positions)
+      ? (mt5Info.positions as any[]).map((pos) => {
+          const typeNumeric = typeof pos.type === 'number' ? pos.type : (pos.type === 'BUY' ? 0 : 1);
+          const type: 'BUY' | 'SELL' = typeNumeric === 0 ? 'BUY' : 'SELL';
+          const ticket: number = typeof pos.ticket === 'number' ? pos.ticket : parseInt(pos.ticket?.toString() || '0');
+          const openPrice = parseFloat((pos.price_open ?? pos.openPrice ?? 0).toString());
+          const sl = pos.sl !== undefined ? parseFloat(pos.sl.toString()) : undefined;
+          const tp = pos.tp !== undefined ? parseFloat(pos.tp.toString()) : undefined;
+          const profit = pos.profit !== undefined ? parseFloat(pos.profit.toString()) : 0;
+          return {
+            ticket,
+            ticketId: ticket.toString(),
+            symbol: pos.symbol || mt5Info.symbol || '',
+            type,
+            volume: parseFloat((pos.volume ?? pos.volume_initial ?? 0).toString()),
+            openPrice,
+            currentPrice: openPrice, // Will be refined on UI refresh with latest price
+            profit,
+            stopLoss: sl,
+            takeProfit: tp,
+            openTime: new Date(),
+            commission: 0,
+            swap: 0,
+          } as Position;
+        })
+      : undefined;
+
     return {
       accountNumber: mt5Info.login?.toString() || '',
       balance: parseFloat(mt5Info.balance?.toString() || '0'),
       equity: parseFloat(mt5Info.equity?.toString() || '0'),
       margin: parseFloat(mt5Info.margin?.toString() || '0'),
-      freeMargin: parseFloat(mt5Info.free_margin?.toString() || '0'),
+      freeMargin: parseFloat((mt5Info.free_margin ?? mt5Info.freeMargin ?? '0').toString()),
       marginLevel: parseFloat(mt5Info.margin_level?.toString() || '0'),
       currency: mt5Info.currency || 'USD',
-      leverage: mt5Info.leverage?.toString() || '1:100',
+      leverage: (mt5Info.leverage?.toString?.() || mt5Info.leverage || '1:100').toString(),
       server: mt5Info.server || '',
       isDemo: mt5Info.mode === 'DEMO' || mt5Info.server?.toLowerCase().includes('demo') || mt5Info.server?.toLowerCase().includes('trial'),
-      tradeAllowed: true, // MT5 connected accounts can trade
+      tradeAllowed: true,
       profit: parseFloat(mt5Info.profit?.toString() || '0'),
       credit: parseFloat(mt5Info.credit?.toString() || '0'),
-      company: mt5Info.company || 'Exness'
+      company: mt5Info.company || 'Exness',
+      positions,
     };
   }
 
@@ -282,8 +310,9 @@ class ExnessAPI {
           type: order.type === 'BUY' ? 0 : 1,
           volume: order.volume,
           price: order.price,
-          sl: order.stopLoss,
-          tp: order.takeProfit,
+          // Ensure SL/TP are numbers (MT5 expects 0.0 if not provided)
+          sl: typeof order.stopLoss === 'number' ? order.stopLoss : 0,
+          tp: typeof order.takeProfit === 'number' ? order.takeProfit : 0,
           comment: order.comment || 'ForexPro Order'
         })
       });
@@ -312,12 +341,50 @@ class ExnessAPI {
     }
 
     try {
-      const accountInfo = await this.getAccountInfo();
-      if (!accountInfo) return [];
+      // Always fetch fresh account info to get latest positions from bridge
+      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/account_info`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: this.sessionId })
+      });
 
-      // For now, return positions from the account info response
-      // In a full implementation, you'd have a separate endpoint for positions
-      return accountInfo.positions || [];
+      if (!response.ok) {
+        throw new Error(`Failed to fetch positions: ${response.status}`);
+      }
+
+      const result = await response.json();
+      if (!result.success || !result.data) {
+        return [];
+      }
+
+      // Map positions from MT5 bridge to internal Position type
+      const positions: Position[] = Array.isArray(result.data.positions)
+        ? result.data.positions.map((pos: any) => {
+            const type: 'BUY' | 'SELL' = pos.type === 0 ? 'BUY' : 'SELL';
+            const ticket: number = typeof pos.ticket === 'number' ? pos.ticket : parseInt(pos.ticket?.toString() || '0');
+            const openPrice = parseFloat((pos.price_open ?? 0).toString());
+            return {
+              ticket,
+              ticketId: ticket.toString(),
+              symbol: pos.symbol,
+              type,
+              volume: parseFloat((pos.volume ?? 0).toString()),
+              openPrice,
+              currentPrice: openPrice,
+              profit: parseFloat((pos.profit ?? 0).toString()),
+              stopLoss: pos.sl !== undefined ? parseFloat(pos.sl.toString()) : undefined,
+              takeProfit: pos.tp !== undefined ? parseFloat(pos.tp.toString()) : undefined,
+              openTime: new Date(),
+              commission: 0,
+              swap: 0,
+            } as Position;
+          })
+        : [];
+
+      // Update cached account info with positions for downstream consumers
+      this.accountInfo = this.mapMT5AccountInfo({ ...(result.data || {}), positions: result.data.positions });
+      this.lastUpdate = new Date();
+      return positions;
     } catch (error) {
       console.error('Failed to get positions:', error);
       return [];
@@ -404,13 +471,18 @@ class ExnessAPI {
         issues.push('Account balance too low');
       }
       
-      if (this.accountInfo.marginLevel > 0 && this.accountInfo.marginLevel < 200) {
-        issues.push('Margin level too low');
+      // Margin level guidance: warn below 200%, hard-stop only if < 100%
+      if (this.accountInfo.marginLevel > 0) {
+        if (this.accountInfo.marginLevel < 200) {
+          issues.push('Margin level too low');
+        }
       }
     }
 
     return {
-      canTrade: issues.length === 0,
+      // Allow trading if connected, info exists, tradeAllowed, balance ok, and margin level not critically low (< 100%)
+      canTrade: !!(this.isConnected && this.accountInfo && this.accountInfo.tradeAllowed && this.accountInfo.balance >= 100 &&
+        (this.accountInfo.marginLevel === 0 || this.accountInfo.marginLevel >= 100)),
       issues
     };
   }

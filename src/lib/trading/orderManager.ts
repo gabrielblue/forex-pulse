@@ -140,12 +140,26 @@ class OrderManager {
       }
 
       // Enhanced order preparation with automatic risk management
+      // Ensure SL/TP are always present for live safety if enabled in risk params
+      const currentPrice = await exnessAPI.getCurrentPrice(orderRequest.symbol);
+      if (!currentPrice) {
+        throw new Error('Unable to fetch current price for order preparation');
+      }
+
+      const priceToUse = orderRequest.type === 'BUY' ? currentPrice.ask : currentPrice.bid;
+      const ensuredStopLoss = this.riskParams.useStopLoss
+        ? (orderRequest.stopLoss ?? this.calculateOptimalStopLoss(priceToUse, orderRequest.type, orderRequest.symbol))
+        : orderRequest.stopLoss;
+      const ensuredTakeProfit = this.riskParams.useTakeProfit
+        ? (orderRequest.takeProfit ?? this.calculateOptimalTakeProfit(priceToUse, orderRequest.type, orderRequest.symbol))
+        : orderRequest.takeProfit;
+
       const enhancedOrder: TradeOrder = {
         symbol: orderRequest.symbol,
         type: orderRequest.type,
         volume: adjustedVolume,
-        stopLoss: orderRequest.stopLoss,
-        takeProfit: orderRequest.takeProfit,
+        stopLoss: ensuredStopLoss,
+        takeProfit: ensuredTakeProfit,
         comment: orderRequest.comment || `ForexPro-${Date.now()}`
       };
 
@@ -217,9 +231,9 @@ class OrderManager {
         return { allowed: false, reason: `Account balance too low: ${accountStatus.accountInfo.currency} ${accountStatus.accountInfo.balance} (min: $${this.riskParams.minAccountBalance})` };
       }
 
-      // Check margin level - prevent margin calls
-      if (accountStatus.accountInfo.marginLevel > 0 && accountStatus.accountInfo.marginLevel < this.riskParams.minMarginLevel) {
-        return { allowed: false, reason: `Margin level too low: ${accountStatus.accountInfo.marginLevel.toFixed(1)}% (min: ${this.riskParams.minMarginLevel}%)` };
+      // Check margin level - hard stop only if below 100%; otherwise warn via logs
+      if (accountStatus.accountInfo.marginLevel > 0 && accountStatus.accountInfo.marginLevel < 100) {
+        return { allowed: false, reason: `Critical margin level: ${accountStatus.accountInfo.marginLevel.toFixed(1)}% (< 100%)` };
       }
 
       // Verify symbol is tradeable
@@ -227,9 +241,10 @@ class OrderManager {
         return { allowed: false, reason: `Symbol ${orderRequest.symbol} not tradeable or market closed` };
       }
 
-      // Enhanced margin check - use only 70% of free margin for safety
-      if (requiredMargin > (accountStatus.accountInfo.freeMargin * 0.7)) {
-        return { allowed: false, reason: `Insufficient free margin: Required ${requiredMargin.toFixed(2)}, Available ${(accountStatus.accountInfo.freeMargin * 0.7).toFixed(2)}` };
+      // Enhanced margin check - use only 50% of free margin for safety in live, 70% in demo
+      const freeMarginCap = (accountStatus.accountInfo.freeMargin) * (accountStatus.accountInfo.isDemo ? 0.7 : 0.5);
+      if (requiredMargin > freeMarginCap) {
+        return { allowed: false, reason: `Insufficient free margin: Required ${requiredMargin.toFixed(2)}, Allowed ${freeMarginCap.toFixed(2)}` };
       }
 
       // Position limit check
@@ -560,22 +575,22 @@ class OrderManager {
           .from('live_trades')
           .upsert({
             user_id: user.id,
-            ticket_id: position.ticketId,
+            ticket_id: (position.ticketId ?? position.ticket)?.toString(),
             symbol: position.symbol,
             trade_type: position.type,
             lot_size: position.volume,
             entry_price: position.openPrice,
-            current_price: position.currentPrice,
+            current_price: position.currentPrice ?? position.openPrice,
             profit: position.profit,
-            profit_pips: this.calculatePips(position.openPrice, position.currentPrice, position.symbol, position.type),
+            profit_pips: this.calculatePips(position.openPrice, position.currentPrice ?? position.openPrice, position.symbol, position.type),
             stop_loss: position.stopLoss,
             take_profit: position.takeProfit,
             status: 'OPEN',
-            commission: position.commission,
-            swap: position.swap,
-            opened_at: position.openTime.toISOString(),
+            commission: position.commission ?? 0,
+            swap: position.swap ?? 0,
+            opened_at: (position.openTime instanceof Date ? position.openTime : new Date()).toISOString(),
             updated_at: new Date().toISOString()
-          });
+          }, { onConflict: 'ticket_id' as any });
       }
       
       console.log(`📊 Synced ${positions.length} positions with database`);

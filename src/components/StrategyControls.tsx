@@ -60,7 +60,7 @@ export const StrategyControls = () => {
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="confidence">Minimum Signal Confidence</Label>
+            <Label id="confidence-label">Minimum Signal Confidence</Label>
             <div className="px-3">
               <Slider
                 value={strategy.signalConfidence}
@@ -69,6 +69,7 @@ export const StrategyControls = () => {
                 min={50}
                 step={5}
                 className="w-full"
+                aria-labelledby="confidence-label"
               />
               <div className="flex justify-between text-xs text-muted-foreground mt-1">
                 <span>50%</span>
@@ -79,8 +80,9 @@ export const StrategyControls = () => {
           </div>
 
           <div className="space-y-2">
-            <Label>Max Concurrent Trades</Label>
+            <Label htmlFor="max-concurrent-trades">Max Concurrent Trades</Label>
             <Input
+              id="max-concurrent-trades"
               type="number"
               value={strategy.maxConcurrentTrades}
               onChange={(e) => setStrategy(prev => ({ 
