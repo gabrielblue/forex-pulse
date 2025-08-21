@@ -44,6 +44,8 @@ class OrderManager {
   private minOrderInterval: number = 30000; // 30 seconds between orders
   private dailyTradeCount: number = 0;
   private maxDailyTrades: number = 10;
+  private peakEquity: number | null = null;
+  private maxEquityDrawdownPct: number = 10; // Circuit breaker at 10% equity DD
 
   async initialize(): Promise<void> {
     await this.loadRiskParameters();
@@ -126,6 +128,12 @@ class OrderManager {
         throw new Error('Not connected to Exness account. Please connect first.');
       }
 
+      // Update equity peak and apply equity drawdown circuit breaker
+      await this.updateEquityPeak();
+      if (await this.isEquityCircuitBreakerTripped()) {
+        throw new Error(`Equity drawdown exceeded ${this.maxEquityDrawdownPct}% - trading halted`);
+      }
+
       // Enhanced risk checks for real money trading
       const riskCheckResult = await this.performEnhancedRiskChecks(orderRequest);
       if (!riskCheckResult.allowed) {
@@ -202,6 +210,11 @@ class OrderManager {
           await this.emergencyStop();
           return { allowed: false, reason: `Daily loss limit reached: ${dailyLossPercentage.toFixed(2)}% (max: ${this.riskParams.maxDailyLoss}%)` };
         }
+      }
+
+      // Equity drawdown gate
+      if (await this.isEquityCircuitBreakerTripped()) {
+        return { allowed: false, reason: `Equity drawdown exceeded ${this.maxEquityDrawdownPct}%` };
       }
 
       // Enhanced position size validation for real trading
@@ -382,6 +395,33 @@ class OrderManager {
     } catch (error) {
       console.error('Error calculating optimal position size for real trading:', error);
       return 0.01; // Return minimum size on error for safety
+    }
+  }
+
+  private async updateEquityPeak(): Promise<void> {
+    try {
+      const info = await exnessAPI.getAccountInfo();
+      if (!info) return;
+      if (this.peakEquity === null || info.equity > this.peakEquity) {
+        this.peakEquity = info.equity;
+      }
+    } catch {}
+  }
+
+  private async isEquityCircuitBreakerTripped(): Promise<boolean> {
+    try {
+      const info = await exnessAPI.getAccountInfo();
+      if (!info || this.peakEquity === null) return false;
+      const ddPct = ((this.peakEquity - info.equity) / this.peakEquity) * 100;
+      if (ddPct >= this.maxEquityDrawdownPct) {
+        console.error(`🚨 Equity drawdown ${ddPct.toFixed(2)}% >= ${this.maxEquityDrawdownPct}%`);
+        // Disable auto-trading immediately
+        this.setAutoTrading(false);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
     }
   }
 

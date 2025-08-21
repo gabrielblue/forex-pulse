@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { orderManager, OrderRequest } from './orderManager';
 import { professionalStrategies, MarketData, TechnicalIndicators } from './strategies/professionalStrategies';
 import { exnessAPI } from './exnessApi';
+import { marketAnalyzer } from './marketAnalyzer';
 
 export interface TradingSignal {
   id: string;
@@ -160,6 +161,14 @@ class SignalProcessor {
 
   private async executeSignal(signal: TradingSignal): Promise<void> {
     try {
+      // Multi-timeframe confluence check before execution
+      const confluence = await marketAnalyzer.assessMultiTimeframeConfluence(signal.symbol, ['15M','1H','4H','1D']);
+      const directionOk = (signal.type === 'BUY' && confluence.direction === 'BUY') || (signal.type === 'SELL' && confluence.direction === 'SELL');
+      if (!directionOk || confluence.confidence < Math.max(this.config.minConfidence, 70)) {
+        console.warn(`Signal ${signal.id} blocked by MTF confluence: direction ${confluence.direction}, confidence ${confluence.confidence.toFixed(1)}%`);
+        return;
+      }
+
       // Calculate position size based on confidence and risk
       const volume = this.calculateVolumeFromSignal(signal);
 
