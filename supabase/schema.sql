@@ -39,3 +39,23 @@ create table if not exists watchlist (
   created_at timestamp with time zone default now()
 );
 
+-- Patterns and stats
+create table if not exists patterns (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid,
+  symbol text not null,
+  timeframe text not null,
+  pattern_key text not null, -- hash or label
+  features jsonb not null,
+  created_at timestamp with time zone default now()
+);
+
+create table if not exists pattern_stats (
+  id uuid primary key default gen_random_uuid(),
+  pattern_id uuid references patterns(id) on delete cascade,
+  expectancy numeric,
+  win_rate numeric,
+  sample_size integer,
+  last_updated timestamp with time zone default now()
+);
+

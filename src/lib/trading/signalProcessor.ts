@@ -4,6 +4,7 @@ import { professionalStrategies, MarketData, TechnicalIndicators } from './strat
 import { exnessAPI } from './exnessApi';
 import { isSpreadAcceptable, isVolatilityAcceptable, isWithinActiveSession, isNewsBlackout } from './executionFilters';
 import { Candle } from './indicators';
+import { supabase } from '@/integrations/supabase/client';
 import { marketAnalyzer } from './marketAnalyzer';
 
 export interface TradingSignal {
@@ -182,6 +183,19 @@ class SignalProcessor {
           console.warn(`ATR too high for ${signal.symbol}`);
           return;
         }
+      }
+
+      // Pattern integration: require a matching top pattern (optional boost)
+      const { data: pats } = await supabase
+        .from('patterns')
+        .select('id, pattern_key, pattern_stats(expectancy, win_rate)')
+        .eq('symbol', signal.symbol)
+        .in('timeframe', ['M15','H1'])
+        .limit(10);
+      const hasPattern = Array.isArray(pats) && pats.length > 0;
+      if (!hasPattern) {
+        console.warn(`No pattern match for ${signal.symbol} — skipping`);
+        return;
       }
       // Multi-timeframe confluence check before execution
       const confluence = await marketAnalyzer.assessMultiTimeframeConfluence(signal.symbol, ['15M','1H','4H','1D']);

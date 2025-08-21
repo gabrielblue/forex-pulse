@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "build:runner": "node ./scripts/build-runner.cjs",
     "runner": "node dist-runner/headlessRunner.js",
-    "runner:dev": "HEADLESS_DRY_RUN=true tsx scripts/headlessRunner.ts"
+    "runner:dev": "HEADLESS_DRY_RUN=true tsx scripts/headlessRunner.ts",
+    "patterns:run": "tsx scripts/run_pattern_miner.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
