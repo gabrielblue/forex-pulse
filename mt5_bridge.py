@@ -52,6 +52,12 @@ class ClosePositionRequest(BaseModel):
     session_id: str
     ticket: int
 
+class ModifyPositionRequest(BaseModel):
+    session_id: str
+    ticket: int
+    sl: Optional[float] = None
+    tp: Optional[float] = None
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize MT5 connection on startup"""
@@ -378,6 +384,44 @@ async def close_position(req: ClosePositionRequest):
             "success": False,
             "error": f"Failed to close position: {str(e)}"
         }
+
+@app.post("/mt5/modify_position")
+async def modify_position(req: ModifyPositionRequest):
+    """Modify SL/TP for a position"""
+    try:
+        if req.session_id not in sessions:
+            return {"success": False, "error": "Invalid session ID"}
+
+        positions = mt5.positions_get(ticket=req.ticket)
+        if positions is None or len(positions) == 0:
+            return {"success": False, "error": f"Position {req.ticket} not found"}
+
+        pos = positions[0]
+        symbol = pos.symbol
+        tick = mt5.symbol_info_tick(symbol)
+        if not tick:
+            return {"success": False, "error": f"No tick for {symbol}"}
+
+        request = {
+            "action": mt5.TRADE_ACTION_SLTP,
+            "position": req.ticket,
+            "symbol": symbol,
+            "sl": float(req.sl) if req.sl is not None else float(pos.sl),
+            "tp": float(req.tp) if req.tp is not None else float(pos.tp),
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+
+        result = mt5.order_send(request)
+        if result is None:
+            return {"success": False, "error": "Modify request failed"}
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            return {"success": False, "error": f"Modify failed: {result.comment}"}
+
+        return {"success": True, "data": {"modified": True, "ticket": req.ticket}}
+    except Exception as e:
+        print(f"❌ Exception modifying position: {e}")
+        return {"success": False, "error": f"Failed to modify position: {str(e)}"}
 
 @app.post("/mt5/place_order")
 async def place_order(order: OrderRequest):

@@ -412,6 +412,23 @@ class ExnessAPI {
     }
   }
 
+  async modifyPosition(ticket: number, params: { stopLoss?: number; takeProfit?: number }): Promise<boolean> {
+    if (!this.isConnected || !this.sessionId) return false;
+    try {
+      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/modify_position`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: this.sessionId, ticket, sl: params.stopLoss, tp: params.takeProfit })
+      });
+      if (!response.ok) throw new Error(`Failed to modify position: ${response.status}`);
+      const result = await response.json();
+      return Boolean(result.success);
+    } catch (e) {
+      console.error('Failed to modify position:', e);
+      return false;
+    }
+  }
+
   async isMarketOpen(symbol: string): Promise<boolean> {
     const now = new Date();
     const dayOfWeek = now.getDay();
