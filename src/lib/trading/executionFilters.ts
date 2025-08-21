@@ -1,6 +1,7 @@
 import { exnessAPI } from './exnessApi';
 import { calculateATR, Candle } from './indicators';
 import { marketAnalyzer } from './marketAnalyzer';
+import { supabase } from '@/integrations/supabase/client';
 
 export async function isSpreadAcceptable(symbol: string, maxPips: number): Promise<boolean> {
   const price = await exnessAPI.getCurrentPrice(symbol);
@@ -31,8 +32,27 @@ export function isWithinActiveSession(symbol: string): boolean {
 }
 
 export async function isNewsBlackout(symbol: string): Promise<boolean> {
-  // Placeholder: integrate real provider or Supabase calendar
-  const flag = (typeof process !== 'undefined') ? (process as any).env?.NEWS_BLACKOUT === '1' : false;
-  return Boolean(flag);
+  try {
+    const now = new Date();
+    const windowStart = new Date(now.getTime() - 30 * 60 * 1000).toISOString();
+    const windowEnd = new Date(now.getTime() + 30 * 60 * 1000).toISOString();
+
+    // Derive currencies from symbol like EURUSD
+    const base = symbol.slice(0, 3).toUpperCase();
+    const quote = symbol.slice(3, 6).toUpperCase();
+
+    const { data } = await supabase
+      .from('economic_calendar')
+      .select('*')
+      .gte('event_time', windowStart)
+      .lte('event_time', windowEnd)
+      .in('impact', ['HIGH', 'MEDIUM'])
+      .in('currency', [base, quote]);
+
+    return Array.isArray(data) && data.length > 0;
+  } catch (e) {
+    // Fail-open (no blackout) if calendar not available
+    return false;
+  }
 }
 
