@@ -2,16 +2,61 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+let VITE_ENV: any = {};
+try {
+  // @ts-ignore
+  VITE_ENV = (import.meta as any)?.env || {};
+} catch {}
+const SUPABASE_URL = (typeof process !== 'undefined' && (process as any).env?.VITE_SUPABASE_URL)
+  || (typeof process !== 'undefined' && (process as any).env?.SUPABASE_URL)
+  || (VITE_ENV.VITE_SUPABASE_URL as string)
+  || '';
+const SUPABASE_PUBLISHABLE_KEY = (typeof process !== 'undefined' && (process as any).env?.VITE_SUPABASE_ANON_KEY)
+  || (typeof process !== 'undefined' && (process as any).env?.SUPABASE_ANON_KEY)
+  || (VITE_ENV.VITE_SUPABASE_ANON_KEY as string)
+  || '';
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-  auth: {
-    storage: localStorage,
-    persistSession: true,
-    autoRefreshToken: true,
-  }
-});
+// Provide a Node-safe storage fallback when window/localStorage are not available
+const safeStorage: Storage | undefined = (() => {
+  try {
+    if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+      return window.localStorage;
+    }
+  } catch {}
+  // In-memory storage polyfill for server-side usage
+  const memory: Record<string, string> = {};
+  return {
+    getItem: (key: string) => (key in memory ? memory[key] : null),
+    setItem: (key: string, value: string) => { memory[key] = value; },
+    removeItem: (key: string) => { delete memory[key]; },
+    clear: () => { Object.keys(memory).forEach(k => delete memory[k]); },
+    key: (index: number) => Object.keys(memory)[index] ?? null,
+    get length() { return Object.keys(memory).length; }
+  } as unknown as Storage;
+})();
+
+// Create real client if env is present; otherwise provide a safe stub
+let supabase: any;
+if (SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY) {
+  supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    auth: {
+      storage: safeStorage,
+      persistSession: true,
+      autoRefreshToken: true,
+    }
+  });
+} else {
+  const noOp = async () => ({ data: null, error: null });
+  const chain = () => ({ select: () => chain(), eq: () => chain(), gte: () => chain(), single: () => chain(), order: () => chain(), limit: () => chain(), upsert: () => noOp(), update: () => noOp(), insert: () => noOp() });
+  supabase = {
+    auth: { getUser: async () => ({ data: { user: null }, error: null }) },
+    from: (_: string) => chain(),
+  };
+  // eslint-disable-next-line no-console
+  console.warn('Supabase env not set. Using no-op supabase client for headless runner.');
+}
+
+export { supabase };

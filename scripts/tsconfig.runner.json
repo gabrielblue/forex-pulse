@@ -1,0 +1,16 @@
+{
+	"compilerOptions": {
+		"outDir": "../dist-runner",
+		"module": "NodeNext",
+		"target": "ES2020",
+		"moduleResolution": "NodeNext",
+		"noEmit": false,
+		"allowImportingTsExtensions": true,
+		"isolatedModules": false,
+		"baseUrl": "../",
+		"paths": {
+			"@/*": ["../src/*"]
+		}
+	},
+	"include": ["./headlessRunner.ts"]
+}

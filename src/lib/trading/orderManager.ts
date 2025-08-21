@@ -91,11 +91,15 @@ class OrderManager {
 
   private async resetDailyCounters(): Promise<void> {
     const today = new Date().toDateString();
-    const lastReset = localStorage.getItem('lastDailyReset');
+    const storage: any = (typeof localStorage !== 'undefined') ? localStorage : {
+      getItem: (_: string) => null,
+      setItem: (_k: string, _v: string) => {},
+    };
+    const lastReset = storage.getItem('lastDailyReset');
     
     if (lastReset !== today) {
       this.dailyTradeCount = 0;
-      localStorage.setItem('lastDailyReset', today);
+      storage.setItem('lastDailyReset', today);
       console.log('Daily trade counters reset');
     } else {
       // Load today's trade count

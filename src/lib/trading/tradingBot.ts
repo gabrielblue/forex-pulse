@@ -74,6 +74,8 @@ class TradingBot {
       await this.loadConfiguration();
       await orderManager.initialize();
       await signalProcessor.initialize();
+      // Start auto-reconnect/heartbeat in background
+      exnessAPI.startAutoReconnect();
       
       // Initialize enhanced features
       await this.initializeEnhancedFeatures();

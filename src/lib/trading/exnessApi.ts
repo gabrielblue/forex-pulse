@@ -63,9 +63,18 @@ class ExnessAPI {
   private isConnected: boolean = false;
   private connectionInfo: any = null;
   private lastUpdate: Date = new Date();
+  private lastCredentials: ExnessCredentials | null = null;
+  private heartbeatInterval: any = null;
+  private reconnectTimeout: any = null;
+  private reconnectBackoffMs: number = 2000;
+  private readonly reconnectBackoffMaxMs: number = 300000; // 5 min max
 
-  // MT5 Bridge URL - configurable via Vite env (VITE_MT5_BRIDGE_URL)
-  private readonly MT5_BRIDGE_URL = (import.meta as any)?.env?.VITE_MT5_BRIDGE_URL || 'http://localhost:8001';
+  // MT5 Bridge URL - configurable via Vite env or Node env
+  private readonly MT5_BRIDGE_URL: string = (
+    (typeof process !== 'undefined' && ((process as any).env?.VITE_MT5_BRIDGE_URL || (process as any).env?.MT5_BRIDGE_URL)) ||
+    (typeof window !== 'undefined' && (window as any).__MT5_BRIDGE_URL) ||
+    'http://localhost:8001'
+  );
 
   async connect(credentials: ExnessCredentials): Promise<boolean> {
     try {
@@ -105,6 +114,7 @@ class ExnessAPI {
         this.accountInfo = this.mapMT5AccountInfo(result.account_info);
         this.isConnected = true;
         this.lastUpdate = new Date();
+        this.lastCredentials = credentials;
         
         this.connectionInfo = {
           connectionStatus: 'Connected',
@@ -124,6 +134,7 @@ class ExnessAPI {
           isDemo: this.accountInfo.isDemo
         });
 
+        this.startHeartbeat();
         return true;
       } else {
         throw new Error(result.error || 'Connection failed');
@@ -287,6 +298,8 @@ class ExnessAPI {
       }
     } catch (error) {
       console.error('Failed to get real account info:', error);
+      // Mark disconnected to trigger reconnect loop
+      this.isConnected = false;
       return null;
     }
   }
@@ -473,7 +486,64 @@ class ExnessAPI {
     this.sessionId = null;
     this.accountInfo = null;
     this.connectionInfo = null;
+    this.stopHeartbeat();
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
     console.log('🔌 Disconnected from Exness');
+  }
+
+  // Heartbeat and auto-reconnect
+  startAutoReconnect(): void {
+    this.startHeartbeat();
+  }
+
+  private startHeartbeat(): void {
+    if (this.heartbeatInterval) return;
+    this.heartbeatInterval = setInterval(async () => {
+      try {
+        if (!this.isConnected) {
+          await this.attemptReconnect();
+          return;
+        }
+        const info = await this.getAccountInfo();
+        if (!info) {
+          this.isConnected = false;
+          await this.attemptReconnect();
+        }
+      } catch (e) {
+        this.isConnected = false;
+        await this.attemptReconnect();
+      }
+    }, 30000);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+  }
+
+  private async attemptReconnect(): Promise<void> {
+    if (!this.lastCredentials) return;
+    if (this.reconnectTimeout) return; // Already scheduled
+    const backoff = this.reconnectBackoffMs;
+    console.warn(`🔄 Attempting reconnect in ${(backoff / 1000).toFixed(0)}s...`);
+    this.reconnectTimeout = setTimeout(async () => {
+      this.reconnectTimeout = null;
+      try {
+        const ok = await this.connect(this.lastCredentials as ExnessCredentials);
+        if (ok) {
+          console.log('✅ Reconnected to Exness');
+          this.reconnectBackoffMs = 2000;
+          return;
+        }
+      } catch {}
+      this.reconnectBackoffMs = Math.min(this.reconnectBackoffMs * 2, this.reconnectBackoffMaxMs);
+      await this.attemptReconnect();
+    }, backoff);
   }
 }
 
