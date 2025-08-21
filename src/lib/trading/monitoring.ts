@@ -24,6 +24,15 @@ class MonitoringService {
     }
     return false;
   }
+
+  async sendWebhookAlert(url: string | undefined, payload: any) {
+    if (!url) return;
+    try {
+      await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    } catch (e) {
+      console.error('Failed to send webhook alert', e);
+    }
+  }
 }
 
 export const monitoring = new MonitoringService();

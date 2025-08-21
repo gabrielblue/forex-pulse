@@ -50,6 +50,8 @@ class OrderManager {
 	private weeklyLossLimitPct: number = 7.0; // weekly de-risk
 	private perSymbolMaxConcurrent: Record<string, number> = {};
 	private trailingStopPips: number = 20;
+  private trailingInterval: any = null;
+  private trailingActive: boolean = false;
 
 	async initialize(): Promise<void> {
 		await this.loadRiskParameters();
@@ -178,6 +180,8 @@ class OrderManager {
 				await this.updatePerformanceMetrics();
 				
 				console.log(`✅ Order executed successfully: ${ticket}`);
+				// Start active trailing and partial TP automation
+				this.startActiveExits();
 				
 				return ticket;
 			} else {
@@ -549,6 +553,37 @@ class OrderManager {
 			return 0;
 		}
 	}
+
+  private startActiveExits(): void {
+    if (this.trailingActive) return;
+    this.trailingActive = true;
+    this.trailingInterval = setInterval(async () => {
+      try {
+        const positions = await this.getOpenPositions();
+        for (const p of positions) {
+          // Trailing stop update
+          await this.applyTrailingStop(p.ticketId, p.symbol, p.type, p.openPrice);
+          // Partial TP: if profit > 1R and volume >= 0.02, close half
+          const pip = this.getPipValue(p.symbol);
+          const r = Math.abs((p.openPrice - (p.stopLoss ?? p.openPrice)) / pip) || 30;
+          const profitPips = this.calculatePips(p.openPrice, p.currentPrice, p.symbol, p.type);
+          if (profitPips > r && p.volume >= 0.02) {
+            await exnessAPI.closePartial(parseInt(p.ticketId, 10), Math.max(0.01, p.volume / 2));
+          }
+        }
+      } catch {}
+    }, 15000);
+  }
+
+  private async applyTrailingStop(ticketId: string, symbol: string, direction: 'BUY' | 'SELL', entry: number) {
+    try {
+      const pip = this.getPipValue(symbol);
+      const price = await exnessAPI.getCurrentPrice(symbol);
+      if (!price) return;
+      const desiredSL = direction === 'BUY' ? price.bid - this.trailingStopPips * pip : price.ask + this.trailingStopPips * pip;
+      await exnessAPI.modifyPosition(parseInt(ticketId, 10), { stopLoss: desiredSL });
+    } catch {}
+  }
 }
 
 export const orderManager = new OrderManager();

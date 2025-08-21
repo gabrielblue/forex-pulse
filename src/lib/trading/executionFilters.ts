@@ -33,6 +33,19 @@ export function isWithinActiveSession(symbol: string): boolean {
 
 export async function isNewsBlackout(symbol: string): Promise<boolean> {
   try {
+    // Toggle from bot_settings
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: settings } = await supabase
+        .from('bot_settings')
+        .select('news_blackout_enabled')
+        .eq('user_id', user.id)
+        .single();
+      if (settings && settings.news_blackout_enabled === false) {
+        return false;
+      }
+    }
+
     const now = new Date();
     const windowStart = new Date(now.getTime() - 30 * 60 * 1000).toISOString();
     const windowEnd = new Date(now.getTime() + 30 * 60 * 1000).toISOString();
