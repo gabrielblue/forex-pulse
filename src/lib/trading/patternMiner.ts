@@ -91,6 +91,8 @@ export async function evaluatePatternStats(symbol: string, timeframe: Timeframe)
 
   const pip = symbol.includes('JPY') ? 0.01 : 0.0001;
   const horizon = 10; // bars to evaluate outcome
+  const spreadPips = symbol.includes('JPY') ? 1.5 : 0.15; // simple cost model
+  const slippagePips = symbol.includes('JPY') ? 0.5 : 0.05;
 
   for (const p of pats) {
     const occurrences: number[] = [];
@@ -100,22 +102,37 @@ export async function evaluatePatternStats(symbol: string, timeframe: Timeframe)
     let wins = 0;
     let totalPnL = 0;
     let count = 0;
+    const regimes: Record<string,{ pnl:number; wins:number; n:number }> = {};
     for (const idx of occurrences) {
       if (idx + 1 >= f.closes.length || idx + 1 + horizon >= f.closes.length) continue;
       const entry = f.closes[idx + 1];
       const exit = f.closes[idx + 1 + horizon];
-      const pnlPips = (exit - entry) / pip; // long-only outcome for evaluation
+      // derive trend regime from EMA slope
+      const emaSlope = (f.emaFast[idx] - f.emaFast[idx-5] || 0);
+      const vol = f.atr[idx] || 0;
+      const regimeLabel = `${emaSlope>0?'UP':'DOWN'}_${vol> (pip*50)?'HIGHVOL':'LOWVOL'}`;
+      const costs = (spreadPips + slippagePips);
+      // evaluate both long and short; take max of the two as edge indicator
+      const pnlLong = (exit - entry) / pip - costs;
+      const pnlShort = (entry - exit) / pip - costs;
+      const pnlPips = Math.max(pnlLong, pnlShort);
       totalPnL += pnlPips;
       if (pnlPips > 0) wins++;
       count++;
+      regimes[regimeLabel] = regimes[regimeLabel] || { pnl:0, wins:0, n:0 };
+      regimes[regimeLabel].pnl += pnlPips;
+      regimes[regimeLabel].n += 1;
+      if (pnlPips > 0) regimes[regimeLabel].wins += 1;
     }
     const expectancy = count ? totalPnL / count : 0;
     const winRate = count ? (wins / count) * 100 : 0;
+    const byRegime = Object.fromEntries(Object.entries(regimes).map(([k,v]) => [k, { expectancy: v.n? v.pnl/v.n:0, win_rate: v.n? (v.wins/v.n)*100:0, samples: v.n }]));
     await supabase.from('pattern_stats').upsert({
       pattern_id: p.id,
       expectancy,
       win_rate: winRate,
       sample_size: count,
+      by_regime: byRegime,
       last_updated: new Date().toISOString()
     });
   }

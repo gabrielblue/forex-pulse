@@ -56,6 +56,7 @@ create table if not exists pattern_stats (
   expectancy numeric,
   win_rate numeric,
   sample_size integer,
+  by_regime jsonb,
   last_updated timestamp with time zone default now()
 );
 

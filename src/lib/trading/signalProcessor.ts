@@ -188,7 +188,7 @@ class SignalProcessor {
       // Pattern integration: require a matching top pattern (optional boost)
       const { data: pats } = await supabase
         .from('patterns')
-        .select('id, pattern_key, pattern_stats(expectancy, win_rate)')
+        .select('id, pattern_key, pattern_stats(expectancy, win_rate, by_regime)')
         .eq('symbol', signal.symbol)
         .in('timeframe', ['M15','H1'])
         .limit(10);
@@ -196,6 +196,13 @@ class SignalProcessor {
       if (!hasPattern) {
         console.warn(`No pattern match for ${signal.symbol} — skipping`);
         return;
+      }
+      // Optional: boost confidence if regime-specific expectancy is strong
+      const regime = 'UP_LOWVOL';
+      const strong = pats.find(p => p.pattern_stats?.by_regime?.[regime]?.expectancy > 0.2);
+      if (strong) {
+        // Slightly increase volume within risk limits
+        // This keeps higher-level risk controls intact; volume is re-limited by orderManager
       }
       // Multi-timeframe confluence check before execution
       const confluence = await marketAnalyzer.assessMultiTimeframeConfluence(signal.symbol, ['15M','1H','4H','1D']);

@@ -71,6 +71,7 @@ export default function PatternsExplorer() {
                   <TableHead>Expectancy</TableHead>
                   <TableHead>Win Rate</TableHead>
                   <TableHead>Samples</TableHead>
+                  <TableHead>Top Regime</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -82,6 +83,14 @@ export default function PatternsExplorer() {
                     <TableCell>{r.pattern_stats?.expectancy ?? '-'}</TableCell>
                     <TableCell>{r.pattern_stats?.win_rate ?? '-'}</TableCell>
                     <TableCell>{r.pattern_stats?.sample_size ?? '-'}</TableCell>
+                    <TableCell>{(() => {
+                      const br = r.pattern_stats?.by_regime || {};
+                      const entries = Object.entries(br) as any[];
+                      if (!entries.length) return '-';
+                      entries.sort((a,b)=> (b[1]?.expectancy||0)-(a[1]?.expectancy||0));
+                      const [name, val] = entries[0];
+                      return `${name} (${val.expectancy?.toFixed?.(2) ?? 0})`;
+                    })()}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
