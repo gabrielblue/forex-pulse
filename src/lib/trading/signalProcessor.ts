@@ -2,6 +2,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { orderManager, OrderRequest } from './orderManager';
 import { professionalStrategies, MarketData, TechnicalIndicators } from './strategies/professionalStrategies';
 import { exnessAPI } from './exnessApi';
+import { isSpreadAcceptable, isVolatilityAcceptable, isWithinActiveSession, isNewsBlackout } from './executionFilters';
+import { Candle } from './indicators';
 import { marketAnalyzer } from './marketAnalyzer';
 
 export interface TradingSignal {
@@ -161,6 +163,26 @@ class SignalProcessor {
 
   private async executeSignal(signal: TradingSignal): Promise<void> {
     try {
+      // Real execution filters: news blackout, session, spread, volatility
+      if (await isNewsBlackout(signal.symbol)) {
+        console.warn(`News blackout active for ${signal.symbol}`);
+        return;
+      }
+      if (!isWithinActiveSession(signal.symbol)) {
+        console.warn(`Inactive session for ${signal.symbol}`);
+        return;
+      }
+      if (!(await isSpreadAcceptable(signal.symbol, signal.symbol.includes('JPY') ? 2.5 : 0.3))) {
+        console.warn(`Spread too high for ${signal.symbol}`);
+        return;
+      }
+      const candles: Candle[] = await exnessAPI.getHistoricalCandles(signal.symbol, 'M15', 100) as any;
+      if (candles && candles.length > 0) {
+        if (!(await isVolatilityAcceptable(signal.symbol, candles, signal.symbol.includes('JPY') ? 80 : 20))) {
+          console.warn(`ATR too high for ${signal.symbol}`);
+          return;
+        }
+      }
       // Multi-timeframe confluence check before execution
       const confluence = await marketAnalyzer.assessMultiTimeframeConfluence(signal.symbol, ['15M','1H','4H','1D']);
       const directionOk = (signal.type === 'BUY' && confluence.direction === 'BUY') || (signal.type === 'SELL' && confluence.direction === 'SELL');
