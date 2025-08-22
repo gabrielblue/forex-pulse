@@ -7,6 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { 
   Users, 
   Settings, 
@@ -21,10 +23,47 @@ import {
   Eye,
   TrendingUp,
   AlertTriangle,
-  CheckCircle
+  CheckCircle,
+  Save,
+  Zap,
+  Bell,
+  Target,
+  DollarSign
 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+
+interface BotSettings {
+  enable_regime_boost: boolean;
+  regime_expectancy_threshold: number;
+  volume_boost_min: number;
+  volume_boost_max: number;
+  news_blackout_enabled: boolean;
+  enable_trailing_stop: boolean;
+  trailing_stop_distance: number;
+  enable_partial_profits: boolean;
+  partial_profit_levels: Array<{
+    percentage: number;
+    distance: number;
+  }>;
+}
 
 const Admin = () => {
+  const [botSettings, setBotSettings] = useState<BotSettings>({
+    enable_regime_boost: false,
+    regime_expectancy_threshold: 85,
+    volume_boost_min: 0.10,
+    volume_boost_max: 0.20,
+    news_blackout_enabled: false,
+    enable_trailing_stop: false,
+    trailing_stop_distance: 20,
+    enable_partial_profits: false,
+    partial_profit_levels: []
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
   const users = [
     {
       id: 1,
@@ -86,6 +125,102 @@ const Admin = () => {
     { action: "Password Reset", user: "forgot_user", time: "1 hour ago" },
     { action: "API Key Generated", user: "api_user", time: "2 hours ago" }
   ];
+
+  // Load bot settings from Supabase
+  useEffect(() => {
+    loadBotSettings();
+  }, []);
+
+  const loadBotSettings = async () => {
+    setIsLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: settings } = await supabase
+        .from('bot_settings')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (settings) {
+        setBotSettings({
+          enable_regime_boost: settings.enable_regime_boost ?? false,
+          regime_expectancy_threshold: settings.regime_expectancy_threshold ?? 85,
+          volume_boost_min: settings.volume_boost_min ?? 0.10,
+          volume_boost_max: settings.volume_boost_max ?? 0.20,
+          news_blackout_enabled: settings.news_blackout_enabled ?? false,
+          enable_trailing_stop: settings.enable_trailing_stop ?? false,
+          trailing_stop_distance: settings.trailing_stop_distance ?? 20,
+          enable_partial_profits: settings.enable_partial_profits ?? false,
+          partial_profit_levels: settings.partial_profit_levels ?? []
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load bot settings:', error);
+      toast.error('Failed to load settings');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const saveBotSettings = async () => {
+    setIsSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from('bot_settings')
+        .upsert({
+          user_id: user.id,
+          enable_regime_boost: botSettings.enable_regime_boost,
+          regime_expectancy_threshold: botSettings.regime_expectancy_threshold,
+          volume_boost_min: botSettings.volume_boost_min,
+          volume_boost_max: botSettings.volume_boost_max,
+          news_blackout_enabled: botSettings.news_blackout_enabled,
+          enable_trailing_stop: botSettings.enable_trailing_stop,
+          trailing_stop_distance: botSettings.trailing_stop_distance,
+          enable_partial_profits: botSettings.enable_partial_profits,
+          partial_profit_levels: botSettings.partial_profit_levels,
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+      toast.success('Settings saved successfully');
+    } catch (error) {
+      console.error('Failed to save bot settings:', error);
+      toast.error('Failed to save settings');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const addPartialProfitLevel = () => {
+    setBotSettings(prev => ({
+      ...prev,
+      partial_profit_levels: [
+        ...prev.partial_profit_levels,
+        { percentage: 50, distance: 30 }
+      ]
+    }));
+  };
+
+  const removePartialProfitLevel = (index: number) => {
+    setBotSettings(prev => ({
+      ...prev,
+      partial_profit_levels: prev.partial_profit_levels.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updatePartialProfitLevel = (index: number, field: 'percentage' | 'distance', value: number) => {
+    setBotSettings(prev => ({
+      ...prev,
+      partial_profit_levels: prev.partial_profit_levels.map((level, i) => 
+        i === index ? { ...level, [field]: value } : level
+      )
+    }));
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -226,10 +361,10 @@ const Admin = () => {
                                 {user.status}
                               </Badge>
                             </TableCell>
-                            <TableCell className="font-medium">{user.balance}</TableCell>
+                            <TableCell>{user.balance}</TableCell>
                             <TableCell>{user.trades}</TableCell>
                             <TableCell>{user.winRate}</TableCell>
-                            <TableCell className="text-sm">{user.lastLogin}</TableCell>
+                            <TableCell>{user.lastLogin}</TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <Button variant="ghost" size="sm">
@@ -237,9 +372,6 @@ const Admin = () => {
                                 </Button>
                                 <Button variant="ghost" size="sm">
                                   <Edit className="w-4 h-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm">
-                                  <Ban className="w-4 h-4" />
                                 </Button>
                                 <Button variant="ghost" size="sm">
                                   <MoreHorizontal className="w-4 h-4" />
@@ -253,147 +385,238 @@ const Admin = () => {
                   </CardContent>
                 </Card>
               </TabsContent>
-              
-              <TabsContent value="trading">
+
+              <TabsContent value="trading" className="space-y-6">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Trading Management</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5" />
+                      Trading Configuration
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-6">
+                      {/* Regime Boost Settings */}
                       <div className="space-y-4">
-                        <h4 className="font-semibold">Market Controls</h4>
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm">Trading Enabled</span>
-                            <Switch defaultChecked />
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-semibold flex items-center gap-2">
+                              <Zap className="w-4 h-4" />
+                              Regime-Based Volume Boost
+                            </h4>
+                            <p className="text-sm text-muted-foreground">
+                              Automatically increase position size when regime expectancy exceeds threshold
+                            </p>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm">Paper Trading Only</span>
-                            <Switch />
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm">Stop Loss Required</span>
-                            <Switch defaultChecked />
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm">News Trading Pause</span>
-                            <Switch defaultChecked />
-                          </div>
+                          <Switch 
+                            checked={botSettings.enable_regime_boost}
+                            onCheckedChange={(checked) => setBotSettings(prev => ({ ...prev, enable_regime_boost: checked }))}
+                          />
                         </div>
+                        
+                        {botSettings.enable_regime_boost && (
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border rounded-lg">
+                            <div>
+                              <Label htmlFor="threshold">Expectancy Threshold (%)</Label>
+                              <Input
+                                id="threshold"
+                                type="number"
+                                min="0"
+                                max="100"
+                                value={botSettings.regime_expectancy_threshold}
+                                onChange={(e) => setBotSettings(prev => ({ 
+                                  ...prev, 
+                                  regime_expectancy_threshold: parseFloat(e.target.value) || 85 
+                                }))}
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="min-boost">Min Boost (%)</Label>
+                              <Input
+                                id="min-boost"
+                                type="number"
+                                min="0"
+                                max="50"
+                                step="0.1"
+                                value={botSettings.volume_boost_min * 100}
+                                onChange={(e) => setBotSettings(prev => ({ 
+                                  ...prev, 
+                                  volume_boost_min: (parseFloat(e.target.value) || 10) / 100 
+                                }))}
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="max-boost">Max Boost (%)</Label>
+                              <Input
+                                id="max-boost"
+                                type="number"
+                                min="0"
+                                max="50"
+                                step="0.1"
+                                value={botSettings.volume_boost_max * 100}
+                                onChange={(e) => setBotSettings(prev => ({ 
+                                  ...prev, 
+                                  volume_boost_max: (parseFloat(e.target.value) || 20) / 100 
+                                }))}
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      
-                      <div className="space-y-4">
-                        <h4 className="font-semibold">Risk Limits</h4>
-                        <div className="space-y-3">
-                          <div>
-                            <label className="text-sm text-muted-foreground">Max Position Size</label>
-                            <Input placeholder="10000" />
-                          </div>
-                          <div>
-                            <label className="text-sm text-muted-foreground">Max Daily Loss (%)</label>
-                            <Input placeholder="5" />
-                          </div>
-                          <div>
-                            <label className="text-sm text-muted-foreground">Max Leverage</label>
-                            <Input placeholder="100" />
-                          </div>
+
+                      {/* News Blackout Settings */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-semibold flex items-center gap-2">
+                            <Bell className="w-4 h-4" />
+                            News Blackout
+                          </h4>
+                          <p className="text-sm text-muted-foreground">
+                            Prevent trading during high-impact economic events
+                          </p>
                         </div>
+                        <Switch 
+                          checked={botSettings.news_blackout_enabled}
+                          onCheckedChange={(checked) => setBotSettings(prev => ({ ...prev, news_blackout_enabled: checked }))}
+                        />
+                      </div>
+
+                      {/* Trailing Stop Settings */}
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-semibold flex items-center gap-2">
+                              <Target className="w-4 h-4" />
+                              Trailing Stop Loss
+                            </h4>
+                            <p className="text-sm text-muted-foreground">
+                              Automatically adjust stop loss as position moves in profit
+                            </p>
+                          </div>
+                          <Switch 
+                            checked={botSettings.enable_trailing_stop}
+                            onCheckedChange={(checked) => setBotSettings(prev => ({ ...prev, enable_trailing_stop: checked }))}
+                          />
+                        </div>
+                        
+                        {botSettings.enable_trailing_stop && (
+                          <div className="p-4 border rounded-lg">
+                            <Label htmlFor="trailing-distance">Trailing Distance (pips)</Label>
+                            <Input
+                              id="trailing-distance"
+                              type="number"
+                              min="5"
+                              max="100"
+                              value={botSettings.trailing_stop_distance}
+                              onChange={(e) => setBotSettings(prev => ({ 
+                                ...prev, 
+                                trailing_stop_distance: parseInt(e.target.value) || 20 
+                              }))}
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Partial Profit Settings */}
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-semibold flex items-center gap-2">
+                              <DollarSign className="w-4 h-4" />
+                              Partial Profit Taking
+                            </h4>
+                            <p className="text-sm text-muted-foreground">
+                              Automatically close partial positions at specified profit levels
+                            </p>
+                          </div>
+                          <Switch 
+                            checked={botSettings.enable_partial_profits}
+                            onCheckedChange={(checked) => setBotSettings(prev => ({ ...prev, enable_partial_profits: checked }))}
+                          />
+                        </div>
+                        
+                        {botSettings.enable_partial_profits && (
+                          <div className="space-y-4 p-4 border rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <h5 className="font-medium">Profit Levels</h5>
+                              <Button size="sm" onClick={addPartialProfitLevel}>
+                                Add Level
+                              </Button>
+                            </div>
+                            
+                            {botSettings.partial_profit_levels.map((level, index) => (
+                              <div key={index} className="flex items-center gap-4">
+                                <div className="flex-1">
+                                  <Label>Percentage to Close (%)</Label>
+                                  <Input
+                                    type="number"
+                                    min="10"
+                                    max="90"
+                                    value={level.percentage}
+                                    onChange={(e) => updatePartialProfitLevel(index, 'percentage', parseInt(e.target.value) || 50)}
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  <Label>Distance (pips)</Label>
+                                  <Input
+                                    type="number"
+                                    min="10"
+                                    max="200"
+                                    value={level.distance}
+                                    onChange={(e) => updatePartialProfitLevel(index, 'distance', parseInt(e.target.value) || 30)}
+                                  />
+                                </div>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={() => removePartialProfitLevel(index)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            ))}
+                            
+                            {botSettings.partial_profit_levels.length === 0 && (
+                              <p className="text-sm text-muted-foreground text-center py-4">
+                                No profit levels configured. Click "Add Level" to create one.
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Save Button */}
+                      <div className="flex justify-end pt-4">
+                        <Button 
+                          onClick={saveBotSettings} 
+                          disabled={isSaving}
+                          className="flex items-center gap-2"
+                        >
+                          <Save className="w-4 h-4" />
+                          {isSaving ? 'Saving...' : 'Save Settings'}
+                        </Button>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
               </TabsContent>
-              
-              <TabsContent value="system">
+
+              <TabsContent value="system" className="space-y-6">
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Settings className="w-5 h-5" />
-                      System Monitoring
+                      System Configuration
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <div className="space-y-4">
-                        <h4 className="font-semibold">Service Status</h4>
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm">Trading Engine</span>
-                            <CheckCircle className="w-5 h-5 text-green-500" />
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm">Data Feed</span>
-                            <CheckCircle className="w-5 h-5 text-green-500" />
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm">AI Prediction</span>
-                            <AlertTriangle className="w-5 h-5 text-yellow-500" />
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm">Notifications</span>
-                            <CheckCircle className="w-5 h-5 text-green-500" />
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-4">
-                        <h4 className="font-semibold">Performance</h4>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span>CPU Usage</span>
-                            <span>24%</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Memory Usage</span>
-                            <span>56%</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Database Load</span>
-                            <span>18%</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>API Response Time</span>
-                            <span>145ms</span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-4">
-                        <h4 className="font-semibold">Quick Actions</h4>
-                        <div className="space-y-2">
-                          <Button variant="outline" className="w-full justify-start">
-                            Restart Services
-                          </Button>
-                          <Button variant="outline" className="w-full justify-start">
-                            Clear Cache
-                          </Button>
-                          <Button variant="outline" className="w-full justify-start">
-                            Export Logs
-                          </Button>
-                          <Button variant="outline" className="w-full justify-start">
-                            Backup Database
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-              
-              <TabsContent value="settings">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>System Settings</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <h4 className="font-semibold mb-4">Platform Configuration</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <h4 className="font-semibold mb-4">General Settings</h4>
+                        <div className="space-y-4">
                           <div>
-                            <label className="text-sm text-muted-foreground">Platform Name</label>
-                            <Input placeholder="ForexPro Analytics" />
+                            <label className="text-sm text-muted-foreground">System Name</label>
+                            <Input placeholder="ForexPro Trading System" />
                           </div>
                           <div>
                             <label className="text-sm text-muted-foreground">Support Email</label>
@@ -449,6 +672,67 @@ const Admin = () => {
                             <div>
                               <span className="text-sm font-medium">Login Monitoring</span>
                               <p className="text-xs text-muted-foreground">Monitor suspicious login attempts</p>
+                            </div>
+                            <Switch defaultChecked />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="settings" className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Settings className="w-5 h-5" />
+                      Application Settings
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-6">
+                      <div>
+                        <h4 className="font-semibold mb-4">Display Settings</h4>
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-sm font-medium">Dark Mode</span>
+                              <p className="text-xs text-muted-foreground">Use dark theme</p>
+                            </div>
+                            <Switch />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-sm font-medium">Real-time Updates</span>
+                              <p className="text-xs text-muted-foreground">Auto-refresh data every 30 seconds</p>
+                            </div>
+                            <Switch defaultChecked />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-sm font-medium">Notifications</span>
+                              <p className="text-xs text-muted-foreground">Show browser notifications</p>
+                            </div>
+                            <Switch defaultChecked />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="font-semibold mb-4">Data Management</h4>
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-sm font-medium">Auto Backup</span>
+                              <p className="text-xs text-muted-foreground">Daily backup of trading data</p>
+                            </div>
+                            <Switch defaultChecked />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-sm font-medium">Data Retention</span>
+                              <p className="text-xs text-muted-foreground">Keep data for 90 days</p>
                             </div>
                             <Switch defaultChecked />
                           </div>

@@ -8,7 +8,14 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "patterns:run": "node scripts/patterns/run.js",
+    "ingest:calendar": "cat events.jsonl | SUPABASE_URL=$SUPABASE_URL SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY python3 scripts/ingest_economic_calendar.py",
+    "ingest:create-sample": "python3 scripts/ingest_economic_calendar.py --create-sample",
+    "mt5:bridge": "python3 mt5_bridge.py",
+    "db:migrate": "supabase db push",
+    "db:reset": "supabase db reset",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
