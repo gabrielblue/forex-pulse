@@ -51,10 +51,10 @@ class SignalProcessor {
 
       if (botSettings) {
         this.config = {
-          minConfidence: parseFloat(botSettings.min_confidence_score?.toString() || '75'),
-          enabledTimeframes: ['1H', '4H', '1D'], // Could be stored in bot_settings
-          enabledPairs: botSettings.allowed_pairs || ['EURUSD', 'GBPUSD', 'USDJPY'],
-          autoExecute: botSettings.is_active || false
+          minConfidence: parseFloat(botSettings.min_confidence_score?.toString() || '70'),
+          enabledTimeframes: ['15M', '1H', '4H'],
+          enabledPairs: botSettings.allowed_pairs || ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD'],
+          autoExecute: true
         };
       }
     } catch (error) {
@@ -63,7 +63,7 @@ class SignalProcessor {
   }
 
   private startSignalMonitoring(): void {
-    // Monitor for new signals every 30 seconds
+    // Monitor for new signals every 10 seconds
     setInterval(async () => {
       if (this.isProcessing) return;
       
@@ -75,7 +75,7 @@ class SignalProcessor {
       } finally {
         this.isProcessing = false;
       }
-    }, 30000);
+    }, 10000);
   }
 
   private async processNewSignals(): Promise<void> {
@@ -93,13 +93,22 @@ class SignalProcessor {
         .eq('user_id', user.id)
         .eq('status', 'ACTIVE')
         .gte('confidence_score', this.config.minConfidence)
-        .in('timeframe', this.config.enabledTimeframes);
+        .in('timeframe', this.config.enabledTimeframes)
+        .order('created_at', { ascending: false })
+        .limit(50);
 
       if (!signals || signals.length === 0) return;
 
-      for (const signal of signals) {
-        await this.processSignal(signal);
+      // Avoid duplicate execution: only one per symbol at a time
+      const latestBySymbol: Record<string, any> = {};
+      for (const s of signals) {
+        const sym = s.currency_pairs?.symbol;
+        if (!sym) continue;
+        if (!latestBySymbol[sym]) latestBySymbol[sym] = s;
       }
+
+      const tasks = Object.values(latestBySymbol).map((signal) => this.processSignal(signal));
+      await Promise.allSettled(tasks);
     } catch (error) {
       console.error('Failed to process new signals:', error);
     }
@@ -233,7 +242,7 @@ class SignalProcessor {
   async generateAdvancedSignals(symbols: string[] = ['EURUSD', 'GBPUSD', 'USDJPY']): Promise<void> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      // Proceed even if user is not authenticated so live execution can still run; DB writes will be skipped
 
       for (const symbol of symbols) {
         // Get market data for the symbol
@@ -255,7 +264,19 @@ class SignalProcessor {
         for (const strategy of strategies) {
           const signal = await strategy();
           if (signal && signal.confidence > this.config.minConfidence) {
-            await this.saveSignalToDatabase(signal, symbol);
+            // Best-effort: save to DB if user is present
+            if (user) {
+              await this.saveSignalToDatabase(signal, symbol);
+            }
+
+            // Direct auto-execution path to avoid reliance on DB pipeline
+            if (this.config.autoExecute && orderManager.isAutoTradingActive()) {
+              try {
+                await this.executeSignal(signal);
+              } catch (execErr) {
+                console.error('Auto-execution failed for generated signal:', execErr);
+              }
+            }
           }
         }
       }

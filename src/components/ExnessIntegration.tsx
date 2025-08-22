@@ -443,7 +443,7 @@ export const ExnessIntegration = () => {
                   onValueChange={(value) => setCredentials(prev => ({ ...prev, server: value }))}
                   disabled={isConnecting || isTesting}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="server">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

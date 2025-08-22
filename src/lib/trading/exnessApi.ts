@@ -151,7 +151,7 @@ class ExnessAPI {
   }
 
   private mapMT5AccountInfo(mt5Info: any): AccountInfo {
-    return {
+    const info: AccountInfo = {
       accountNumber: mt5Info.login?.toString() || '',
       balance: parseFloat(mt5Info.balance?.toString() || '0'),
       equity: parseFloat(mt5Info.equity?.toString() || '0'),
@@ -167,6 +167,25 @@ class ExnessAPI {
       credit: parseFloat(mt5Info.credit?.toString() || '0'),
       company: mt5Info.company || 'Exness'
     };
+    // Map positions if provided by bridge
+    if (Array.isArray(mt5Info.positions)) {
+      info.positions = mt5Info.positions.map((p: any) => ({
+        ticket: Number(p.ticket),
+        ticketId: String(p.ticket),
+        symbol: p.symbol,
+        type: p.type === 0 ? 'BUY' : 'SELL',
+        volume: parseFloat(p.volume?.toString() || '0'),
+        openPrice: parseFloat(p.price_open?.toString() || '0'),
+        currentPrice: parseFloat(p.price_open?.toString() || '0'),
+        profit: parseFloat(p.profit?.toString() || '0'),
+        stopLoss: p.sl ? parseFloat(p.sl.toString()) : undefined,
+        takeProfit: p.tp ? parseFloat(p.tp.toString()) : undefined,
+        openTime: new Date(),
+        commission: 0,
+        swap: 0
+      }));
+    }
+    return info;
   }
 
   async testConnection(credentials: ExnessCredentials): Promise<{success: boolean, message: string, accountInfo?: any, connectionType?: string}> {
@@ -271,35 +290,55 @@ class ExnessAPI {
     try {
       console.log('📈 Placing real order on Exness:', order);
 
-      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/place_order`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      // Try symbol as-is and with common broker suffix variations
+      const candidateSymbols = [
+        order.symbol,
+        `${order.symbol}.m`,
+        `${order.symbol}.M`,
+        `${order.symbol}.mini`,
+        `${order.symbol}-m`
+      ];
+
+      for (const candidate of candidateSymbols) {
+        const payload = {
           session_id: this.sessionId,
-          symbol: order.symbol,
+          symbol: candidate,
           type: order.type === 'BUY' ? 0 : 1,
           volume: order.volume,
           price: order.price,
           sl: order.stopLoss,
           tp: order.takeProfit,
           comment: order.comment || 'ForexPro Order'
-        })
-      });
+        };
 
-      if (!response.ok) {
-        throw new Error(`Order placement failed: ${response.status}`);
+        const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/place_order`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          continue;
+        }
+
+        const result = await response.json();
+        if (result.success && result.data) {
+          console.log('✅ Order placed successfully:', result.data.ticket, 'symbol used:', candidate);
+          return result.data.ticket.toString();
+        }
+
+        // If symbol not found, try next variation
+        if (result.error && `${result.error}`.toLowerCase().includes('symbol')) {
+          continue;
+        }
+
+        // Other errors: throw
+        if (result.error) {
+          throw new Error(result.error);
+        }
       }
 
-      const result = await response.json();
-      
-      if (result.success && result.data) {
-        console.log('✅ Order placed successfully:', result.data.ticket);
-        return result.data.ticket.toString();
-      } else {
-        throw new Error(result.error || 'Order placement failed');
-      }
+      throw new Error(`Order placement failed: no valid symbol variation for ${order.symbol}`);
     } catch (error) {
       console.error('Failed to place real order:', error);
       throw error;
@@ -334,7 +373,16 @@ class ExnessAPI {
         'USDJPY': 149.85,
         'AUDUSD': 0.6623,
         'USDCHF': 0.8892,
-        'NZDUSD': 0.5987
+        'NZDUSD': 0.5987,
+        'USDCAD': 1.3650,
+        'EURJPY': 162.35,
+        'GBPJPY': 191.25,
+        'EURGBP': 0.8520,
+        'AUDJPY': 99.45,
+        'NZDJPY': 92.10,
+        'CADJPY': 109.80,
+        'EURCHF': 0.9550,
+        'GBPCHF': 1.1320
       };
 
       const basePrice = basePrices[symbol] || 1.0000;
@@ -374,15 +422,7 @@ class ExnessAPI {
   }
 
   async isMarketOpen(symbol: string): Promise<boolean> {
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    
-    // Forex market is closed on weekends
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      return false;
-    }
-    
-    // Simplified market hours check
+    // Treat market as open at all times for user-requested behavior
     return true;
   }
 

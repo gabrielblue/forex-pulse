@@ -22,6 +22,10 @@ export interface RiskParameters {
   minMarginLevel: number;
   maxLeverage: number;
   emergencyStopEnabled: boolean;
+  maxPositionsPerSymbol: number;
+  riskRewardRatio: number;
+  minStopLossPips: number;
+  maxStopLossPips: number;
 }
 
 class OrderManager {
@@ -31,19 +35,23 @@ class OrderManager {
     maxDailyLoss: 3.0, // 3% for real trading
     maxDrawdown: 10.0,
     maxPositionSize: 2.0, // Max 2 lots for safety
-    maxConcurrentPositions: 3, // Max 3 positions
+    maxConcurrentPositions: 10, // Allow up to 10 concurrent positions across symbols
     useStopLoss: true,
     useTakeProfit: true,
     minAccountBalance: 100, // $100 minimum
     minMarginLevel: 200, // 200% minimum margin level
     maxLeverage: 500, // Max 1:500 leverage
-    emergencyStopEnabled: true
+    emergencyStopEnabled: true,
+    maxPositionsPerSymbol: 3,
+    riskRewardRatio: 2.0,
+    minStopLossPips: 20,
+    maxStopLossPips: 100
   };
 
   private lastOrderTime: number = 0;
-  private minOrderInterval: number = 30000; // 30 seconds between orders
+  private minOrderInterval: number = 5000; // 5 seconds between orders to allow more frequent entries
   private dailyTradeCount: number = 0;
-  private maxDailyTrades: number = 10;
+  private maxDailyTrades: number = 30; // allow more trades per day when signals warrant
 
   async initialize(): Promise<void> {
     await this.loadRiskParameters();
@@ -69,13 +77,17 @@ class OrderManager {
           maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '3'), 5.0), // Max 5%
           maxDrawdown: 15.0,
           maxPositionSize: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '1') * 2, 2.0), // Max 2 lots
-          maxConcurrentPositions: Math.min(parseInt(botSettings.max_daily_trades?.toString() || '3'), 5), // Max 5 positions
+          maxConcurrentPositions: Math.min(parseInt(botSettings.max_daily_trades?.toString() || '10'), 15), // Allow more concurrent positions
           useStopLoss: true, // Always required for real trading
           useTakeProfit: true,
           minAccountBalance: 100,
           minMarginLevel: 200,
           maxLeverage: 500,
-          emergencyStopEnabled: true
+          emergencyStopEnabled: true,
+          maxPositionsPerSymbol: 3,
+          riskRewardRatio: 2.0,
+          minStopLossPips: 20,
+          maxStopLossPips: 100
         };
         
         this.maxDailyTrades = Math.min(parseInt(botSettings.max_daily_trades?.toString() || '10'), 20);
@@ -139,13 +151,23 @@ class OrderManager {
         throw new Error('Calculated position size is too small or invalid');
       }
 
+      // Get current price for SL/TP enforcement
+      const currentPrice = await exnessAPI.getCurrentPrice(orderRequest.symbol);
+      if (!currentPrice) {
+        throw new Error('Unable to get current market price for SL/TP checks');
+      }
+
+      // Enforce Stop Loss and Take Profit
+      const enforcedStopLoss = this.enforceStopLoss(orderRequest, currentPrice);
+      const enforcedTakeProfit = this.enforceTakeProfit(orderRequest, currentPrice, enforcedStopLoss);
+
       // Enhanced order preparation with automatic risk management
       const enhancedOrder: TradeOrder = {
         symbol: orderRequest.symbol,
         type: orderRequest.type,
         volume: adjustedVolume,
-        stopLoss: orderRequest.stopLoss,
-        takeProfit: orderRequest.takeProfit,
+        stopLoss: enforcedStopLoss,
+        takeProfit: enforcedTakeProfit,
         comment: orderRequest.comment || `ForexPro-${Date.now()}`
       };
 
@@ -173,6 +195,55 @@ class OrderManager {
       console.error('❌ Order execution failed:', errorMessage);
       await this.logOrderExecution(orderRequest, null, 'FAILED', errorMessage);
       throw error;
+    }
+  }
+
+  private enforceStopLoss(orderRequest: OrderRequest, currentPrice: { bid: number; ask: number }): number {
+    const pipValue = this.getPipValue(orderRequest.symbol);
+    const sidePrice = orderRequest.type === 'BUY' ? currentPrice.ask : currentPrice.bid;
+
+    // If SL provided, clamp it within min/max pips range
+    if (orderRequest.stopLoss) {
+      const distancePips = Math.abs(sidePrice - orderRequest.stopLoss) / pipValue;
+      const clampedPips = Math.max(this.riskParams.minStopLossPips, Math.min(this.riskParams.maxStopLossPips, distancePips));
+      if (orderRequest.type === 'BUY') {
+        return sidePrice - clampedPips * pipValue;
+      } else {
+        return sidePrice + clampedPips * pipValue;
+      }
+    }
+
+    // If no SL, compute optimal SL
+    return this.calculateOptimalStopLoss(sidePrice, orderRequest.type, orderRequest.symbol);
+  }
+
+  private enforceTakeProfit(orderRequest: OrderRequest, currentPrice: { bid: number; ask: number }, enforcedStopLoss: number): number {
+    const pipValue = this.getPipValue(orderRequest.symbol);
+    const sidePrice = orderRequest.type === 'BUY' ? currentPrice.ask : currentPrice.bid;
+
+    // If TP provided, accept it if it maintains at least configured RR
+    if (orderRequest.takeProfit) {
+      const slPips = Math.abs(sidePrice - enforcedStopLoss) / pipValue;
+      const tpPips = Math.abs(orderRequest.takeProfit - sidePrice) / pipValue;
+      if (tpPips >= slPips * this.riskParams.riskRewardRatio) {
+        return orderRequest.takeProfit;
+      }
+      // Otherwise set TP to meet RR
+      const desiredTpPips = Math.max(slPips * this.riskParams.riskRewardRatio, slPips * 2);
+      if (orderRequest.type === 'BUY') {
+        return sidePrice + desiredTpPips * pipValue;
+      } else {
+        return sidePrice - desiredTpPips * pipValue;
+      }
+    }
+
+    // No TP provided: set to riskRewardRatio * SL distance
+    const slPips = Math.abs(sidePrice - enforcedStopLoss) / pipValue;
+    const desiredTpPips = Math.max(slPips * this.riskParams.riskRewardRatio, slPips * 2);
+    if (orderRequest.type === 'BUY') {
+      return sidePrice + desiredTpPips * pipValue;
+    } else {
+      return sidePrice - desiredTpPips * pipValue;
     }
   }
 
@@ -204,13 +275,8 @@ class OrderManager {
         }
       }
 
-      // Enhanced position size validation for real trading
+      // Margin requirement vs available equity (sizing is applied later; enforce using free margin check below)
       const requiredMargin = await this.calculateRequiredMargin(orderRequest, accountStatus.accountInfo);
-      const riskPercentage = (requiredMargin / accountStatus.accountInfo.equity) * 100; // Use equity instead of balance
-      
-      if (riskPercentage > this.riskParams.maxRiskPerTrade) {
-        return { allowed: false, reason: `Risk per trade too high: ${riskPercentage.toFixed(2)}% (max: ${this.riskParams.maxRiskPerTrade}%)` };
-      }
 
       // Ensure minimum account balance for trading
       if (accountStatus.accountInfo.balance < this.riskParams.minAccountBalance) {
@@ -237,6 +303,13 @@ class OrderManager {
         return { allowed: false, reason: `Maximum concurrent positions reached: ${accountStatus.openPositions}/${this.riskParams.maxConcurrentPositions}` };
       }
 
+      // Per-symbol exposure cap
+      const openPositions = await exnessAPI.getPositions();
+      const positionsForSymbol = openPositions.filter(p => p.symbol === orderRequest.symbol).length;
+      if (positionsForSymbol >= this.riskParams.maxPositionsPerSymbol) {
+        return { allowed: false, reason: `Per-symbol cap reached for ${orderRequest.symbol}: ${positionsForSymbol}/${this.riskParams.maxPositionsPerSymbol}` };
+      }
+
       // Check minimum lot size
       if (orderRequest.volume < 0.01) {
         return { allowed: false, reason: 'Order volume too small (minimum: 0.01 lots)' };
@@ -257,7 +330,7 @@ class OrderManager {
         return { allowed: false, reason: `Daily trade limit reached: ${this.dailyTradeCount}/${this.maxDailyTrades}` };
       }
 
-      // Check order frequency
+      // Check order frequency (more relaxed to allow multiple symbols in quick succession)
       const timeSinceLastOrder = Date.now() - this.lastOrderTime;
       if (timeSinceLastOrder < this.minOrderInterval) {
         return { allowed: false, reason: `Order frequency limit: ${Math.ceil((this.minOrderInterval - timeSinceLastOrder) / 1000)}s remaining` };
@@ -340,8 +413,8 @@ class OrderManager {
       }
 
       // Ensure minimum stop loss distance for safety
-      stopLossDistance = Math.max(stopLossDistance, 20); // Minimum 20 pips
-      stopLossDistance = Math.min(stopLossDistance, 100); // Maximum 100 pips
+      stopLossDistance = Math.max(this.riskParams.minStopLossPips, stopLossDistance); // Minimum pips
+      stopLossDistance = Math.min(this.riskParams.maxStopLossPips, stopLossDistance); // Maximum pips
 
       // Calculate position size based on risk management
       const pipValue = this.getPipValue(orderRequest.symbol);
@@ -392,12 +465,14 @@ class OrderManager {
     // Different stop loss distances for different symbol types
     let stopLossPips: number;
     if (symbol.includes('JPY')) {
-      stopLossPips = 40; // 40 pips for JPY pairs (more volatile)
+      stopLossPips = Math.max(this.riskParams.minStopLossPips, 40); // 40 pips for JPY pairs (more volatile)
     } else if (['GBPUSD', 'GBPJPY', 'EURGBP'].some(pair => symbol.includes(pair.replace('/', '')))) {
-      stopLossPips = 35; // 35 pips for GBP pairs (volatile)
+      stopLossPips = Math.max(this.riskParams.minStopLossPips, 35); // 35 pips for GBP pairs (volatile)
     } else {
-      stopLossPips = 30; // 30 pips for major pairs
+      stopLossPips = Math.max(this.riskParams.minStopLossPips, 30); // 30 pips for major pairs
     }
+
+    stopLossPips = Math.min(stopLossPips, this.riskParams.maxStopLossPips);
     
     if (type === 'BUY') {
       return price - (stopLossPips * pipValue);
@@ -407,23 +482,15 @@ class OrderManager {
   }
 
   private calculateOptimalTakeProfit(price: number, type: 'BUY' | 'SELL', symbol: string): number {
-    // Enhanced take profit calculation with 2:1 risk-reward ratio
+    // Enhanced take profit calculation with configured risk-reward ratio
     const pipValue = this.getPipValue(symbol);
-    
-    // Calculate take profit based on stop loss distance
-    let takeProfitPips: number;
-    if (symbol.includes('JPY')) {
-      takeProfitPips = 80; // 2:1 ratio for JPY pairs
-    } else if (['GBPUSD', 'GBPJPY', 'EURGBP'].some(pair => symbol.includes(pair.replace('/', '')))) {
-      takeProfitPips = 70; // 2:1 ratio for GBP pairs
-    } else {
-      takeProfitPips = 60; // 2:1 ratio for major pairs
-    }
+    const defaultStopPips = Math.max(this.riskParams.minStopLossPips, symbol.includes('JPY') ? 40 : 30);
+    const tpPips = Math.min(this.riskParams.maxStopLossPips * this.riskParams.riskRewardRatio, defaultStopPips * this.riskParams.riskRewardRatio);
     
     if (type === 'BUY') {
-      return price + (takeProfitPips * pipValue);
+      return price + (tpPips * pipValue);
     } else {
-      return price - (takeProfitPips * pipValue);
+      return price - (tpPips * pipValue);
     }
   }
 
