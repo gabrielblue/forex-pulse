@@ -11,6 +11,7 @@ import { AIPredictionSystem } from "@/components/AIPredictionSystem";
 import { ExnessIntegration } from "@/components/ExnessIntegration";
 import { LiveTradingDashboard } from "@/components/LiveTradingDashboard";
 import { EnhancedTradingBot } from "@/components/EnhancedTradingBot";
+import { AdvancedTradingControls } from "@/components/AdvancedTradingControls";
 import { initializeTradingSystem } from "@/lib/trading";
 import { useEffect } from "react";
 
@@ -59,6 +60,11 @@ const Index = () => {
           </div>
         </div>
 
+        {/* Advanced Trading Controls - Main Trading Interface */}
+        <div className="mb-8">
+          <AdvancedTradingControls />
+        </div>
+
         {/* Market Charts */}
         <div className="mb-8">
           <MarketCharts />
@@ -98,30 +104,10 @@ const Index = () => {
             <PredictionsCard />
           </div>
 
-          {/* Right Column - News & Calendar */}
+          {/* Right Column - Sidebar */}
           <div className="space-y-8">
             <NewsAlertsCard />
             <EconomicCalendar />
-          </div>
-        </div>
-
-        {/* Footer Stats */}
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="p-6 rounded-lg bg-gradient-to-br from-card to-card/80 border border-border/50">
-            <div className="text-2xl font-bold text-bullish">94.7%</div>
-            <div className="text-sm text-muted-foreground">AI Accuracy (30d)</div>
-          </div>
-          <div className="p-6 rounded-lg bg-gradient-to-br from-card to-card/80 border border-border/50">
-            <div className="text-2xl font-bold text-foreground">28</div>
-            <div className="text-sm text-muted-foreground">Currency Pairs</div>
-          </div>
-          <div className="p-6 rounded-lg bg-gradient-to-br from-card to-card/80 border border-border/50">
-            <div className="text-2xl font-bold text-accent">24/7</div>
-            <div className="text-sm text-muted-foreground">Market Monitoring</div>
-          </div>
-          <div className="p-6 rounded-lg bg-gradient-to-br from-card to-card/80 border border-border/50">
-            <div className="text-2xl font-bold text-primary">15</div>
-            <div className="text-sm text-muted-foreground">Data Sources</div>
           </div>
         </div>
       </div>
