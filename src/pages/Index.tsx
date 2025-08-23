@@ -12,6 +12,7 @@ import { ExnessIntegration } from "@/components/ExnessIntegration";
 import { LiveTradingDashboard } from "@/components/LiveTradingDashboard";
 import { EnhancedTradingBot } from "@/components/EnhancedTradingBot";
 import { AdvancedTradingControls } from "@/components/AdvancedTradingControls";
+import { MarketDataAnalysis } from "@/components/MarketDataAnalysis";
 import { initializeTradingSystem } from "@/lib/trading";
 import { useEffect } from "react";
 
@@ -63,6 +64,11 @@ const Index = () => {
         {/* Advanced Trading Controls - Main Trading Interface */}
         <div className="mb-8">
           <AdvancedTradingControls />
+        </div>
+
+        {/* Market Data Analysis - Buyer/Seller Data */}
+        <div className="mb-8">
+          <MarketDataAnalysis />
         </div>
 
         {/* Market Charts */}

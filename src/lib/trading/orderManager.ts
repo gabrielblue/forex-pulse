@@ -34,6 +34,8 @@ interface RegimeBoostConfig {
 	threshold: number; // expectancy threshold (0-100)
 	minBoostPct: number; // e.g., 0.10 for +10%
 	maxBoostPct: number; // e.g., 0.20 for +20%
+	sessionMultiplier: number; // Increase position size during London/NY sessions
+	volatilityMultiplier: number; // Increase size during high volatility
 }
 
 class OrderManager {
@@ -53,10 +55,12 @@ class OrderManager {
 	};
 
 	private regimeBoostConfig: RegimeBoostConfig = {
-		enabled: false,
-		threshold: 85,
-		minBoostPct: 0.10,
-		maxBoostPct: 0.20
+		enabled: true,
+		threshold: 80, // Aggressive: Lower threshold for more signals
+		minBoostPct: 0.15, // 15% minimum boost
+		maxBoostPct: 0.25, // 25% maximum boost
+		sessionMultiplier: 1.5, // Increase position size during London/NY sessions
+		volatilityMultiplier: 1.3 // Increase size during high volatility
 	};
 
 	private lastOrderTime: number = 0;
@@ -361,12 +365,28 @@ class OrderManager {
 				const t = excess / range; // 0..1 scale beyond threshold
 				const boostPct = this.regimeBoostConfig.minBoostPct + t * (this.regimeBoostConfig.maxBoostPct - this.regimeBoostConfig.minBoostPct);
 				const boostFactor = 1 + boostPct;
-				positionSize *= boostFactor;
+				
+				// Apply session-based multiplier for London/NY sessions
+				const currentHour = new Date().getUTCHours();
+				const isLondonSession = currentHour >= 8 && currentHour < 16; // 08:00-16:00 UTC
+				const isNewYorkSession = currentHour >= 13 && currentHour < 21; // 13:00-21:00 UTC
+				
+				let sessionMultiplier = 1.0;
+				if (isLondonSession || isNewYorkSession) {
+					sessionMultiplier = this.regimeBoostConfig.sessionMultiplier;
+					console.log(`🚀 London/NY session detected - applying ${sessionMultiplier}x multiplier`);
+				}
+				
+				// Apply both regime boost and session multiplier
+				positionSize *= boostFactor * sessionMultiplier;
+				
 				console.log('Regime boost applied:', {
 					regime: orderRequest.regime,
 					expectancy,
 					threshold: this.regimeBoostConfig.threshold,
-					boostPct: parseFloat((boostPct * 100).toFixed(2))
+					boostPct: parseFloat((boostPct * 100).toFixed(2)),
+					sessionMultiplier: parseFloat(sessionMultiplier.toFixed(2)),
+					finalMultiplier: parseFloat((boostFactor * sessionMultiplier).toFixed(2))
 				});
 			}
 

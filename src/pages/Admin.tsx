@@ -1,5 +1,5 @@
 import { Navigation } from "@/components/Navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -28,11 +28,13 @@ import {
   Zap,
   Bell,
   Target,
-  DollarSign
+  DollarSign,
+  Clock
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { Slider } from "@/components/ui/slider";
 
 interface BotSettings {
   enable_regime_boost: boolean;
@@ -386,219 +388,312 @@ const Admin = () => {
                 </Card>
               </TabsContent>
 
+              {/* Trading Tab */}
               <TabsContent value="trading" className="space-y-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <TrendingUp className="w-5 h-5" />
-                      Trading Configuration
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-6">
-                      {/* Regime Boost Settings */}
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Regime-Based Volume Boost */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5" />
+                        Regime-Based Volume Boost (AGGRESSIVE)
+                      </CardTitle>
+                      <CardDescription>
+                        Increase position size when market regime expectancy exceeds threshold for maximum profit
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="enable-regime-boost">Enable Regime Boost</Label>
+                        <Switch
+                          id="enable-regime-boost"
+                          checked={botSettings.enable_regime_boost ?? true}
+                          onCheckedChange={(checked) => setBotSettings(prev => ({ ...prev, enable_regime_boost: checked }))}
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="regime-threshold">
+                          Expectancy Threshold: {botSettings.regime_expectancy_threshold ?? 80}%
+                        </Label>
+                        <Slider
+                          id="regime-threshold"
+                          value={[botSettings.regime_expectancy_threshold ?? 80]}
+                          onValueChange={(value) => setBotSettings(prev => ({ ...prev, regime_expectancy_threshold: value[0] }))}
+                          max={100}
+                          min={60}
+                          step={5}
+                          className="w-full"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Aggressive: Lower threshold (80%) = More signals, higher profit potential
+                        </p>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="volume-boost-min">
+                          Min Boost: {((botSettings.volume_boost_min ?? 0.15) * 100).toFixed(0)}%
+                        </Label>
+                        <Slider
+                          id="volume-boost-min"
+                          value={[(botSettings.volume_boost_min ?? 0.15) * 100]}
+                          onValueChange={(value) => setBotSettings(prev => ({ ...prev, volume_boost_min: value[0] / 100 }))}
+                          max={50}
+                          min={10}
+                          step={5}
+                          className="w-full"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="volume-boost-max">
+                          Max Boost: {((botSettings.volume_boost_max ?? 0.25) * 100).toFixed(0)}%
+                        </Label>
+                        <Slider
+                          id="volume-boost-max"
+                          value={[(botSettings.volume_boost_max ?? 0.25) * 100]}
+                          onValueChange={(value) => setBotSettings(prev => ({ ...prev, volume_boost_max: value[0] / 100 }))}
+                          max={50}
+                          min={15}
+                          step={5}
+                          className="w-full"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Aggressive: 15-25% boost for maximum profit during high-probability setups
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Session-Based Trading */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Clock className="w-5 h-5" />
+                        Session-Based Trading (London/NY)
+                      </CardTitle>
+                      <CardDescription>
+                        Optimize trading during high-volatility London and New York sessions
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between p-3 border rounded-lg">
                           <div>
-                            <h4 className="font-semibold flex items-center gap-2">
-                              <Zap className="w-4 h-4" />
-                              Regime-Based Volume Boost
-                            </h4>
-                            <p className="text-sm text-muted-foreground">
-                              Automatically increase position size when regime expectancy exceeds threshold
-                            </p>
+                            <p className="font-medium">London Session</p>
+                            <p className="text-sm text-muted-foreground">08:00-16:00 UTC (High Volatility)</p>
                           </div>
-                          <Switch 
-                            checked={botSettings.enable_regime_boost}
-                            onCheckedChange={(checked) => setBotSettings(prev => ({ ...prev, enable_regime_boost: checked }))}
-                          />
+                          <Badge variant="default" className="bg-green-100 text-green-800">
+                            Active
+                          </Badge>
                         </div>
                         
-                        {botSettings.enable_regime_boost && (
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border rounded-lg">
-                            <div>
-                              <Label htmlFor="threshold">Expectancy Threshold (%)</Label>
-                              <Input
-                                id="threshold"
-                                type="number"
-                                min="0"
-                                max="100"
-                                value={botSettings.regime_expectancy_threshold}
-                                onChange={(e) => setBotSettings(prev => ({ 
-                                  ...prev, 
-                                  regime_expectancy_threshold: parseFloat(e.target.value) || 85 
-                                }))}
-                              />
-                            </div>
-                            <div>
-                              <Label htmlFor="min-boost">Min Boost (%)</Label>
-                              <Input
-                                id="min-boost"
-                                type="number"
-                                min="0"
-                                max="50"
-                                step="0.1"
-                                value={botSettings.volume_boost_min * 100}
-                                onChange={(e) => setBotSettings(prev => ({ 
-                                  ...prev, 
-                                  volume_boost_min: (parseFloat(e.target.value) || 10) / 100 
-                                }))}
-                              />
-                            </div>
-                            <div>
-                              <Label htmlFor="max-boost">Max Boost (%)</Label>
-                              <Input
-                                id="max-boost"
-                                type="number"
-                                min="0"
-                                max="50"
-                                step="0.1"
-                                value={botSettings.volume_boost_max * 100}
-                                onChange={(e) => setBotSettings(prev => ({ 
-                                  ...prev, 
-                                  volume_boost_max: (parseFloat(e.target.value) || 20) / 100 
-                                }))}
-                              />
-                            </div>
+                        <div className="flex items-center justify-between p-3 border rounded-lg">
+                          <div>
+                            <p className="font-medium">New York Session</p>
+                            <p className="text-sm text-muted-foreground">13:00-21:00 UTC (High Volatility)</p>
                           </div>
-                        )}
-                      </div>
-
-                      {/* News Blackout Settings */}
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h4 className="font-semibold flex items-center gap-2">
-                            <Bell className="w-4 h-4" />
-                            News Blackout
-                          </h4>
-                          <p className="text-sm text-muted-foreground">
-                            Prevent trading during high-impact economic events
-                          </p>
+                          <Badge variant="default" className="bg-green-100 text-green-800">
+                            Active
+                          </Badge>
                         </div>
-                        <Switch 
-                          checked={botSettings.news_blackout_enabled}
+                        
+                        <div className="flex items-center justify-between p-3 border rounded-lg">
+                          <div>
+                            <p className="font-medium">Asian Session</p>
+                            <p className="text-sm text-muted-foreground">00:00-08:00 UTC (Lower Volatility)</p>
+                          </div>
+                          <Badge variant="outline" className="text-muted-foreground">
+                            Limited
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-sm text-blue-800">
+                          <strong>Session Multiplier:</strong> Position size increases by 1.5x during London/NY sessions for maximum profit
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Trading Pairs & Gold */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <DollarSign className="w-5 h-5" />
+                        Trading Pairs & Gold
+                      </CardTitle>
+                      <CardDescription>
+                        Major currency pairs and gold for maximum profit opportunities
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 border rounded-lg bg-green-50 border-green-200">
+                          <p className="font-medium text-green-800">EUR/USD</p>
+                          <p className="text-xs text-green-600">Most liquid, tight spreads</p>
+                        </div>
+                        <div className="p-3 border rounded-lg bg-green-50 border-green-200">
+                          <p className="font-medium text-green-800">GBP/USD</p>
+                          <p className="text-xs text-green-600">Good volatility, clear trends</p>
+                        </div>
+                        <div className="p-3 border rounded-lg bg-green-50 border-green-200">
+                          <p className="font-medium text-green-800">USD/JPY</p>
+                          <p className="text-xs text-green-600">Trend-following, predictable</p>
+                        </div>
+                        <div className="p-3 border rounded-lg bg-yellow-50 border-yellow-200">
+                          <p className="font-medium text-yellow-800">XAU/USD</p>
+                          <p className="text-xs text-yellow-600">Gold - Safe haven, high volatility</p>
+                        </div>
+                      </div>
+                      
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-sm text-amber-800">
+                          <strong>Gold Trading:</strong> XAU/USD offers high volatility and safe-haven appeal during market uncertainty
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* News Blackout */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <AlertTriangle className="w-5 h-5" />
+                        News Blackout
+                      </CardTitle>
+                      <CardDescription>
+                        Prevent trading during high-impact economic news events
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="news-blackout">Enable News Blackout</Label>
+                        <Switch
+                          id="news-blackout"
+                          checked={botSettings.news_blackout_enabled ?? true}
                           onCheckedChange={(checked) => setBotSettings(prev => ({ ...prev, news_blackout_enabled: checked }))}
                         />
                       </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Automatically pauses trading 30 minutes before and after high-impact news events
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
 
-                      {/* Trailing Stop Settings */}
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h4 className="font-semibold flex items-center gap-2">
-                              <Target className="w-4 h-4" />
-                              Trailing Stop Loss
-                            </h4>
-                            <p className="text-sm text-muted-foreground">
-                              Automatically adjust stop loss as position moves in profit
-                            </p>
-                          </div>
-                          <Switch 
-                            checked={botSettings.enable_trailing_stop}
-                            onCheckedChange={(checked) => setBotSettings(prev => ({ ...prev, enable_trailing_stop: checked }))}
-                          />
-                        </div>
-                        
-                        {botSettings.enable_trailing_stop && (
-                          <div className="p-4 border rounded-lg">
-                            <Label htmlFor="trailing-distance">Trailing Distance (pips)</Label>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Trailing Stop Loss */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Target className="w-5 h-5" />
+                        Trailing Stop Loss
+                      </CardTitle>
+                      <CardDescription>
+                        Automatically adjust stop loss as trade moves into profit
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="enable-trailing-stop">Enable Trailing Stop</Label>
+                        <Switch
+                          id="enable-trailing-stop"
+                          checked={botSettings.enable_trailing_stop ?? true}
+                          onCheckedChange={(checked) => setBotSettings(prev => ({ ...prev, enable_trailing_stop: checked }))}
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="trailing-distance">
+                          Trailing Distance: {botSettings.trailing_stop_distance ?? 20} pips
+                        </Label>
+                        <Slider
+                          id="trailing-distance"
+                          value={[botSettings.trailing_stop_distance ?? 20]}
+                          onValueChange={(value) => setBotSettings(prev => ({ ...prev, trailing_stop_distance: value[0] }))}
+                          max={50}
+                          min={10}
+                          step={5}
+                          className="w-full"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Distance in pips to trail behind current price
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Partial Profit Taking */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <DollarSign className="w-5 h-5" />
+                        Partial Profit Taking
+                      </CardTitle>
+                      <CardDescription>
+                        Take partial profits at predefined levels
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="enable-partial-profits">Enable Partial Profits</Label>
+                        <Switch
+                          id="enable-partial-profits"
+                          checked={botSettings.enable_partial_profits ?? true}
+                          onCheckedChange={(checked) => setBotSettings(prev => ({ ...prev, enable_partial_profits: checked }))}
+                        />
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <Label>Profit Levels</Label>
+                        {botSettings.partial_profit_levels.map((level, index) => (
+                          <div key={index} className="flex gap-2 items-center">
                             <Input
-                              id="trailing-distance"
                               type="number"
-                              min="5"
-                              max="100"
-                              value={botSettings.trailing_stop_distance}
-                              onChange={(e) => setBotSettings(prev => ({ 
-                                ...prev, 
-                                trailing_stop_distance: parseInt(e.target.value) || 20 
-                              }))}
+                              placeholder="% to close"
+                              value={level.percentage}
+                              onChange={(e) => updatePartialProfitLevel(index, 'percentage', parseFloat(e.target.value))}
+                              className="w-20"
                             />
+                            <Input
+                              type="number"
+                              placeholder="Distance (pips)"
+                              value={level.distance}
+                              onChange={(e) => updatePartialProfitLevel(index, 'distance', parseFloat(e.target.value))}
+                              className="w-24"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => removePartialProfitLevel(index)}
+                            >
+                              Remove
+                            </Button>
                           </div>
-                        )}
-                      </div>
-
-                      {/* Partial Profit Settings */}
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h4 className="font-semibold flex items-center gap-2">
-                              <DollarSign className="w-4 h-4" />
-                              Partial Profit Taking
-                            </h4>
-                            <p className="text-sm text-muted-foreground">
-                              Automatically close partial positions at specified profit levels
-                            </p>
-                          </div>
-                          <Switch 
-                            checked={botSettings.enable_partial_profits}
-                            onCheckedChange={(checked) => setBotSettings(prev => ({ ...prev, enable_partial_profits: checked }))}
-                          />
-                        </div>
+                        ))}
                         
-                        {botSettings.enable_partial_profits && (
-                          <div className="space-y-4 p-4 border rounded-lg">
-                            <div className="flex items-center justify-between">
-                              <h5 className="font-medium">Profit Levels</h5>
-                              <Button size="sm" onClick={addPartialProfitLevel}>
-                                Add Level
-                              </Button>
-                            </div>
-                            
-                            {botSettings.partial_profit_levels.map((level, index) => (
-                              <div key={index} className="flex items-center gap-4">
-                                <div className="flex-1">
-                                  <Label>Percentage to Close (%)</Label>
-                                  <Input
-                                    type="number"
-                                    min="10"
-                                    max="90"
-                                    value={level.percentage}
-                                    onChange={(e) => updatePartialProfitLevel(index, 'percentage', parseInt(e.target.value) || 50)}
-                                  />
-                                </div>
-                                <div className="flex-1">
-                                  <Label>Distance (pips)</Label>
-                                  <Input
-                                    type="number"
-                                    min="10"
-                                    max="200"
-                                    value={level.distance}
-                                    onChange={(e) => updatePartialProfitLevel(index, 'distance', parseInt(e.target.value) || 30)}
-                                  />
-                                </div>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  onClick={() => removePartialProfitLevel(index)}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            ))}
-                            
-                            {botSettings.partial_profit_levels.length === 0 && (
-                              <p className="text-sm text-muted-foreground text-center py-4">
-                                No profit levels configured. Click "Add Level" to create one.
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Save Button */}
-                      <div className="flex justify-end pt-4">
-                        <Button 
-                          onClick={saveBotSettings} 
-                          disabled={isSaving}
-                          className="flex items-center gap-2"
+                        <Button
+                          variant="outline"
+                          onClick={addPartialProfitLevel}
+                          className="w-full"
                         >
-                          <Save className="w-4 h-4" />
-                          {isSaving ? 'Saving...' : 'Save Settings'}
+                          Add Profit Level
                         </Button>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Save Button */}
+                <div className="flex justify-center">
+                  <Button onClick={saveBotSettings} disabled={isSaving} size="lg" className="px-8">
+                    {isSaving ? 'Saving...' : 'Save Trading Settings'}
+                  </Button>
+                </div>
               </TabsContent>
 
               <TabsContent value="system" className="space-y-6">
