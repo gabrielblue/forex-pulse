@@ -3,6 +3,9 @@ import { exnessAPI, ExnessCredentials } from './exnessApi';
 import { orderManager } from './orderManager';
 import { signalProcessor } from './signalProcessor';
 import { marketAnalyzer } from './marketAnalyzer';
+import { MeanReversionAlpha } from './strategies/meanReversionAlpha';
+import { DynamicAllocationEngine } from './strategies/dynamicAllocation';
+import { PaperTradingBacktester } from './backtesting/paperTradingBacktester';
 import { worldClassStrategies } from './strategies/worldClassStrategies';
 
 export interface BotStatus {
@@ -87,6 +90,11 @@ class TradingBot {
     newsAvoidance: true // Pause trading during high-impact news
   };
 
+  // Advanced trading components
+  private meanReversionAlpha: MeanReversionAlpha;
+  private allocationEngine: DynamicAllocationEngine;
+  private paperBacktester: PaperTradingBacktester;
+
   async initialize(): Promise<void> {
     try {
       await this.loadConfiguration();
@@ -95,6 +103,9 @@ class TradingBot {
       
       // Initialize enhanced features
       await this.initializeEnhancedFeatures();
+      
+      // Initialize advanced trading components
+      this.initializeAdvancedComponents();
       
       console.log('🤖 Trading bot initialized successfully with enhanced Exness integration');
     } catch (error) {
@@ -118,6 +129,52 @@ class TradingBot {
       console.log('✨ Enhanced trading features initialized');
     } catch (error) {
       console.error('Failed to initialize enhanced features:', error);
+    }
+  }
+
+  private initializeAdvancedComponents(): void {
+    try {
+      // Initialize mean reversion alpha
+      this.meanReversionAlpha = new MeanReversionAlpha({
+        enabled: true,
+        riskPerTrade: 0.3,
+        maxPositions: 3
+      });
+      console.log('🔄 Mean reversion alpha initialized');
+
+      // Initialize dynamic allocation engine
+      this.allocationEngine = new DynamicAllocationEngine({
+        enabled: true,
+        rebalanceInterval: 24,
+        maxAllocationPerAlpha: 0.4
+      });
+      console.log('⚖️ Dynamic allocation engine initialized');
+
+      // Initialize paper trading backtester
+      this.paperBacktester = new PaperTradingBacktester({
+        enabled: true,
+        updateInterval: 30,
+        maxConcurrentTrades: 10,
+        enabledPairs: this.configuration.enabledPairs,
+        alphas: { meanReversion: true },
+        riskManagement: {
+          maxRiskPerTrade: 0.5,
+          maxDailyLoss: 2.0,
+          maxDrawdown: 5.0
+        },
+        journaling: {
+          enabled: true,
+          saveToSupabase: true
+        }
+      });
+      console.log('📊 Paper trading backtester initialized');
+
+      // Start paper trading backtester
+      this.paperBacktester.start();
+      console.log('🚀 Paper trading backtester started');
+
+    } catch (error) {
+      console.error('Failed to initialize advanced components:', error);
     }
   }
 
@@ -823,6 +880,34 @@ class TradingBot {
 
   getStatus(): BotStatus {
     return { ...this.status };
+  }
+
+  // Advanced component status methods
+  getMeanReversionStatus(): any {
+    return this.meanReversionAlpha ? {
+      enabled: this.meanReversionAlpha.getConfig().enabled,
+      activePositions: this.meanReversionAlpha.getActivePositionsCount(),
+      config: this.meanReversionAlpha.getConfig()
+    } : null;
+  }
+
+  getAllocationStatus(): any {
+    return this.allocationEngine ? {
+      enabled: this.allocationEngine.getConfig().enabled,
+      shouldRebalance: this.allocationEngine.shouldRebalance(),
+      summary: this.allocationEngine.getAllocationSummary(),
+      allocations: this.allocationEngine.calculateAllocations()
+    } : null;
+  }
+
+  getBacktestStatus(): any {
+    return this.paperBacktester ? {
+      isRunning: this.paperBacktester.getStatus().isRunning,
+      activeTrades: this.paperBacktester.getStatus().activeTrades,
+      totalTrades: this.paperBacktester.getStatus().totalTrades,
+      dailyPnL: this.paperBacktester.getStatus().dailyPnL,
+      results: this.paperBacktester.getResults()
+    } : null;
   }
 
   getConfiguration(): BotConfiguration {
