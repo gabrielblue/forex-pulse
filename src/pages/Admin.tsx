@@ -65,6 +65,7 @@ const Admin = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [diagnosticData, setDiagnosticData] = useState<any>(null);
 
   const users = [
     {
@@ -195,6 +196,31 @@ const Admin = () => {
       toast.error('Failed to save settings');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const runDiagnostics = async () => {
+    try {
+      // Check if tradingBot is available
+      if (typeof window !== 'undefined' && (window as any).tradingBot) {
+        const bot = (window as any).tradingBot;
+        
+        const diagnosticData = {
+          botStatus: bot.getStatus(),
+          meanReversionStatus: bot.getMeanReversionStatus(),
+          backtestStatus: bot.getBacktestStatus(),
+          allocationStatus: bot.getAllocationStatus(),
+          timestamp: new Date().toISOString()
+        };
+        
+        setDiagnosticData(diagnosticData);
+        toast.success('Diagnostics completed!');
+      } else {
+        toast.error('Trading bot not found. Make sure the app is running.');
+      }
+    } catch (error) {
+      console.error('Diagnostic error:', error);
+      toast.error('Failed to run diagnostics');
     }
   };
 
@@ -889,6 +915,54 @@ const Admin = () => {
                     <span className="text-sm">API Calls (1h)</span>
                     <span className="text-sm font-medium">2,847</span>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Trading Bot Diagnostics */}
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Search className="w-5 h-5" />
+                  Trading Bot Diagnostics
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <Button 
+                    onClick={runDiagnostics} 
+                    className="w-full"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? 'Running...' : 'Run Diagnostics'}
+                  </Button>
+                  
+                  {diagnosticData && (
+                    <div className="space-y-3">
+                      <div className="text-sm font-medium">Last Run: {new Date(diagnosticData.timestamp).toLocaleString()}</div>
+                      
+                      <div className="space-y-2">
+                        <div className="text-xs font-medium text-muted-foreground">Bot Status:</div>
+                        <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-20">
+                          {JSON.stringify(diagnosticData.botStatus, null, 2)}
+                        </pre>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="text-xs font-medium text-muted-foreground">Mean Reversion:</div>
+                        <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-20">
+                          {JSON.stringify(diagnosticData.meanReversionStatus, null, 2)}
+                        </pre>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="text-xs font-medium text-muted-foreground">Paper Backtest:</div>
+                        <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-20">
+                          {JSON.stringify(diagnosticData.backtestStatus, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
