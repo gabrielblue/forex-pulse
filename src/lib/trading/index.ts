@@ -5,6 +5,55 @@ export { tradingBot } from './tradingBot';
 export { signalProcessor } from './signalProcessor';
 export { marketAnalyzer } from './marketAnalyzer';
 
+// Immediate global setup for debugging
+if (typeof window !== 'undefined') {
+  console.log('🔧 Setting up immediate global helpers...');
+  
+  (window as any).debugTradingSystem = () => {
+    console.log('🔍 Debug: Trading System Check');
+    console.log('Window available:', typeof window !== 'undefined');
+    console.log('Trading Bot:', (window as any).tradingBot);
+    console.log('Order Manager:', (window as any).orderManager);
+    console.log('Signal Processor:', (window as any).signalProcessor);
+    console.log('Initialized:', (window as any).tradingSystemInitialized);
+    console.log('Initializing:', (window as any).tradingSystemInitializing);
+    console.log('Available functions:', Object.keys(window).filter(key => key.includes('trading') || key.includes('check') || key.includes('force')));
+  };
+  
+  (window as any).manualSetup = () => {
+    console.log('🔧 Manual setup of trading functions...');
+    if ((window as any).tradingBot) {
+      (window as any).checkTradingSystem = () => {
+        console.log('🔍 Trading System Status:');
+        console.log('Trading Bot:', (window as any).tradingBot);
+        console.log('Order Manager:', (window as any).orderManager);
+        console.log('Signal Processor:', (window as any).signalProcessor);
+        return true;
+      };
+      
+      (window as any).forceTradingMode = () => {
+        console.log('🚀 Forcing trading mode...');
+        (window as any).tradingBot.setConfiguration({
+          minConfidence: 50,
+          aggressiveMode: true
+        });
+        console.log('✅ Trading mode activated with 50% confidence');
+      };
+      
+      (window as any).quickStatus = () => {
+        console.log('🤖 Trading Bot Status:', (window as any).tradingBot.getStatus ? (window as any).tradingBot.getStatus() : 'Available');
+        return true;
+      };
+      
+      console.log('✅ Manual setup complete');
+    } else {
+      console.log('❌ Trading bot not available for manual setup');
+    }
+  };
+  
+  console.log('🌐 Immediate global helpers loaded');
+}
+
 // Types
 export type { ExnessCredentials, TradeOrder, AccountInfo, Position } from './exnessApi';
 export type { OrderRequest, RiskParameters } from './orderManager';
@@ -49,11 +98,15 @@ export const initializeTradingSystem = async () => {
     
     // Make trading system globally accessible for debugging
     if (typeof window !== 'undefined') {
+      console.log('🔧 Setting up global trading system...');
+      
       (window as any).tradingBot = tradingBot;
       (window as any).orderManager = orderManager;
       (window as any).signalProcessor = signalProcessor;
       (window as any).tradingSystemInitialized = true;
       (window as any).tradingSystemInitializing = false;
+      
+      console.log('🔧 Adding global helper functions...');
       
       // Add global helper functions
       (window as any).checkTradingSystem = () => {
@@ -118,6 +171,9 @@ export const initializeTradingSystem = async () => {
       };
       
       console.log('🌐 Trading system made globally accessible with helper functions');
+      console.log('🔧 Available functions:', Object.keys(window).filter(key => ['checkTradingSystem', 'forceTradingMode', 'quickStatus', 'checkInitStatus'].includes(key)));
+    } else {
+      console.log('❌ Window not available for global setup');
     }
     
     console.log('✅ Trading system initialized successfully');
