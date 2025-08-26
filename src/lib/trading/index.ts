@@ -77,11 +77,16 @@ export const tradeExecutor = {
 export const initializeTradingSystem = async () => {
   try {
     console.log('🚀 Initializing trading system...');
+    console.log('🔧 Window available:', typeof window !== 'undefined');
     
     // Set global initialization flag
     if (typeof window !== 'undefined') {
+      console.log('🔧 Setting initialization flags...');
       (window as any).tradingSystemInitializing = true;
       (window as any).tradingSystemInitialized = false;
+      console.log('🔧 Flags set:', { initializing: true, initialized: false });
+    } else {
+      console.log('❌ Window not available during initialization');
     }
     
     // Initialize order manager
