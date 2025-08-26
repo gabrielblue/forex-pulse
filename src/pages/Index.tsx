@@ -13,6 +13,7 @@ import { LiveTradingDashboard } from "@/components/LiveTradingDashboard";
 import { EnhancedTradingBot } from "@/components/EnhancedTradingBot";
 import { AdvancedTradingControls } from "@/components/AdvancedTradingControls";
 import { MarketDataAnalysis } from "@/components/MarketDataAnalysis";
+import { TradingDebugger } from "@/components/TradingDebugger";
 import { initializeTradingSystem } from "@/lib/trading";
 import { useEffect } from "react";
 
@@ -69,6 +70,11 @@ const Index = () => {
         {/* Market Data Analysis - Buyer/Seller Data */}
         <div className="mb-8">
           <MarketDataAnalysis />
+        </div>
+
+        {/* Trading Debugger - Debug Trading System */}
+        <div className="mb-8">
+          <TradingDebugger />
         </div>
 
         {/* Market Charts */}
