@@ -74,6 +74,46 @@ class OrderManager {
 		console.log('OrderManager initialized with enhanced risk parameters for real trading');
 	}
 
+	// NEW: approximate ATR from recent ticks (1m bars)
+	private async estimateATRFromTicks(symbol: string, minutes: number = 14): Promise<number> {
+		try {
+			const ticks = await exnessAPI.getTicks(symbol, minutes * 1200); // ~20 ticks/sec * 60 * minutes (upper bound)
+			if (!ticks.length) return 0;
+
+			// Bucket ticks into 1m candles: high, low, close
+			const byMinute = new Map<number, { high: number; low: number; close: number }>();
+			for (const t of ticks) {
+				const minute = Math.floor(t.time / 60_000) * 60_000;
+				const mid = (t.bid + t.ask) / 2;
+				const b = byMinute.get(minute);
+				if (!b) byMinute.set(minute, { high: mid, low: mid, close: mid });
+				else {
+					b.high = Math.max(b.high, mid);
+					b.low = Math.min(b.low, mid);
+					b.close = mid;
+				}
+			}
+			const candles = Array.from(byMinute.entries()).sort((a,b)=>a[0]-b[0]).map(([,v])=>v);
+			if (candles.length < 2) return 0;
+
+			// True Range and ATR
+			let prevClose = candles[0].close;
+			const TRs: number[] = [];
+			for (let i=1;i<candles.length;i++) {
+				const c = candles[i];
+				const tr = Math.max(c.high - c.low, Math.abs(c.high - prevClose), Math.abs(c.low - prevClose));
+				TRs.push(tr);
+				prevClose = c.close;
+			}
+			const n = Math.min(TRs.length, minutes);
+			const atr = TRs.slice(-n).reduce((s,x)=>s+x,0)/n;
+			return atr;
+		} catch (e) {
+			console.error('ATR estimation failed:', e);
+			return 0;
+		}
+	}
+
 	private async loadRiskParameters(): Promise<void> {
 		try {
 			const { data: { user } } = await supabase.auth.getUser();
@@ -100,20 +140,10 @@ class OrderManager {
 					maxLeverage: 500,
 					emergencyStopEnabled: true
 				};
-				
 				this.maxDailyTrades = Math.min(parseInt(botSettings.max_daily_trades?.toString() || '10'), 20);
-
-				// Load regime-based boost config if present; keep safe defaults
-				this.regimeBoostConfig = {
-					enabled: Boolean(botSettings.enable_regime_boost ?? false),
-					threshold: Math.max(0, Math.min(100, parseFloat(botSettings.regime_expectancy_threshold?.toString() || '85'))),
-					minBoostPct: Math.max(0, Math.min(0.5, parseFloat(botSettings.volume_boost_min?.toString() || '0.10'))),
-					maxBoostPct: Math.max(0, Math.min(0.5, parseFloat(botSettings.volume_boost_max?.toString() || '0.20')))
-				};
 			}
 			
 			console.log('Enhanced risk parameters loaded for real trading:', this.riskParams);
-			console.log('Regime boost configuration:', this.regimeBoostConfig);
 		} catch (error) {
 			console.error('Failed to load risk parameters:', error);
 		}
@@ -814,6 +844,5 @@ class OrderManager {
 	}
 }
 
-const orderManager = new OrderManager();
-export { orderManager };
+export const orderManager = new OrderManager();
 export type { TradeOrder } from './exnessApi';
