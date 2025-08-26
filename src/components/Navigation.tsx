@@ -10,7 +10,8 @@ import {
   Menu,
   X,
   Activity,
-  Settings
+  Settings,
+  Search
 } from "lucide-react";
 
 export const Navigation = () => {
@@ -25,6 +26,7 @@ export const Navigation = () => {
     { label: "Calendar", icon: Calendar, path: "/calendar" },
     { label: "Learn", icon: BookOpen, path: "/learn" },
     { label: "Admin", icon: Settings, path: "/admin" },
+    { label: "Diagnostics", icon: Search, path: "/diagnostics" },
   ];
 
   const handleNavigation = (path: string) => {
