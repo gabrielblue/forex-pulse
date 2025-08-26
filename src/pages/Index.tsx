@@ -20,6 +20,64 @@ const Index = () => {
   useEffect(() => {
     // Initialize trading system when app loads
     initializeTradingSystem();
+    
+    // Also set up global functions immediately for debugging
+    const setupGlobalFunctions = () => {
+      console.log('🔧 Setting up global functions from Index component...');
+      
+      // Check if trading bot is available
+      const checkTradingBot = () => {
+        const bot = (window as any).tradingBot;
+        if (bot) {
+          console.log('✅ Trading bot found:', bot);
+          return true;
+        } else {
+          console.log('❌ Trading bot not found');
+          return false;
+        }
+      };
+      
+      // Set up global functions
+      (window as any).checkTradingBot = checkTradingBot;
+      (window as any).debugTrading = () => {
+        console.log('🔍 Debug Trading System:');
+        console.log('Trading Bot:', (window as any).tradingBot);
+        console.log('Order Manager:', (window as any).orderManager);
+        console.log('Signal Processor:', (window as any).signalProcessor);
+        console.log('Initialized:', (window as any).tradingSystemInitialized);
+        console.log('Initializing:', (window as any).tradingSystemInitializing);
+      };
+      
+      (window as any).forceTrading = () => {
+        if ((window as any).tradingBot && (window as any).tradingBot.setConfiguration) {
+          console.log('🚀 Forcing trading mode...');
+          (window as any).tradingBot.setConfiguration({
+            minConfidence: 50,
+            aggressiveMode: true
+          });
+          console.log('✅ Trading mode activated with 50% confidence');
+        } else {
+          console.log('❌ Trading bot not available or setConfiguration method missing');
+        }
+      };
+      
+      console.log('✅ Global functions set up from Index component');
+      console.log('Available: checkTradingBot, debugTrading, forceTrading');
+    };
+    
+    // Set up global functions immediately
+    setupGlobalFunctions();
+    
+    // Also set up a timer to check periodically
+    const interval = setInterval(() => {
+      if ((window as any).tradingBot) {
+        console.log('🌐 Trading bot detected, setting up additional functions...');
+        setupGlobalFunctions();
+        clearInterval(interval);
+      }
+    }, 1000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   return (
