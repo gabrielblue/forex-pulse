@@ -24,10 +24,20 @@
       // Inline Trading Bot Debug Script
       console.log('🔧 Loading Inline Trading Bot Debug Script...');
       
-      // Set up debug functions immediately
-      window.debugTradingSystem = function() {
-        console.log('🔍 Debug: Trading System Check');
-        console.log('Window available:', typeof window !== 'undefined');
+      // Set up global trading functions immediately
+      window.checkTradingBot = function() {
+        const bot = window.tradingBot;
+        if (bot) {
+          console.log('✅ Trading bot found:', bot);
+          return true;
+        } else {
+          console.log('❌ Trading bot not found');
+          return false;
+        }
+      };
+      
+      window.debugTrading = function() {
+        console.log('🔍 Debug Trading System:');
         console.log('Trading Bot:', window.tradingBot);
         console.log('Order Manager:', window.orderManager);
         console.log('Signal Processor:', window.signalProcessor);
@@ -38,41 +48,16 @@
         ));
       };
       
-      window.manualSetup = function() {
-        console.log('🔧 Manual setup of trading functions...');
-        if (window.tradingBot) {
-          window.checkTradingSystem = function() {
-            console.log('🔍 Trading System Status:');
-            console.log('Trading Bot:', window.tradingBot);
-            console.log('Order Manager:', window.orderManager);
-            console.log('Signal Processor:', window.signalProcessor);
-            return true;
-          };
-          
-          window.forceTradingMode = function() {
-            console.log('🚀 Forcing trading mode...');
-            if (window.tradingBot.setConfiguration) {
-              window.tradingBot.setConfiguration({
-                minConfidence: 50,
-                aggressiveMode: true
-              });
-              console.log('✅ Trading mode activated with 50% confidence');
-            } else {
-              console.log('❌ setConfiguration method not available');
-            }
-          };
-          
-          window.quickStatus = function() {
-            console.log('🤖 Trading Bot Status:', window.tradingBot);
-            if (window.tradingBot.getStatus) {
-              console.log('Status:', window.tradingBot.getStatus());
-            }
-            return true;
-          };
-          
-          console.log('✅ Manual setup complete');
+      window.forceTrading = function() {
+        if (window.tradingBot && window.tradingBot.setConfiguration) {
+          console.log('🚀 Forcing trading mode...');
+          window.tradingBot.setConfiguration({
+            minConfidence: 50,
+            aggressiveMode: true
+          });
+          console.log('✅ Trading mode activated with 50% confidence');
         } else {
-          console.log('❌ Trading bot not available for manual setup');
+          console.log('❌ Trading bot not available or setConfiguration method missing');
         }
       };
       
@@ -98,8 +83,8 @@
         }
       };
       
-      console.log('✅ Inline debug functions loaded and ready!');
-      console.log('Available functions: debugTradingSystem, manualSetup, checkInitStatus');
+      console.log('✅ Inline global trading functions loaded and ready!');
+      console.log('Available functions: checkTradingBot, debugTrading, forceTrading, checkInitStatus');
     </script>
   </body>
 </html>
