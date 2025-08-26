@@ -54,7 +54,70 @@ export const initializeTradingSystem = async () => {
       (window as any).signalProcessor = signalProcessor;
       (window as any).tradingSystemInitialized = true;
       (window as any).tradingSystemInitializing = false;
-      console.log('🌐 Trading system made globally accessible');
+      
+      // Add global helper functions
+      (window as any).checkTradingSystem = () => {
+        console.log('🔍 Trading System Status:');
+        console.log('Trading Bot:', (window as any).tradingBot);
+        console.log('Order Manager:', (window as any).orderManager);
+        console.log('Signal Processor:', (window as any).signalProcessor);
+        
+        if ((window as any).tradingBot) {
+          console.log('✅ Trading system is ready!');
+          return true;
+        } else {
+          console.log('❌ Trading system not initialized');
+          return false;
+        }
+      };
+      
+      (window as any).forceTradingMode = () => {
+        if ((window as any).tradingBot) {
+          console.log('🚀 Forcing trading mode...');
+          (window as any).tradingBot.setConfiguration({
+            minConfidence: 50, // Lower threshold for testing
+            aggressiveMode: true
+          });
+          console.log('✅ Trading mode activated with 50% confidence');
+        } else {
+          console.log('❌ Trading bot not available');
+        }
+      };
+      
+      (window as any).quickStatus = () => {
+        const bot = (window as any).tradingBot;
+        if (bot) {
+          console.log('🤖 Trading Bot Status:', bot.getStatus ? bot.getStatus() : 'Available but no getStatus method');
+          return true;
+        } else {
+          console.log('❌ Trading Bot not found');
+          return false;
+        }
+      };
+      
+      (window as any).checkInitStatus = () => {
+        console.log('🔍 Initialization Status:');
+        console.log('Initializing:', (window as any).tradingSystemInitializing);
+        console.log('Initialized:', (window as any).tradingSystemInitialized);
+        console.log('Error:', (window as any).tradingSystemError || 'None');
+        console.log('Trading Bot:', (window as any).tradingBot ? 'Available' : 'Not Available');
+        
+        if ((window as any).tradingSystemInitialized) {
+          console.log('✅ System fully initialized!');
+          return true;
+        } else if ((window as any).tradingSystemInitializing) {
+          console.log('⏳ System still initializing...');
+          return 'initializing';
+        } else if ((window as any).tradingSystemError) {
+          console.log('❌ Initialization failed:', (window as any).tradingSystemError);
+          return false;
+        } else {
+          console.log('❓ Initialization not started');
+          return 'not_started';
+        }
+      };
+      
+      console.log('🌐 Trading system made globally accessible with helper functions');
     }
     
     console.log('✅ Trading system initialized successfully');
@@ -84,78 +147,3 @@ export const cleanupTradingSystem = async () => {
     console.error('❌ Error during cleanup:', error);
   }
 };
-
-// Global helper functions for debugging - set up immediately
-const setupGlobalHelpers = () => {
-  if (typeof window !== 'undefined') {
-    // Check trading system status
-    (window as any).checkTradingSystem = () => {
-      console.log('🔍 Trading System Status:');
-      console.log('Trading Bot:', (window as any).tradingBot);
-      console.log('Order Manager:', (window as any).orderManager);
-      console.log('Signal Processor:', (window as any).signalProcessor);
-      
-      if ((window as any).tradingBot) {
-        console.log('✅ Trading system is ready!');
-        return true;
-      } else {
-        console.log('❌ Trading system not initialized');
-        return false;
-      }
-    };
-    
-    // Force trading mode
-    (window as any).forceTradingMode = () => {
-      if ((window as any).tradingBot) {
-        console.log('🚀 Forcing trading mode...');
-        (window as any).tradingBot.setConfiguration({
-          minConfidence: 50, // Lower threshold for testing
-          aggressiveMode: true
-        });
-        console.log('✅ Trading mode activated with 50% confidence');
-      } else {
-        console.log('❌ Trading bot not available');
-      }
-    };
-    
-    // Quick status check
-    (window as any).quickStatus = () => {
-      const bot = (window as any).tradingBot;
-      if (bot) {
-        console.log('🤖 Trading Bot Status:', bot.getStatus ? bot.getStatus() : 'Available but no getStatus method');
-        return true;
-      } else {
-        console.log('❌ Trading Bot not found');
-        return false;
-      }
-    };
-    
-    // Check initialization status
-    (window as any).checkInitStatus = () => {
-      console.log('🔍 Initialization Status:');
-      console.log('Initializing:', (window as any).tradingSystemInitializing);
-      console.log('Initialized:', (window as any).tradingSystemInitialized);
-      console.log('Error:', (window as any).tradingSystemError || 'None');
-      console.log('Trading Bot:', (window as any).tradingBot ? 'Available' : 'Not Available');
-      
-      if ((window as any).tradingSystemInitialized) {
-        console.log('✅ System fully initialized!');
-        return true;
-      } else if ((window as any).tradingSystemInitializing) {
-        console.log('⏳ System still initializing...');
-        return 'initializing';
-      } else if ((window as any).tradingSystemError) {
-        console.log('❌ Initialization failed:', (window as any).tradingSystemError);
-        return false;
-      } else {
-        console.log('❓ Initialization not started');
-        return 'not_started';
-      }
-    };
-    
-    console.log('🌐 Global trading helpers loaded');
-  }
-};
-
-// Set up global helpers immediately
-setupGlobalHelpers();
