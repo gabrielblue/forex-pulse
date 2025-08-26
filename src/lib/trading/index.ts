@@ -41,6 +41,14 @@ export const initializeTradingSystem = async () => {
     const { signalProcessor } = await import('./signalProcessor');
     await signalProcessor.initialize();
     
+    // Make trading system globally accessible for debugging
+    if (typeof window !== 'undefined') {
+      (window as any).tradingBot = tradingBot;
+      (window as any).orderManager = orderManager;
+      (window as any).signalProcessor = signalProcessor;
+      console.log('🌐 Trading system made globally accessible');
+    }
+    
     console.log('✅ Trading system initialized successfully');
     return true;
   } catch (error) {
@@ -64,3 +72,34 @@ export const cleanupTradingSystem = async () => {
     console.error('❌ Error during cleanup:', error);
   }
 };
+
+// Global helper functions for debugging
+if (typeof window !== 'undefined') {
+  (window as any).checkTradingSystem = () => {
+    console.log('🔍 Trading System Status:');
+    console.log('Trading Bot:', (window as any).tradingBot);
+    console.log('Order Manager:', (window as any).orderManager);
+    console.log('Signal Processor:', (window as any).signalProcessor);
+    
+    if ((window as any).tradingBot) {
+      console.log('✅ Trading system is ready!');
+      return true;
+    } else {
+      console.log('❌ Trading system not initialized');
+      return false;
+    }
+  };
+  
+  (window as any).forceTradingMode = () => {
+    if ((window as any).tradingBot) {
+      console.log('🚀 Forcing trading mode...');
+      (window as any).tradingBot.setConfiguration({
+        minConfidence: 50, // Lower threshold for testing
+        aggressiveMode: true
+      });
+      console.log('✅ Trading mode activated with 50% confidence');
+    } else {
+      console.log('❌ Trading bot not available');
+    }
+  };
+}

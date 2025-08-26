@@ -216,7 +216,7 @@ const SimpleDiagnostics = () => {
                     </div>
                     <div className="text-sm">
                       <strong>Check MT5 bridge:</strong>
-                      <code className="ml-2 bg-muted px-2 py-1 rounded">fetch('http://localhost:8001/').then(r => console.log(r.ok))</code>
+                      <code className="ml-2 bg-muted px-2 py-1 rounded">fetch(&apos;http://localhost:8001/&apos;).then(r =&gt; console.log(r.ok))</code>
                     </div>
                   </div>
                 </CardContent>
