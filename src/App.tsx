@@ -15,6 +15,7 @@ import SimpleDiagnostics from "./pages/SimpleDiagnostics";
 import NotFound from "./pages/NotFound";
 import "@/lib/globalFunctions"; // Import global functions module
 import GlobalFunctionsProvider from "./components/GlobalFunctionsProvider";
+import { GlobalFunctionsSetup } from "./components/GlobalFunctionsSetup";
 
 const queryClient = new QueryClient();
 
@@ -142,9 +143,8 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <Toaster />
-        <Sonner />
         <GlobalFunctionsProvider>
+          <GlobalFunctionsSetup />
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Index />} />
@@ -159,6 +159,8 @@ const App = () => {
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
+          <Toaster />
+          <Sonner />
         </GlobalFunctionsProvider>
       </TooltipProvider>
     </QueryClientProvider>

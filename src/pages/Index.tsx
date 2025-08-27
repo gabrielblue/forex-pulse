@@ -16,6 +16,7 @@ import { MarketDataAnalysis } from "@/components/MarketDataAnalysis";
 import { initializeTradingSystem } from "@/lib/trading";
 import { useEffect } from "react";
 import "@/lib/globalFunctions"; // Import global functions module
+import { GlobalFunctionsTest } from "@/components/GlobalFunctionsTest";
 
 const Index = () => {
   useEffect(() => {
@@ -193,6 +194,11 @@ const Index = () => {
         {/* Market Data Analysis - Buyer/Seller Data */}
         <div className="mb-8">
           <MarketDataAnalysis />
+        </div>
+
+        {/* Global Functions Test - Debug Component */}
+        <div className="mb-8">
+          <GlobalFunctionsTest />
         </div>
 
 
