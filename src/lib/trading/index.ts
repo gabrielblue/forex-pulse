@@ -137,6 +137,13 @@ export const initializeTradingSystem = async () => {
       console.log('✅ Global functions set up successfully!');
       console.log('Available: checkTradingSystem, quickStatus, forceTradingMode, checkInitStatus');
       console.log('✅ Trading system initialization complete!');
+      
+      // BULLETPROOF: Double-check functions are available
+      console.log('🔧 BULLETPROOF: Verifying function availability after trading system init...');
+      console.log('checkTradingSystem available:', typeof (window as any).checkTradingSystem);
+      console.log('quickStatus available:', typeof (window as any).quickStatus);
+      console.log('forceTradingMode available:', typeof (window as any).forceTradingMode);
+      console.log('checkInitStatus available:', typeof (window as any).checkInitStatus);
     } else {
       console.log('❌ Window not available for global setup');
     }
