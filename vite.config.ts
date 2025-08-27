@@ -8,11 +8,22 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
-    // Force file updates and disable caching
+    // NUCLEAR OPTION: Force file updates and disable caching
     force: true,
     hmr: {
       overlay: true,
     },
+    // Aggressive cache busting
+    headers: {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    },
+    // Force file serving
+    fs: {
+      strict: false,
+      allow: ['..']
+    }
   },
   // Disable caching in development
   build: {

@@ -3,11 +3,11 @@ import App from './App.tsx'
 import './index.css'
 import './lib/globalFunctions' // Import global functions module
 
-// Set up global trading functions immediately when the app starts
-console.log('🔧 Main.tsx loaded, setting up global trading functions...');
+// NUCLEAR OPTION: Set up global trading functions IMMEDIATELY when the app starts
+console.log('🚀 NUCLEAR OPTION: Main.tsx loaded, setting up global trading functions IMMEDIATELY...');
 
 // Force setup of global functions immediately
-console.log('🔧 Forcing immediate setup of global functions...');
+console.log('🚀 NUCLEAR OPTION: Forcing immediate setup of global functions...');
 
 // Set up global functions with the names you're trying to use
 (window as any).checkTradingSystem = () => {
