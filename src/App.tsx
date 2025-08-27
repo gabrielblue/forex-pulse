@@ -14,6 +14,7 @@ import Diagnostics from "./pages/Diagnostics";
 import SimpleDiagnostics from "./pages/SimpleDiagnostics";
 import NotFound from "./pages/NotFound";
 import "@/lib/globalFunctions"; // Import global functions module
+import GlobalFunctionsProvider from "./components/GlobalFunctionsProvider";
 
 const queryClient = new QueryClient();
 
@@ -143,20 +144,22 @@ const App = () => {
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/charts" element={<Charts />} />
-            <Route path="/news" element={<News />} />
-            <Route path="/calendar" element={<Calendar />} />
-            <Route path="/learn" element={<Learn />} />
-            <Route path="/admin" element={<Admin />} />
-            <Route path="/diagnostics" element={<Diagnostics />} />
-            <Route path="/simple-diagnostics" element={<SimpleDiagnostics />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
+        <GlobalFunctionsProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/charts" element={<Charts />} />
+              <Route path="/news" element={<News />} />
+              <Route path="/calendar" element={<Calendar />} />
+              <Route path="/learn" element={<Learn />} />
+              <Route path="/admin" element={<Admin />} />
+              <Route path="/diagnostics" element={<Diagnostics />} />
+              <Route path="/simple-diagnostics" element={<SimpleDiagnostics />} />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </GlobalFunctionsProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );
