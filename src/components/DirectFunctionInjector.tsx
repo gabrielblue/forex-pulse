@@ -117,14 +117,27 @@ export const DirectFunctionInjector = () => {
       setInjectionStatus('✅ Functions injected successfully!');
       setFunctionsAvailable(true);
       
-      // Also set up a global flag
-      (window as any).directInjectionComplete = true;
-      
-    } catch (error) {
-      console.error('❌ DIRECT INJECTION: Error injecting functions:', error);
-      setInjectionStatus(`❌ Injection failed: ${error}`);
-    }
-  };
+              // Also set up a global flag
+        (window as any).directInjectionComplete = true;
+        
+        // CRITICAL: Add function to set trading system objects if they're missing
+        (window as any).setTradingSystemObjects = () => {
+          console.log('🔧 CRITICAL: Manually setting trading system objects...');
+          // Try to get objects from the trading system if available
+          if ((window as any).tradingBot && (window as any).orderManager && (window as any).signalProcessor) {
+            console.log('✅ CRITICAL: Trading system objects already available!');
+            return true;
+          } else {
+            console.log('❌ CRITICAL: Trading system objects not available yet');
+            return false;
+          }
+        };
+        
+      } catch (error) {
+        console.error('❌ DIRECT INJECTION: Error injecting functions:', error);
+        setInjectionStatus(`❌ Injection failed: ${error}`);
+      }
+    };
 
   // Check if functions are available
   const checkFunctions = () => {
