@@ -8,7 +8,22 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    // Force file updates and disable caching
+    force: true,
+    hmr: {
+      overlay: true,
+    },
   },
+  // Disable caching in development
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+      },
+    },
+  },
+  // Force clear cache on restart
+  clearScreen: false,
   plugins: [
     react(),
     mode === 'development' &&

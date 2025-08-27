@@ -13,6 +13,7 @@ import Admin from "./pages/Admin";
 import Diagnostics from "./pages/Diagnostics";
 import SimpleDiagnostics from "./pages/SimpleDiagnostics";
 import NotFound from "./pages/NotFound";
+import "@/lib/globalFunctions"; // Import global functions module
 
 const queryClient = new QueryClient();
 
@@ -80,8 +81,51 @@ const App = () => {
       }
     };
     
+    // Also set up the functions with the names you need
+    (window as any).checkTradingSystem = () => {
+      console.log('🔍 Trading System Status:');
+      console.log('Trading Bot:', (window as any).tradingBot);
+      console.log('Order Manager:', (window as any).orderManager);
+      console.log('Signal Processor:', (window as any).signalProcessor);
+      console.log('Initialized:', (window as any).tradingSystemInitialized);
+      console.log('Initializing:', (window as any).tradingSystemInitializing);
+      
+      if ((window as any).tradingBot) {
+        console.log('✅ Trading system is ready!');
+        return true;
+      } else {
+        console.log('❌ Trading system not initialized');
+        return false;
+      }
+    };
+    
+    (window as any).quickStatus = () => {
+      const bot = (window as any).tradingBot;
+      if (bot) {
+        console.log('🤖 Trading Bot Status:', bot.getStatus ? bot.getStatus() : 'Available but no getStatus method');
+        return true;
+      } else {
+        console.log('❌ Trading Bot not found');
+        return false;
+      }
+    };
+    
+    (window as any).forceTradingMode = () => {
+      if ((window as any).tradingBot && (window as any).tradingBot.setConfiguration) {
+        console.log('🚀 Forcing trading mode...');
+        (window as any).tradingBot.setConfiguration({
+          minConfidence: 50, // Lower threshold for testing
+          aggressiveMode: true
+        });
+        console.log('✅ Trading mode activated with 50% confidence');
+      } else {
+        console.log('❌ Trading bot not available or setConfiguration method missing');
+      }
+    };
+    
     console.log('✅ Global trading functions set up from App component');
     console.log('Available: checkTradingBot, debugTrading, forceTrading, checkInitStatus');
+    console.log('Also available: checkTradingSystem, quickStatus, forceTradingMode');
     
     // Also set up a timer to check periodically for the trading bot
     const interval = setInterval(() => {

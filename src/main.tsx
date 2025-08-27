@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
+import './lib/globalFunctions' // Import global functions module
 
 // Set up global trading functions immediately when the app starts
 console.log('🔧 Main.tsx loaded, setting up global trading functions...');
