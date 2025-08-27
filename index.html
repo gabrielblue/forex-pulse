@@ -24,7 +24,71 @@
       // Inline Trading Bot Debug Script
       console.log('🔧 Loading Inline Trading Bot Debug Script...');
       
-      // Set up global trading functions immediately
+      // Set up global trading functions immediately with the names you need
+      window.checkTradingSystem = function() {
+        console.log('🔍 Trading System Status:');
+        console.log('Trading Bot:', window.tradingBot);
+        console.log('Order Manager:', window.orderManager);
+        console.log('Signal Processor:', window.signalProcessor);
+        console.log('Initialized:', window.tradingSystemInitialized);
+        console.log('Initializing:', window.tradingSystemInitializing);
+        
+        if (window.tradingBot) {
+          console.log('✅ Trading system is ready!');
+          return true;
+        } else {
+          console.log('❌ Trading system not initialized');
+          return false;
+        }
+      };
+      
+      window.quickStatus = function() {
+        const bot = window.tradingBot;
+        if (bot) {
+          console.log('🤖 Trading Bot Status:', bot.getStatus ? bot.getStatus() : 'Available but no getStatus method');
+          return true;
+        } else {
+          console.log('❌ Trading Bot not found');
+          return false;
+        }
+      };
+      
+      window.forceTradingMode = function() {
+        if (window.tradingBot && window.tradingBot.setConfiguration) {
+          console.log('🚀 Forcing trading mode...');
+          window.tradingBot.setConfiguration({
+            minConfidence: 50, // Lower threshold for testing
+            aggressiveMode: true
+          });
+          console.log('✅ Trading mode activated with 50% confidence');
+        } else {
+          console.log('❌ Trading bot not available or setConfiguration method missing');
+        }
+      };
+      
+      window.checkInitStatus = function() {
+        console.log('🔍 Initialization Status:');
+        console.log('Initializing:', window.tradingSystemInitializing);
+        console.log('Initialized:', window.tradingSystemInitialized);
+        console.log('Error:', window.tradingSystemError || 'None');
+        console.log('Trading Bot:', window.tradingBot ? 'Available' : 'Not Available');
+        
+        if (window.tradingSystemInitialized) {
+          console.log('✅ System fully initialized!');
+          return true;
+        } else if (window.tradingSystemInitializing) {
+          console.log('⏳ System still initializing...');
+          return 'initializing';
+        } else if (window.tradingSystemError) {
+          console.log('❌ Initialization failed:', window.tradingSystemError);
+          return false;
+        } else {
+          console.log('❓ Initialization not started');
+          return 'not_started';
+        }
+      };
+      
+      // Also keep the old names for compatibility
       window.checkTradingBot = function() {
         const bot = window.tradingBot;
         if (bot) {
@@ -61,30 +125,9 @@
         }
       };
       
-      window.checkInitStatus = function() {
-        console.log('🔍 Initialization Status:');
-        console.log('Initializing:', window.tradingSystemInitializing);
-        console.log('Initialized:', window.tradingSystemInitialized);
-        console.log('Error:', window.tradingSystemError || 'None');
-        console.log('Trading Bot:', window.tradingBot ? 'Available' : 'Not Available');
-        
-        if (window.tradingSystemInitialized) {
-          console.log('✅ System fully initialized!');
-          return true;
-        } else if (window.tradingSystemInitializing) {
-          console.log('⏳ System still initializing...');
-          return 'initializing';
-        } else if (window.tradingSystemError) {
-          console.log('❌ Initialization failed:', window.tradingSystemError);
-          return false;
-        } else {
-          console.log('❓ Initialization not started');
-          return 'not_started';
-        }
-      };
-      
       console.log('✅ Inline global trading functions loaded and ready!');
-      console.log('Available functions: checkTradingBot, debugTrading, forceTrading, checkInitStatus');
+      console.log('Available functions: checkTradingSystem, quickStatus, forceTradingMode, checkInitStatus');
+      console.log('Also available: checkTradingBot, debugTrading, forceTrading');
     </script>
   </body>
 </html>
