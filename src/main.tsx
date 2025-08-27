@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 import './lib/globalFunctions' // Import global functions module
+import './lib/forceGlobalFunctions' // FINAL NUCLEAR OPTION: Force global functions
 
 // NUCLEAR OPTION: Set up global trading functions IMMEDIATELY when the app starts
 console.log('🚀 NUCLEAR OPTION: Main.tsx loaded, setting up global trading functions IMMEDIATELY...');
