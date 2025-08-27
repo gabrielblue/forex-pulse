@@ -6,6 +6,9 @@ import './lib/globalFunctions' // Import global functions module
 // Set up global trading functions immediately when the app starts
 console.log('🔧 Main.tsx loaded, setting up global trading functions...');
 
+// Force setup of global functions immediately
+console.log('🔧 Forcing immediate setup of global functions...');
+
 // Set up global functions with the names you're trying to use
 (window as any).checkTradingSystem = () => {
   console.log('🔍 Trading System Status:');

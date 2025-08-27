@@ -116,6 +116,14 @@ export const setupGlobalFunctions = () => {
 };
 
 // Auto-setup when module is imported
+console.log('🔧 Global functions module loaded, attempting auto-setup...');
+
 if (typeof window !== 'undefined') {
+  console.log('🔧 Window available, calling setupGlobalFunctions...');
   setupGlobalFunctions();
+} else {
+  console.log('❌ Window not available during module load');
 }
+
+// Also export the setup function for manual calls
+export default setupGlobalFunctions;

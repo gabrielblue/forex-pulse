@@ -133,6 +133,13 @@
       console.log('✅ Inline global trading functions loaded and ready!');
       console.log('Available functions: checkTradingSystem, quickStatus, forceTradingMode, checkInitStatus');
       console.log('Also available: checkTradingBot, debugTrading, forceTrading');
+      
+      // Force immediate availability check
+      console.log('🔧 Checking function availability...');
+      console.log('checkTradingSystem available:', typeof window.checkTradingSystem);
+      console.log('quickStatus available:', typeof window.quickStatus);
+      console.log('forceTradingMode available:', typeof window.forceTradingMode);
+      console.log('checkInitStatus available:', typeof window.checkInitStatus);
     </script>
   </body>
 </html>
