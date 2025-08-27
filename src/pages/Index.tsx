@@ -17,6 +17,7 @@ import { initializeTradingSystem } from "@/lib/trading";
 import { useEffect } from "react";
 import "@/lib/globalFunctions"; // Import global functions module
 import { GlobalFunctionsTest } from "@/components/GlobalFunctionsTest";
+import { DirectFunctionInjector } from "@/components/DirectFunctionInjector";
 
 const Index = () => {
   useEffect(() => {
@@ -199,6 +200,11 @@ const Index = () => {
         {/* Global Functions Test - Debug Component */}
         <div className="mb-8">
           <GlobalFunctionsTest />
+        </div>
+
+        {/* Direct Function Injector - Emergency Solution */}
+        <div className="mb-8">
+          <DirectFunctionInjector />
         </div>
 
 
