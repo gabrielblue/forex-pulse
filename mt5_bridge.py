@@ -44,9 +44,27 @@ class OrderRequest(BaseModel):
     sl: Optional[float] = None
     tp: Optional[float] = None
     comment: Optional[str] = "API Order"
+    time_in_force: Optional[int] = 0  # 0=GTC, 1=IOC, 2=FOK
+    max_slippage_points: Optional[int] = 10
 
 class SessionRequest(BaseModel):
     session_id: str
+
+class ModifyOrderRequest(BaseModel):
+    session_id: str
+    ticket: int
+    sl: Optional[float] = None
+    tp: Optional[float] = None
+    price: Optional[float] = None
+
+class CancelOrderRequest(BaseModel):
+    session_id: str
+    ticket: int
+
+class ClosePositionRequest(BaseModel):
+    session_id: str
+    ticket: int
+    volume: Optional[float] = None
 
 @app.on_event("startup")
 async def startup_event():
@@ -267,20 +285,53 @@ async def place_order(order: OrderRequest):
             "type_filling": mt5.ORDER_FILLING_IOC,
         }
         
-        # Send order
-        result = mt5.order_send(request)
+        # Apply time in force and slippage settings
+        if order.time_in_force == 1:  # IOC
+            request["type_filling"] = mt5.ORDER_FILLING_IOC
+        elif order.time_in_force == 2:  # FOK
+            request["type_filling"] = mt5.ORDER_FILLING_FOK
         
-        if result is None:
-            return {
-                "success": False,
-                "error": "Order send failed"
-            }
+        # Apply slippage tolerance
+        if order.max_slippage_points:
+            request["deviation"] = order.max_slippage_points
         
-        if result.retcode != mt5.TRADE_RETCODE_DONE:
-            return {
-                "success": False,
-                "error": f"Order failed: {result.comment}"
-            }
+        # Send order with retry logic
+        max_retries = 3
+        for attempt in range(max_retries):
+            result = mt5.order_send(request)
+            
+            if result is None:
+                return {
+                    "success": False,
+                    "error": "Order send failed"
+                }
+            
+            if result.retcode == mt5.TRADE_RETCODE_DONE:
+                print(f"✅ Order placed successfully: {result.order} (attempt {attempt + 1})")
+                break
+            elif result.retcode in [mt5.TRADE_RETCODE_PRICE_CHANGED, mt5.TRADE_RETCODE_REQUOTE]:
+                # Price changed, retry with new price
+                if attempt < max_retries - 1:
+                    print(f"⚠️ Price changed, retrying... (attempt {attempt + 1})")
+                    time.sleep(0.1)  # Brief delay before retry
+                    # Update price for retry
+                    tick = mt5.symbol_info_tick(order.symbol)
+                    if tick:
+                        if order.type == 0:  # BUY
+                            request["price"] = tick.ask
+                        else:  # SELL
+                            request["price"] = tick.bid
+                    continue
+                else:
+                    return {
+                        "success": False,
+                        "error": f"Price changed after {max_retries} attempts: {result.comment}"
+                    }
+            else:
+                return {
+                    "success": False,
+                    "error": f"Order failed: {result.comment}"
+                }
         
         print(f"✅ Order placed successfully: {result.order}")
         
@@ -305,6 +356,200 @@ async def place_order(order: OrderRequest):
         return {
             "success": False,
             "error": f"Failed to place order: {str(e)}"
+        }
+
+@app.post("/mt5/modify_order")
+async def modify_order(request: ModifyOrderRequest):
+    """Modify an existing order"""
+    try:
+        if request.session_id not in sessions:
+            return {
+                "success": False,
+                "error": "Invalid session ID"
+            }
+        
+        # Update last activity
+        sessions[request.session_id]["last_activity"] = datetime.now().isoformat()
+        
+        # Prepare modification request
+        mod_request = {
+            "action": mt5.TRADE_ACTION_MODIFY,
+            "ticket": request.ticket,
+            "price": request.price,
+            "sl": request.sl,
+            "tp": request.tp,
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+        
+        # Remove None values
+        mod_request = {k: v for k, v in mod_request.items() if v is not None}
+        
+        # Send modification request
+        result = mt5.order_send(mod_request)
+        
+        if result is None:
+            return {
+                "success": False,
+                "error": "Modify order failed"
+            }
+        
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            return {
+                "success": False,
+                "error": f"Modify failed: {result.comment}"
+            }
+        
+        print(f"✅ Order {request.ticket} modified successfully")
+        
+        return {
+            "success": True,
+            "data": {
+                "ticket": request.ticket,
+                "price": request.price,
+                "sl": request.sl,
+                "tp": request.tp,
+                "time": datetime.now().isoformat()
+            }
+        }
+        
+    except Exception as e:
+        print(f"❌ Exception modifying order: {e}")
+        return {
+            "success": False,
+            "error": f"Failed to modify order: {str(e)}"
+        }
+
+@app.post("/mt5/cancel_order")
+async def cancel_order(request: CancelOrderRequest):
+    """Cancel a pending order"""
+    try:
+        if request.session_id not in sessions:
+            return {
+                "success": False,
+                "error": "Invalid session ID"
+            }
+        
+        # Update last activity
+        sessions[request.session_id]["last_activity"] = datetime.now().isoformat()
+        
+        # Prepare cancellation request
+        cancel_request = {
+            "action": mt5.TRADE_ACTION_REMOVE,
+            "ticket": request.ticket,
+        }
+        
+        # Send cancellation request
+        result = mt5.order_send(cancel_request)
+        
+        if result is None:
+            return {
+                "success": False,
+                "error": "Cancel order failed"
+            }
+        
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            return {
+                "success": False,
+                "error": f"Cancel failed: {result.comment}"
+            }
+        
+        print(f"✅ Order {request.ticket} cancelled successfully")
+        
+        return {
+            "success": True,
+            "data": {
+                "ticket": request.ticket,
+                "time": datetime.now().isoformat()
+            }
+        }
+        
+    except Exception as e:
+        print(f"❌ Exception cancelling order: {e}")
+        return {
+            "success": False,
+            "error": f"Failed to cancel order: {str(e)}"
+        }
+
+@app.post("/mt5/close_position")
+async def close_position(request: ClosePositionRequest):
+    """Close a position"""
+    try:
+        if request.session_id not in sessions:
+            return {
+                "success": False,
+                "error": "Invalid session ID"
+            }
+        
+        # Update last activity
+        sessions[request.session_id]["last_activity"] = datetime.now().isoformat()
+        
+        # Get position info
+        positions = mt5.positions_get(ticket=request.ticket)
+        if not positions:
+            return {
+                "success": False,
+                "error": f"Position {request.ticket} not found"
+            }
+        
+        position = positions[0]
+        
+        # Determine close type (opposite of position type)
+        if position.type == mt5.POSITION_TYPE_BUY:
+            close_type = mt5.ORDER_TYPE_SELL
+            price = mt5.symbol_info_tick(position.symbol).bid
+        else:
+            close_type = mt5.ORDER_TYPE_BUY
+            price = mt5.symbol_info_tick(position.symbol).ask
+        
+        # Prepare close request
+        close_request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": position.symbol,
+            "volume": request.volume or float(position.volume),
+            "type": close_type,
+            "position": request.ticket,
+            "price": price,
+            "deviation": 20,
+            "magic": 12345,
+            "comment": "API Close",
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+        
+        # Send close request
+        result = mt5.order_send(close_request)
+        
+        if result is None:
+            return {
+                "success": False,
+                "error": "Close position failed"
+            }
+        
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            return {
+                "success": False,
+                "error": f"Close failed: {result.comment}"
+            }
+        
+        print(f"✅ Position {request.ticket} closed successfully")
+        
+        return {
+            "success": True,
+            "data": {
+                "ticket": request.ticket,
+                "close_ticket": result.order,
+                "volume": float(result.volume),
+                "price": float(result.price),
+                "time": datetime.now().isoformat()
+            }
+        }
+        
+    except Exception as e:
+        print(f"❌ Exception closing position: {e}")
+        return {
+            "success": False,
+            "error": f"Failed to close position: {str(e)}"
         }
 
 @app.get("/mt5/sessions")

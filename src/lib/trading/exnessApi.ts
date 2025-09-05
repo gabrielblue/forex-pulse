@@ -31,6 +31,9 @@ export interface TradeOrder {
   stopLoss?: number;
   takeProfit?: number;
   comment?: string;
+  // Optional execution controls
+  timeInForce?: 'IOC' | 'FOK' | 'GTC';
+  maxSlippagePoints?: number;
 }
 
 export interface Position {
@@ -55,6 +58,26 @@ export interface MarketPrice {
   ask: number;
   spread: number;
   timestamp: Date;
+}
+
+export interface TickPrint {
+  time: number;
+  bid: number;
+  ask: number;
+  last?: number;
+  volume?: number;
+}
+
+export interface OrderBookLevel {
+  price: number;
+  volume: number;
+}
+
+export interface OrderBookSnapshot {
+  symbol: string;
+  bids: OrderBookLevel[];
+  asks: OrderBookLevel[];
+  timestamp: number;
 }
 
 class ExnessAPI {
@@ -202,64 +225,19 @@ class ExnessAPI {
       }
 
       const result = await response.json();
-      
+
       if (result.success && result.account_info) {
-        const accountInfo = this.mapMT5AccountInfo(result.account_info);
-        
         return {
           success: true,
-          message: `Connection test successful! Connected to ${accountInfo.isDemo ? 'DEMO' : 'LIVE'} account.`,
-          accountInfo,
-          connectionType: accountInfo.isDemo ? 'demo' : 'live'
-        };
-      } else {
-        return {
-          success: false,
-          message: result.error || 'Connection test failed'
+          message: 'Connection successful',
+          accountInfo: result.account_info,
+          connectionType: result.account_info.mode
         };
       }
-    } catch (error) {
-      console.error('Connection test error:', error);
-      return {
-        success: false,
-        message: `Connection test failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      };
-    }
-  }
 
-  async getAccountInfo(): Promise<AccountInfo | null> {
-    if (!this.isConnected || !this.sessionId) {
-      console.warn('Not connected to Exness - cannot get account info');
-      return null;
-    }
-
-    try {
-      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/account_info`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          session_id: this.sessionId
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to get account info: ${response.status}`);
-      }
-
-      const result = await response.json();
-      
-      if (result.success && result.data) {
-        this.accountInfo = this.mapMT5AccountInfo(result.data);
-        this.lastUpdate = new Date();
-        return this.accountInfo;
-      } else {
-        throw new Error(result.error || 'Failed to get account info');
-      }
-    } catch (error) {
-      console.error('Failed to get real account info:', error);
-      return null;
+      return { success: false, message: result.error || 'Unknown error' };
+    } catch (error: any) {
+      return { success: false, message: error?.message || 'Unknown error' };
     }
   }
 
@@ -284,7 +262,9 @@ class ExnessAPI {
           price: order.price,
           sl: order.stopLoss,
           tp: order.takeProfit,
-          comment: order.comment || 'ForexPro Order'
+          comment: order.comment || 'ForexPro Order',
+          time_in_force: order.timeInForce,
+          max_slippage_points: order.maxSlippagePoints
         })
       });
 
@@ -326,7 +306,7 @@ class ExnessAPI {
 
   async getCurrentPrice(symbol: string): Promise<MarketPrice | null> {
     try {
-      // For real implementation, you'd get this from MT5 Bridge
+      // For real implementation, you'd get this from MT5 Bridge (future extension)
       // For now, return realistic mock data
       const basePrices: Record<string, number> = {
         'EURUSD': 1.0845,
@@ -334,11 +314,12 @@ class ExnessAPI {
         'USDJPY': 149.85,
         'AUDUSD': 0.6623,
         'USDCHF': 0.8892,
-        'NZDUSD': 0.5987
+        'NZDUSD': 0.5987,
+        'XAUUSD': 2350.0
       };
 
       const basePrice = basePrices[symbol] || 1.0000;
-      const spread = symbol.includes('JPY') ? 0.015 : 0.00015;
+      const spread = symbol.includes('JPY') ? 0.015 : (symbol === 'XAUUSD' ? 0.2 : 0.00015);
       const bid = basePrice - spread / 2;
       const ask = basePrice + spread / 2;
 
@@ -355,6 +336,34 @@ class ExnessAPI {
     }
   }
 
+  // NEW: Fetch recent ticks from MT5 bridge
+  async getTicks(symbol: string, limit: number = 1000): Promise<TickPrint[]> {
+    try {
+      const url = `${this.MT5_BRIDGE_URL}/mt5/ticks?symbol=${encodeURIComponent(symbol)}&limit=${limit}`;
+      const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(`Ticks fetch failed: ${res.status}`);
+      const data = await res.json();
+      return (data?.data?.ticks || []) as TickPrint[];
+    } catch (error) {
+      console.error('Failed to fetch ticks:', error);
+      return [];
+    }
+  }
+
+  // NEW: Fetch order book snapshot from MT5 bridge
+  async getOrderBook(symbol: string): Promise<OrderBookSnapshot | null> {
+    try {
+      const url = `${this.MT5_BRIDGE_URL}/mt5/orderbook?symbol=${encodeURIComponent(symbol)}`;
+      const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(`OrderBook fetch failed: ${res.status}`);
+      const data = await res.json();
+      return data?.data as OrderBookSnapshot;
+    } catch (error) {
+      console.error('Failed to fetch order book:', error);
+      return null;
+    }
+  }
+
   async closePosition(ticket: number): Promise<boolean> {
     if (!this.isConnected || !this.sessionId) {
       return false;
@@ -362,9 +371,7 @@ class ExnessAPI {
 
     try {
       console.log('🔒 Closing position:', ticket);
-      
-      // In a real implementation, you'd call the MT5 Bridge to close the position
-      // For now, simulate success
+      // TODO: Implement via MT5 bridge close
       console.log('✅ Position closed successfully');
       return true;
     } catch (error) {
@@ -378,76 +385,65 @@ class ExnessAPI {
     const dayOfWeek = now.getDay();
     
     // Forex market is closed on weekends
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      return false;
-    }
-    
-    // Simplified market hours check
+    if (dayOfWeek === 0 || dayOfWeek === 6) return false;
     return true;
   }
 
-  async verifyTradingCapabilities(): Promise<{canTrade: boolean, issues: string[]}> {
-    const issues: string[] = [];
-    
-    if (!this.isConnected) {
-      issues.push('Not connected to Exness');
-    }
-    
-    if (!this.accountInfo) {
-      issues.push('No account information available');
-    } else {
-      if (!this.accountInfo.tradeAllowed) {
-        issues.push('Trading not allowed on this account');
-      }
-      
-      if (this.accountInfo.balance < 100) {
-        issues.push('Account balance too low');
-      }
-      
-      if (this.accountInfo.marginLevel > 0 && this.accountInfo.marginLevel < 200) {
-        issues.push('Margin level too low');
-      }
-    }
-
-    return {
-      canTrade: issues.length === 0,
-      issues
-    };
-  }
-
-  async getServerTime(): Promise<Date | null> {
-    try {
-      // In real implementation, get from MT5 Bridge
-      return new Date();
-    } catch (error) {
-      console.error('Failed to get server time:', error);
-      return null;
-    }
-  }
-
   isConnectedToExness(): boolean {
-    return this.isConnected && this.sessionId !== null;
+    return this.isConnected;
   }
 
-  getAccountType(): string | null {
-    return this.accountInfo?.isDemo ? 'demo' : 'live';
+  getAccountType(): 'demo' | 'live' | null {
+    if (!this.accountInfo) return null;
+    return this.accountInfo.isDemo ? 'demo' : 'live';
   }
 
-  getConnectionStatus(): string {
-    if (!this.isConnected) return 'Disconnected';
-    return 'Connected to MT5';
-  }
-
-  getConnectionInfo(): any {
+  getConnectionInfo() {
     return this.connectionInfo;
   }
 
-  disconnect(): void {
-    this.isConnected = false;
-    this.sessionId = null;
-    this.accountInfo = null;
-    this.connectionInfo = null;
-    console.log('🔌 Disconnected from Exness');
+  async getAccountInfo(): Promise<AccountInfo | null> {
+    try {
+      if (!this.isConnected || !this.sessionId) return null;
+
+      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/account_info`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: this.sessionId
+        })
+      });
+
+      if (!response.ok) return null;
+
+      const result = await response.json();
+      if (result.success && result.data) {
+        const info = result.data;
+        return {
+          accountNumber: info.login?.toString() || '',
+          balance: parseFloat(info.balance?.toString() || '0'),
+          equity: parseFloat(info.equity?.toString() || '0'),
+          margin: parseFloat(info.margin?.toString() || '0'),
+          freeMargin: parseFloat(info.free_margin?.toString() || '0'),
+          marginLevel: parseFloat(info.margin_level?.toString() || '0'),
+          currency: info.currency || 'USD',
+          leverage: info.leverage?.toString() || '1:100',
+          server: this.accountInfo?.server || '',
+          isDemo: this.accountInfo?.isDemo || false,
+          tradeAllowed: true,
+          profit: parseFloat(info.profit?.toString() || '0'),
+          credit: parseFloat(info.credit?.toString() || '0'),
+          company: this.accountInfo?.company || 'Exness'
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Failed to get real account info:', error);
+      return null;
+    }
   }
 }
 

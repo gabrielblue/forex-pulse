@@ -11,13 +11,141 @@ import { AIPredictionSystem } from "@/components/AIPredictionSystem";
 import { ExnessIntegration } from "@/components/ExnessIntegration";
 import { LiveTradingDashboard } from "@/components/LiveTradingDashboard";
 import { EnhancedTradingBot } from "@/components/EnhancedTradingBot";
+import { AdvancedTradingControls } from "@/components/AdvancedTradingControls";
+import { MarketDataAnalysis } from "@/components/MarketDataAnalysis";
 import { initializeTradingSystem } from "@/lib/trading";
 import { useEffect } from "react";
+import "@/lib/globalFunctions"; // Import global functions module
+import { GlobalFunctionsTest } from "@/components/GlobalFunctionsTest";
+import { DirectFunctionInjector } from "@/components/DirectFunctionInjector";
 
 const Index = () => {
   useEffect(() => {
     // Initialize trading system when app loads
     initializeTradingSystem();
+    
+    // Also set up global functions immediately for debugging
+    const setupGlobalFunctions = () => {
+      console.log('🔧 Setting up global functions from Index component...');
+      
+      // Check if trading bot is available
+      const checkTradingBot = () => {
+        const bot = (window as any).tradingBot;
+        if (bot) {
+          console.log('✅ Trading bot found:', bot);
+          return true;
+        } else {
+          console.log('❌ Trading bot not found');
+          return false;
+        }
+      };
+      
+      // Set up global functions
+      (window as any).checkTradingBot = checkTradingBot;
+      (window as any).debugTrading = () => {
+        console.log('🔍 Debug Trading System:');
+        console.log('Trading Bot:', (window as any).tradingBot);
+        console.log('Order Manager:', (window as any).orderManager);
+        console.log('Signal Processor:', (window as any).signalProcessor);
+        console.log('Initialized:', (window as any).tradingSystemInitialized);
+        console.log('Initializing:', (window as any).tradingSystemInitializing);
+      };
+      
+      (window as any).forceTrading = () => {
+        if ((window as any).tradingBot && (window as any).tradingBot.setConfiguration) {
+          console.log('🚀 Forcing trading mode...');
+          (window as any).tradingBot.setConfiguration({
+            minConfidence: 50,
+            aggressiveMode: true
+          });
+          console.log('✅ Trading mode activated with 50% confidence');
+        } else {
+          console.log('❌ Trading bot not available or setConfiguration method missing');
+        }
+      };
+      
+      // Also set up the functions with the names you need
+      (window as any).checkTradingSystem = () => {
+        console.log('🔍 Trading System Status:');
+        console.log('Trading Bot:', (window as any).tradingBot);
+        console.log('Order Manager:', (window as any).orderManager);
+        console.log('Signal Processor:', (window as any).signalProcessor);
+        console.log('Initialized:', (window as any).tradingSystemInitialized);
+        console.log('Initializing:', (window as any).tradingSystemInitializing);
+        
+        if ((window as any).tradingBot) {
+          console.log('✅ Trading system is ready!');
+          return true;
+        } else {
+          console.log('❌ Trading system not initialized');
+          return false;
+        }
+      };
+      
+      (window as any).quickStatus = () => {
+        const bot = (window as any).tradingBot;
+        if (bot) {
+          console.log('🤖 Trading Bot Status:', bot.getStatus ? bot.getStatus() : 'Available but no getStatus method');
+          return true;
+        } else {
+          console.log('❌ Trading Bot not found');
+          return false;
+        }
+      };
+      
+      (window as any).forceTradingMode = () => {
+        if ((window as any).tradingBot && (window as any).tradingBot.setConfiguration) {
+          console.log('🚀 Forcing trading mode...');
+          (window as any).tradingBot.setConfiguration({
+            minConfidence: 50, // Lower threshold for testing
+            aggressiveMode: true
+          });
+          console.log('✅ Trading mode activated with 50% confidence');
+        } else {
+          console.log('❌ Trading bot not available or setConfiguration method missing');
+        }
+      };
+      
+      (window as any).checkInitStatus = () => {
+        console.log('🔍 Initialization Status:');
+        console.log('Initializing:', (window as any).tradingSystemInitializing);
+        console.log('Initialized:', (window as any).tradingSystemInitialized);
+        console.log('Error:', (window as any).tradingSystemError || 'None');
+        console.log('Trading Bot:', (window as any).tradingBot ? 'Available' : 'Not Available');
+        
+        if ((window as any).tradingSystemInitialized) {
+          console.log('✅ System fully initialized!');
+          return true;
+        } else if ((window as any).tradingSystemInitializing) {
+          console.log('⏳ System still initializing...');
+          return 'initializing';
+        } else if ((window as any).tradingSystemError) {
+          console.log('❌ Initialization failed:', (window as any).tradingSystemError);
+          return false;
+        } else {
+          console.log('❓ Initialization not started');
+          return 'not_started';
+        }
+      };
+      
+      console.log('✅ Global functions set up from Index component');
+      console.log('Available: checkTradingBot, debugTrading, forceTrading');
+      console.log('Also available: checkTradingSystem, quickStatus, forceTradingMode, checkInitStatus');
+    };
+    
+    // Set up global functions immediately
+    setupGlobalFunctions();
+    
+    // Also set up a timer to check periodically
+    const interval = setInterval(() => {
+      if ((window as any).tradingBot) {
+        console.log('🌐 Trading bot detected, setting up additional functions...');
+        setupGlobalFunctions();
+        clearInterval(interval);
+      }
+    }, 1000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -59,6 +187,28 @@ const Index = () => {
           </div>
         </div>
 
+        {/* Advanced Trading Controls - Main Trading Interface */}
+        <div className="mb-8">
+          <AdvancedTradingControls />
+        </div>
+
+        {/* Market Data Analysis - Buyer/Seller Data */}
+        <div className="mb-8">
+          <MarketDataAnalysis />
+        </div>
+
+        {/* Global Functions Test - Debug Component */}
+        <div className="mb-8">
+          <GlobalFunctionsTest />
+        </div>
+
+        {/* Direct Function Injector - Emergency Solution */}
+        <div className="mb-8">
+          <DirectFunctionInjector />
+        </div>
+
+
+
         {/* Market Charts */}
         <div className="mb-8">
           <MarketCharts />
@@ -98,30 +248,10 @@ const Index = () => {
             <PredictionsCard />
           </div>
 
-          {/* Right Column - News & Calendar */}
+          {/* Right Column - Sidebar */}
           <div className="space-y-8">
             <NewsAlertsCard />
             <EconomicCalendar />
-          </div>
-        </div>
-
-        {/* Footer Stats */}
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="p-6 rounded-lg bg-gradient-to-br from-card to-card/80 border border-border/50">
-            <div className="text-2xl font-bold text-bullish">94.7%</div>
-            <div className="text-sm text-muted-foreground">AI Accuracy (30d)</div>
-          </div>
-          <div className="p-6 rounded-lg bg-gradient-to-br from-card to-card/80 border border-border/50">
-            <div className="text-2xl font-bold text-foreground">28</div>
-            <div className="text-sm text-muted-foreground">Currency Pairs</div>
-          </div>
-          <div className="p-6 rounded-lg bg-gradient-to-br from-card to-card/80 border border-border/50">
-            <div className="text-2xl font-bold text-accent">24/7</div>
-            <div className="text-sm text-muted-foreground">Market Monitoring</div>
-          </div>
-          <div className="p-6 rounded-lg bg-gradient-to-br from-card to-card/80 border border-border/50">
-            <div className="text-2xl font-bold text-primary">15</div>
-            <div className="text-sm text-muted-foreground">Data Sources</div>
           </div>
         </div>
       </div>

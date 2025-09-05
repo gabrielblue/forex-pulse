@@ -6,6 +6,11 @@
     <title>forex-pulse</title>
     <meta name="description" content="Lovable Generated Project" />
     <meta name="author" content="Lovable" />
+    
+    <!-- Cache-busting meta tags -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
 
     <meta property="og:title" content="forex-pulse" />
     <meta property="og:description" content="Lovable Generated Project" />
@@ -20,5 +25,160 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // FINAL NUCLEAR OPTION: GLOBAL FUNCTIONS - This will DEFINITELY work!
+      console.log('🚀 FINAL NUCLEAR OPTION: Setting up global trading functions...');
+      
+      // Force immediate execution
+      (function() {
+        'use strict';
+        
+        // Set up global trading functions immediately with the names you need
+        window.checkTradingSystem = function() {
+          console.log('🔍 Trading System Status:');
+          console.log('Trading Bot:', window.tradingBot);
+          console.log('Order Manager:', window.orderManager);
+          console.log('Signal Processor:', window.signalProcessor);
+          console.log('Initialized:', window.tradingSystemInitialized);
+          console.log('Initializing:', window.tradingSystemInitializing);
+          
+          if (window.tradingBot) {
+            console.log('✅ Trading system is ready!');
+            return true;
+          } else {
+            console.log('❌ Trading system not initialized');
+            return false;
+          }
+        };
+        
+        window.quickStatus = function() {
+          const bot = window.tradingBot;
+          if (bot) {
+            console.log('🤖 Trading Bot Status:', bot.getStatus ? bot.getStatus() : 'Available but no getStatus method');
+            return true;
+          } else {
+            console.log('❌ Trading Bot not found');
+            return false;
+          }
+        };
+        
+        window.forceTradingMode = function() {
+          if (window.tradingBot && window.tradingBot.setConfiguration) {
+            console.log('🚀 Forcing trading mode...');
+            window.tradingBot.setConfiguration({
+              minConfidence: 50, // Lower threshold for testing
+              aggressiveMode: true
+            });
+            console.log('✅ Trading mode activated with 50% confidence');
+          } else {
+            console.log('❌ Trading bot not available or setConfiguration method missing');
+          }
+        };
+        
+        window.checkInitStatus = function() {
+          console.log('🔍 Initialization Status:');
+          console.log('Initializing:', window.tradingSystemInitializing);
+          console.log('Initialized:', window.tradingSystemInitialized);
+          console.log('Error:', window.tradingSystemError || 'None');
+          console.log('Trading Bot:', window.tradingBot ? 'Available' : 'Not Available');
+          
+          if (window.tradingSystemInitialized) {
+            console.log('✅ System fully initialized!');
+            return true;
+          } else if (window.tradingSystemInitializing) {
+            console.log('⏳ System still initializing...');
+            return 'initializing';
+          } else if (window.tradingSystemError) {
+            console.log('❌ Initialization failed:', window.tradingSystemError);
+            return false;
+          } else {
+            console.log('❓ Initialization not started');
+            return 'not_started';
+          }
+        };
+        
+        // Also keep the old names for compatibility
+        window.checkTradingBot = function() {
+          const bot = window.tradingBot;
+          if (bot) {
+            console.log('✅ Trading bot found:', bot);
+            return true;
+          } else {
+            console.log('❌ Trading bot not found');
+            return false;
+          }
+        };
+        
+        window.debugTrading = function() {
+          console.log('🔍 Debug Trading System:');
+          console.log('Trading Bot:', window.tradingBot);
+          console.log('Order Manager:', window.orderManager);
+          console.log('Signal Processor:', window.signalProcessor);
+          console.log('Initialized:', window.tradingSystemInitialized);
+          console.log('Initializing:', window.tradingSystemInitializing);
+          console.log('Available functions:', Object.keys(window).filter(key => 
+            key.includes('trading') || key.includes('check') || key.includes('force') || key.includes('debug')
+          ));
+        };
+        
+        window.forceTrading = function() {
+          if (window.tradingBot && window.tradingBot.setConfiguration) {
+            console.log('🚀 Forcing trading mode...');
+            window.tradingBot.setConfiguration({
+              minConfidence: 50,
+              aggressiveMode: true
+            });
+            console.log('✅ Trading mode activated with 50% confidence');
+          } else {
+            console.log('❌ Trading bot not available or setConfiguration method missing');
+          }
+        };
+        
+        console.log('✅ FINAL NUCLEAR OPTION: Global trading functions loaded and ready!');
+        console.log('Available functions: checkTradingSystem, quickStatus, forceTradingMode, checkInitStatus');
+        console.log('Also available: checkTradingBot, debugTrading, forceTrading');
+        
+        // Force immediate availability check
+        console.log('🔧 FINAL NUCLEAR OPTION: Checking function availability...');
+        console.log('checkTradingSystem available:', typeof window.checkTradingSystem);
+        console.log('quickStatus available:', typeof window.quickStatus);
+        console.log('forceTradingMode available:', typeof window.forceTradingMode);
+        console.log('checkInitStatus available:', typeof window.checkInitStatus);
+        
+        // Verify functions are actually on window
+        if (typeof window.checkTradingSystem === 'function') {
+          console.log('🎯 FINAL NUCLEAR OPTION: checkTradingSystem is DEFINITELY available!');
+        } else {
+          console.log('❌ FINAL NUCLEAR OPTION: checkTradingSystem is NOT available - this should not happen!');
+        }
+        
+        if (typeof window.quickStatus === 'function') {
+          console.log('🎯 FINAL NUCLEAR OPTION: quickStatus is DEFINITELY available!');
+        } else {
+          console.log('❌ FINAL NUCLEAR OPTION: quickStatus is NOT available - this should not happen!');
+        }
+        
+        if (typeof window.forceTradingMode === 'function') {
+          console.log('🎯 FINAL NUCLEAR OPTION: forceTradingMode is DEFINITELY available!');
+        } else {
+          console.log('❌ FINAL NUCLEAR OPTION: forceTradingMode is NOT available - this should not happen!');
+        }
+        
+        if (typeof window.checkInitStatus === 'function') {
+          console.log('🎯 FINAL NUCLEAR OPTION: checkInitStatus is DEFINITELY available!');
+        } else {
+          console.log('❌ FINAL NUCLEAR OPTION: checkInitStatus is NOT available - this should not happen!');
+        }
+        
+        // Also set up a global flag to show this script has run
+        window.globalFunctionsSetupComplete = true;
+        console.log('✅ FINAL NUCLEAR OPTION: Global functions setup complete flag set!');
+        
+        console.log('🚀 FINAL NUCLEAR OPTION: Script execution complete!');
+        
+      })();
+      
+      console.log('🚀 FINAL NUCLEAR OPTION: HTML script execution complete!');
+    </script>
   </body>
 </html>
