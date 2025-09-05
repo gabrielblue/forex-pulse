@@ -4,6 +4,7 @@ import { orderManager } from './orderManager';
 import { signalProcessor } from './signalProcessor';
 import { marketAnalyzer } from './marketAnalyzer';
 import { worldClassStrategies } from './strategies/worldClassStrategies';
+import { botSignalManager } from './botSignalManager';
 
 export interface BotStatus {
   isActive: boolean;
@@ -29,6 +30,7 @@ export interface BotConfiguration {
   useStopLoss: boolean;
   useTakeProfit: boolean;
   emergencyStopEnabled: boolean;
+  signalCheckInterval?: number; // in milliseconds
 }
 
 class TradingBot {
@@ -208,6 +210,15 @@ class TradingBot {
         await marketAnalyzer.startContinuousAnalysis();
       }
 
+      // Initialize signal manager
+      await botSignalManager.initialize({
+        enabled: true,
+        interval: this.configuration.signalCheckInterval || 30000,
+        symbols: this.configuration.enabledPairs,
+        minConfidence: this.configuration.minConfidence,
+        autoExecute: this.status.autoTradingEnabled
+      });
+
       const accountType = exnessAPI.getAccountType();
       console.log(`🚀 Trading bot started successfully on ${accountType?.toUpperCase()} account`);
       console.log(`💰 Account Balance: ${accountInfo.currency} ${accountInfo.balance.toFixed(2)}`);
@@ -242,6 +253,9 @@ class TradingBot {
         this.marketAnalysisActive = false;
         await marketAnalyzer.stopContinuousAnalysis();
       }
+
+      // Stop signal generation
+      botSignalManager.stopAutomaticGeneration();
 
       // Disable auto trading
       orderManager.setAutoTrading(false);
@@ -709,11 +723,19 @@ class TradingBot {
     // Perform chart analysis before generating signal
     const chartAnalysis = await this.performAdvancedChartAnalysis(randomPair, "1H");
     
+    // Generate signals through both processors
     await signalProcessor.generateTestSignal(randomPair);
+    await botSignalManager.forceGenerateSignal(randomPair);
     
     console.log(`✅ Enhanced test signal generated for ${randomPair} on ${accountType?.toUpperCase()} account`);
     if (chartAnalysis) {
       console.log(`📊 Chart analysis: ${chartAnalysis.recommendation.action} with ${chartAnalysis.recommendation.confidence.toFixed(1)}% confidence`);
+    }
+    
+    // If auto-trading is enabled, execute pending signals immediately
+    if (this.status.autoTradingEnabled && orderManager.isAutoTradingActive()) {
+      console.log('🎯 Auto-executing test signal...');
+      await botSignalManager.generateAndProcessSignals();
     }
   }
 
