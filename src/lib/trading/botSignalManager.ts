@@ -176,7 +176,9 @@ class BotSignalManager {
         .eq('symbol', signal.symbol)
         .single();
 
-      if (!pair) {
+      let pairId = pair?.id;
+      
+      if (!pairId) {
         // Create currency pair if it doesn't exist
         const baseCurrency = signal.symbol.substring(0, 3);
         const quoteCurrency = signal.symbol.substring(3, 6);
@@ -193,7 +195,7 @@ class BotSignalManager {
           .single();
         
         if (!newPair) return;
-        pair.id = newPair.id;
+        pairId = newPair.id;
       }
 
       // Save signal to database
@@ -201,7 +203,7 @@ class BotSignalManager {
         .from('trading_signals')
         .insert({
           user_id: user.id,
-          pair_id: pair.id,
+          pair_id: pairId,
           signal_type: signal.type,
           confidence_score: signal.confidence,
           entry_price: signal.entryPrice,

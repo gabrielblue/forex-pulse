@@ -218,6 +218,9 @@ class TradingBot {
         minConfidence: this.configuration.minConfidence,
         autoExecute: this.status.autoTradingEnabled
       });
+      
+      // Start automatic signal generation
+      botSignalManager.startAutomaticGeneration();
 
       const accountType = exnessAPI.getAccountType();
       console.log(`🚀 Trading bot started successfully on ${accountType?.toUpperCase()} account`);
@@ -292,6 +295,19 @@ class TradingBot {
     this.status.autoTradingEnabled = enabled;
     orderManager.setAutoTrading(enabled);
     await signalProcessor.enableAutoExecution(enabled);
+    
+    // Update signal manager configuration for auto-execution
+    botSignalManager.setConfiguration({
+      enabled: enabled,
+      autoExecute: enabled
+    });
+    
+    // Start or stop automatic generation based on enabled status
+    if (enabled && this.status.isActive) {
+      botSignalManager.startAutomaticGeneration();
+    } else if (!enabled) {
+      botSignalManager.stopAutomaticGeneration();
+    }
     
     await this.updateStatus();
     
@@ -714,6 +730,11 @@ class TradingBot {
     
     if (!this.status.isConnected) {
       throw new Error('Must be connected to Exness to generate test signals');
+    }
+    
+    // Force generate a signal for all enabled pairs
+    for (const symbol of this.configuration.enabledPairs) {
+      await botSignalManager.forceGenerateSignal(symbol);
     }
     
     const randomPair = this.configuration.enabledPairs[
