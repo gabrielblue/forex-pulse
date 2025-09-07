@@ -7,7 +7,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "12.2.12 (cd3cf9e)"
@@ -16,56 +16,149 @@ export type Database = {
     Tables: {
       bot_settings: {
         Row: {
+          aggressive_mode: boolean | null
           allowed_pairs: string[] | null
           bot_name: string
           created_at: string | null
+          enable_partial_profits: boolean | null
+          enable_regime_boost: boolean | null
+          enable_session_trading: boolean | null
+          enable_trailing_stop: boolean | null
+          enabled_pairs: string[] | null
           id: string
           is_active: boolean | null
           max_daily_loss: number | null
           max_daily_trades: number | null
           max_risk_per_trade: number | null
           min_confidence_score: number | null
+          news_blackout_enabled: boolean | null
+          partial_profit_levels: Json | null
+          regime_expectancy_threshold: number | null
+          session_multiplier: number | null
           stop_loss_pips: number | null
           take_profit_pips: number | null
           trading_hours: Json | null
           trading_mode: string | null
           trailing_stop: boolean | null
+          trailing_stop_distance: number | null
+          updated_at: string | null
+          user_id: string | null
+          volatility_multiplier: number | null
+          volume_boost_max: number | null
+          volume_boost_min: number | null
+        }
+        Insert: {
+          aggressive_mode?: boolean | null
+          allowed_pairs?: string[] | null
+          bot_name?: string
+          created_at?: string | null
+          enable_partial_profits?: boolean | null
+          enable_regime_boost?: boolean | null
+          enable_session_trading?: boolean | null
+          enable_trailing_stop?: boolean | null
+          enabled_pairs?: string[] | null
+          id?: string
+          is_active?: boolean | null
+          max_daily_loss?: number | null
+          max_daily_trades?: number | null
+          max_risk_per_trade?: number | null
+          min_confidence_score?: number | null
+          news_blackout_enabled?: boolean | null
+          partial_profit_levels?: Json | null
+          regime_expectancy_threshold?: number | null
+          session_multiplier?: number | null
+          stop_loss_pips?: number | null
+          take_profit_pips?: number | null
+          trading_hours?: Json | null
+          trading_mode?: string | null
+          trailing_stop?: boolean | null
+          trailing_stop_distance?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+          volatility_multiplier?: number | null
+          volume_boost_max?: number | null
+          volume_boost_min?: number | null
+        }
+        Update: {
+          aggressive_mode?: boolean | null
+          allowed_pairs?: string[] | null
+          bot_name?: string
+          created_at?: string | null
+          enable_partial_profits?: boolean | null
+          enable_regime_boost?: boolean | null
+          enable_session_trading?: boolean | null
+          enable_trailing_stop?: boolean | null
+          enabled_pairs?: string[] | null
+          id?: string
+          is_active?: boolean | null
+          max_daily_loss?: number | null
+          max_daily_trades?: number | null
+          max_risk_per_trade?: number | null
+          min_confidence_score?: number | null
+          news_blackout_enabled?: boolean | null
+          partial_profit_levels?: Json | null
+          regime_expectancy_threshold?: number | null
+          session_multiplier?: number | null
+          stop_loss_pips?: number | null
+          take_profit_pips?: number | null
+          trading_hours?: Json | null
+          trading_mode?: string | null
+          trailing_stop?: boolean | null
+          trailing_stop_distance?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+          volatility_multiplier?: number | null
+          volume_boost_max?: number | null
+          volume_boost_min?: number | null
+        }
+        Relationships: []
+      }
+      calendar_events: {
+        Row: {
+          actual: string | null
+          affected_pairs: string[] | null
+          created_at: string | null
+          currency: string | null
+          description: string | null
+          event_date: string
+          event_name: string
+          forecast: string | null
+          id: string
+          impact: string | null
+          previous: string | null
+          source: string | null
           updated_at: string | null
           user_id: string | null
         }
         Insert: {
-          allowed_pairs?: string[] | null
-          bot_name?: string
+          actual?: string | null
+          affected_pairs?: string[] | null
           created_at?: string | null
+          currency?: string | null
+          description?: string | null
+          event_date: string
+          event_name: string
+          forecast?: string | null
           id?: string
-          is_active?: boolean | null
-          max_daily_loss?: number | null
-          max_daily_trades?: number | null
-          max_risk_per_trade?: number | null
-          min_confidence_score?: number | null
-          stop_loss_pips?: number | null
-          take_profit_pips?: number | null
-          trading_hours?: Json | null
-          trading_mode?: string | null
-          trailing_stop?: boolean | null
+          impact?: string | null
+          previous?: string | null
+          source?: string | null
           updated_at?: string | null
           user_id?: string | null
         }
         Update: {
-          allowed_pairs?: string[] | null
-          bot_name?: string
+          actual?: string | null
+          affected_pairs?: string[] | null
           created_at?: string | null
+          currency?: string | null
+          description?: string | null
+          event_date?: string
+          event_name?: string
+          forecast?: string | null
           id?: string
-          is_active?: boolean | null
-          max_daily_loss?: number | null
-          max_daily_trades?: number | null
-          max_risk_per_trade?: number | null
-          min_confidence_score?: number | null
-          stop_loss_pips?: number | null
-          take_profit_pips?: number | null
-          trading_hours?: Json | null
-          trading_mode?: string | null
-          trailing_stop?: boolean | null
+          impact?: string | null
+          previous?: string | null
+          source?: string | null
           updated_at?: string | null
           user_id?: string | null
         }
@@ -110,6 +203,33 @@ export type Database = {
           spread_typical?: number | null
           symbol?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      drift_events: {
+        Row: {
+          created_at: string | null
+          event_type: string | null
+          id: string
+          metric: Json | null
+          severity: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          event_type?: string | null
+          id?: string
+          metric?: Json | null
+          severity?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          event_type?: string | null
+          id?: string
+          metric?: Json | null
+          severity?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -206,6 +326,48 @@ export type Database = {
           session_token?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      fills: {
+        Row: {
+          created_at: string | null
+          id: string
+          liquidity_side: string | null
+          price: number
+          qty: number
+          side: string
+          slippage: number | null
+          spread: number | null
+          symbol: string
+          ticket_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          liquidity_side?: string | null
+          price: number
+          qty: number
+          side: string
+          slippage?: number | null
+          spread?: number | null
+          symbol: string
+          ticket_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          liquidity_side?: string | null
+          price?: number
+          qty?: number
+          side?: string
+          slippage?: number | null
+          spread?: number | null
+          symbol?: string
+          ticket_id?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -432,6 +594,105 @@ export type Database = {
           updated_at?: string
           user_id?: string
           username?: string
+        }
+        Relationships: []
+      }
+      risk_limits: {
+        Row: {
+          created_at: string | null
+          id: string
+          max_daily_loss: number | null
+          max_drawdown: number | null
+          max_risk_per_trade: number | null
+          user_id: string | null
+          var_limit: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          max_daily_loss?: number | null
+          max_drawdown?: number | null
+          max_risk_per_trade?: number | null
+          user_id?: string | null
+          var_limit?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          max_daily_loss?: number | null
+          max_drawdown?: number | null
+          max_risk_per_trade?: number | null
+          user_id?: string | null
+          var_limit?: number | null
+        }
+        Relationships: []
+      }
+      trade_journal: {
+        Row: {
+          closed_at: string | null
+          created_at: string | null
+          decision_features: Json | null
+          entry_price: number | null
+          exit_price: number | null
+          id: string
+          modeled_slippage: number | null
+          opened_at: string | null
+          pnl: number | null
+          pnl_pips: number | null
+          realized_slippage: number | null
+          regime_tag: string | null
+          session_tag: string | null
+          side: string
+          spread_at_entry: number | null
+          symbol: string
+          ticket_id: string | null
+          updated_at: string | null
+          user_id: string | null
+          volume: number
+        }
+        Insert: {
+          closed_at?: string | null
+          created_at?: string | null
+          decision_features?: Json | null
+          entry_price?: number | null
+          exit_price?: number | null
+          id?: string
+          modeled_slippage?: number | null
+          opened_at?: string | null
+          pnl?: number | null
+          pnl_pips?: number | null
+          realized_slippage?: number | null
+          regime_tag?: string | null
+          session_tag?: string | null
+          side: string
+          spread_at_entry?: number | null
+          symbol: string
+          ticket_id?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+          volume: number
+        }
+        Update: {
+          closed_at?: string | null
+          created_at?: string | null
+          decision_features?: Json | null
+          entry_price?: number | null
+          exit_price?: number | null
+          id?: string
+          modeled_slippage?: number | null
+          opened_at?: string | null
+          pnl?: number | null
+          pnl_pips?: number | null
+          realized_slippage?: number | null
+          regime_tag?: string | null
+          session_tag?: string | null
+          side?: string
+          spread_at_entry?: number | null
+          symbol?: string
+          ticket_id?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+          volume?: number
         }
         Relationships: []
       }
@@ -709,17 +970,68 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      secure_exness_sessions: {
+        Row: {
+          account_balance: number | null
+          account_currency: string | null
+          account_equity: number | null
+          account_free_margin: number | null
+          account_margin: number | null
+          created_at: string | null
+          expires_at: string | null
+          id: string | null
+          is_connected: boolean | null
+          login_id: number | null
+          server_name: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          account_balance?: number | null
+          account_currency?: string | null
+          account_equity?: number | null
+          account_free_margin?: number | null
+          account_margin?: number | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string | null
+          is_connected?: boolean | null
+          login_id?: number | null
+          server_name?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          account_balance?: number | null
+          account_currency?: string | null
+          account_equity?: number | null
+          account_free_margin?: number | null
+          account_margin?: number | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string | null
+          is_connected?: boolean | null
+          login_id?: number | null
+          server_name?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      decrypt_session_token: {
+        Args: { encrypted_token: string }
+        Returns: string
+      }
       get_current_user_role: {
         Args: Record<PropertyKey, never>
         Returns: Database["public"]["Enums"]["app_role"]
       }
       has_role: {
         Args: {
-          _user_id: string
           _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
         }
         Returns: boolean
       }
