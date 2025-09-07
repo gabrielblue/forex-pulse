@@ -573,6 +573,7 @@ export type Database = {
           created_at: string
           display_name: string | null
           id: string
+          is_public: boolean | null
           updated_at: string
           user_id: string
           username: string
@@ -582,6 +583,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          is_public?: boolean | null
           updated_at?: string
           user_id: string
           username: string
@@ -591,9 +593,37 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          is_public?: boolean | null
           updated_at?: string
           user_id?: string
           username?: string
+        }
+        Relationships: []
+      }
+      rate_limits: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          request_count: number | null
+          user_id: string | null
+          window_start: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          request_count?: number | null
+          user_id?: string | null
+          window_start?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          request_count?: number | null
+          user_id?: string | null
+          window_start?: string | null
         }
         Relationships: []
       }
@@ -624,6 +654,42 @@ export type Database = {
           max_risk_per_trade?: number | null
           user_id?: string | null
           var_limit?: number | null
+        }
+        Relationships: []
+      }
+      security_audit_log: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json | null
+          id: string
+          ip_address: unknown | null
+          record_id: string | null
+          table_name: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ip_address?: unknown | null
+          record_id?: string | null
+          table_name?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ip_address?: unknown | null
+          record_id?: string | null
+          table_name?: string | null
+          user_agent?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -970,56 +1036,13 @@ export type Database = {
       }
     }
     Views: {
-      secure_exness_sessions: {
-        Row: {
-          account_balance: number | null
-          account_currency: string | null
-          account_equity: number | null
-          account_free_margin: number | null
-          account_margin: number | null
-          created_at: string | null
-          expires_at: string | null
-          id: string | null
-          is_connected: boolean | null
-          login_id: number | null
-          server_name: string | null
-          updated_at: string | null
-          user_id: string | null
-        }
-        Insert: {
-          account_balance?: number | null
-          account_currency?: string | null
-          account_equity?: number | null
-          account_free_margin?: number | null
-          account_margin?: number | null
-          created_at?: string | null
-          expires_at?: string | null
-          id?: string | null
-          is_connected?: boolean | null
-          login_id?: number | null
-          server_name?: string | null
-          updated_at?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          account_balance?: number | null
-          account_currency?: string | null
-          account_equity?: number | null
-          account_free_margin?: number | null
-          account_margin?: number | null
-          created_at?: string | null
-          expires_at?: string | null
-          id?: string | null
-          is_connected?: boolean | null
-          login_id?: number | null
-          server_name?: string | null
-          updated_at?: string | null
-          user_id?: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
+      decrypt_exness_token: {
+        Args: { encrypted_token: string }
+        Returns: string
+      }
       decrypt_session_token: {
         Args: { encrypted_token: string }
         Returns: string
@@ -1034,6 +1057,15 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      log_security_event: {
+        Args: {
+          p_action: string
+          p_details?: Json
+          p_record_id?: string
+          p_table_name?: string
+        }
+        Returns: undefined
       }
     }
     Enums: {

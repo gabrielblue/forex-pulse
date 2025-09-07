@@ -5,6 +5,7 @@ import { signalProcessor } from './signalProcessor';
 import { marketAnalyzer } from './marketAnalyzer';
 import { worldClassStrategies } from './strategies/worldClassStrategies';
 import { botSignalManager } from './botSignalManager';
+import { SecurityValidator } from '../security/validator';
 
 export interface BotStatus {
   isActive: boolean;
@@ -147,6 +148,21 @@ class TradingBot {
 
   async connectToExness(credentials: ExnessCredentials): Promise<boolean> {
     try {
+      // Validate credentials before attempting connection
+      const accountValidation = SecurityValidator.validateAccountNumber(credentials.accountNumber);
+      if (!accountValidation.valid) {
+        throw new Error(accountValidation.error);
+      }
+      
+      const serverValidation = SecurityValidator.validateServerName(credentials.server);
+      if (!serverValidation.valid) {
+        throw new Error(serverValidation.error);
+      }
+      
+      // Check rate limiting
+      if (!SecurityValidator.checkRateLimit('exness_connect', 5, 300000)) { // 5 attempts per 5 minutes
+        throw new Error('Too many connection attempts. Please wait before trying again.');
+      }
       // Direct connection through exnessAPI
       const connected = await exnessAPI.connect(credentials);
       this.status.isConnected = connected;

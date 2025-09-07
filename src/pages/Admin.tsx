@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { SecurityMonitor } from "@/components/SecurityMonitor";
 import { 
   Users, 
   Settings, 
@@ -484,35 +485,8 @@ const Admin = () => {
               </CardContent>
             </Card>
 
-            {/* Quick Stats */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="w-5 h-5" />
-                  Security Overview
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between">
-                    <span className="text-sm">Failed Logins (24h)</span>
-                    <span className="text-sm font-medium">12</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm">Blocked IPs</span>
-                    <span className="text-sm font-medium">3</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm">Active Sessions</span>
-                    <span className="text-sm font-medium">127</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm">API Calls (1h)</span>
-                    <span className="text-sm font-medium">2,847</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            {/* Security Monitor */}
+            <SecurityMonitor />
           </div>
         </div>
       </div>
