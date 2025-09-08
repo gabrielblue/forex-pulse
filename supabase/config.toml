@@ -28,7 +28,7 @@ enabled = false
 
 [auth]
 # Security settings for production
-otp_expiry_seconds = 300
+otp_expiry_seconds = 180
 password_min_length = 12
 hibp_enabled = true
 rate_limit_email_sent = 60
