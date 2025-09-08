@@ -1039,6 +1039,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_and_update_rate_limit: {
+        Args: {
+          p_action: string
+          p_limit?: number
+          p_user_id: string
+          p_window_minutes?: number
+        }
+        Returns: boolean
+      }
       decrypt_exness_token: {
         Args: { encrypted_token: string }
         Returns: string
@@ -1065,6 +1074,10 @@ export type Database = {
           p_record_id?: string
           p_table_name?: string
         }
+        Returns: undefined
+      }
+      reset_user_rate_limit: {
+        Args: { p_action?: string; p_user_id: string }
         Returns: undefined
       }
       update_market_data_secure: {
