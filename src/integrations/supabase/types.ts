@@ -1067,6 +1067,16 @@ export type Database = {
         }
         Returns: undefined
       }
+      update_market_data_secure: {
+        Args: {
+          p_ask: number
+          p_bid: number
+          p_spread: number
+          p_symbol: string
+          p_volume?: number
+        }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "admin" | "trader" | "viewer"
