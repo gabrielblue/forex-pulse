@@ -60,9 +60,10 @@ export const StrategyControls = () => {
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="confidence">Minimum Signal Confidence</Label>
+            <Label htmlFor="signal-confidence">Minimum Signal Confidence</Label>
             <div className="px-3">
               <Slider
+                id="signal-confidence"
                 value={strategy.signalConfidence}
                 onValueChange={(value) => setStrategy(prev => ({ ...prev, signalConfidence: value }))}
                 max={100}
@@ -79,8 +80,9 @@ export const StrategyControls = () => {
           </div>
 
           <div className="space-y-2">
-            <Label>Max Concurrent Trades</Label>
+            <Label htmlFor="max-trades">Max Concurrent Trades</Label>
             <Input
+              id="max-trades"
               type="number"
               value={strategy.maxConcurrentTrades}
               onChange={(e) => setStrategy(prev => ({ 
@@ -174,11 +176,11 @@ export const StrategyControls = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <Label htmlFor="ai-predictions">AI Predictions</Label>
+              <Label htmlFor="enable-ai-predictions">AI Predictions</Label>
               <p className="text-sm text-muted-foreground">Use machine learning forecasts</p>
             </div>
             <Switch
-              id="ai-predictions"
+              id="enable-ai-predictions"
               checked={strategy.useAiPredictions}
               onCheckedChange={(checked) => 
                 setStrategy(prev => ({ ...prev, useAiPredictions: checked }))
@@ -190,11 +192,11 @@ export const StrategyControls = () => {
 
           <div className="flex items-center justify-between">
             <div>
-              <Label htmlFor="technical-analysis">Technical Analysis</Label>
+              <Label htmlFor="enable-technical-analysis">Technical Analysis</Label>
               <p className="text-sm text-muted-foreground">RSI, MACD, Moving averages</p>
             </div>
             <Switch
-              id="technical-analysis"
+              id="enable-technical-analysis"
               checked={strategy.useTechnicalAnalysis}
               onCheckedChange={(checked) => 
                 setStrategy(prev => ({ ...prev, useTechnicalAnalysis: checked }))
@@ -206,11 +208,11 @@ export const StrategyControls = () => {
 
           <div className="flex items-center justify-between">
             <div>
-              <Label htmlFor="news-filter">News Filter</Label>
+              <Label htmlFor="enable-news-filter">News Filter</Label>
               <p className="text-sm text-muted-foreground">Avoid trading during high-impact news</p>
             </div>
             <Switch
-              id="news-filter"
+              id="enable-news-filter"
               checked={strategy.useNewsFilter}
               onCheckedChange={(checked) => 
                 setStrategy(prev => ({ ...prev, useNewsFilter: checked }))
@@ -229,9 +231,9 @@ export const StrategyControls = () => {
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="take-profit">Take Profit Ratio</Label>
+            <Label htmlFor="take-profit-ratio">Take Profit Ratio</Label>
             <Input
-              id="take-profit"
+              id="take-profit-ratio"
               type="number"
               step="0.1"
               value={strategy.takeProfitRatio}
@@ -243,9 +245,9 @@ export const StrategyControls = () => {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="stop-loss">Stop Loss Ratio</Label>
+            <Label htmlFor="stop-loss-ratio">Stop Loss Ratio</Label>
             <Input
-              id="stop-loss"
+              id="stop-loss-ratio"
               type="number"
               step="0.1"
               value={strategy.stopLossRatio}

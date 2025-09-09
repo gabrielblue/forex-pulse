@@ -25,9 +25,9 @@ export interface SignalProcessorConfig {
 
 class SignalProcessor {
   private config: SignalProcessorConfig = {
-    minConfidence: 75,
+    minConfidence: 60, // Reduced for more trading opportunities
     enabledTimeframes: ['1H', '4H', '1D'],
-    enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY'],
+    enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD'], // More pairs
     autoExecute: false
   };
 
@@ -63,7 +63,7 @@ class SignalProcessor {
   }
 
   private startSignalMonitoring(): void {
-    // Monitor for new signals every 30 seconds
+    // Monitor for new signals every 15 seconds for day trading
     setInterval(async () => {
       if (this.isProcessing) return;
       
@@ -75,7 +75,7 @@ class SignalProcessor {
       } finally {
         this.isProcessing = false;
       }
-    }, 30000);
+    }, 15000); // Reduced interval for more frequent processing
   }
 
   private async processNewSignals(): Promise<void> {
@@ -188,11 +188,11 @@ class SignalProcessor {
   }
 
   private calculateOptimalVolumeFromSignal(signal: TradingSignal): number {
-    // Enhanced volume calculation based on signal strength and market conditions
-    let baseVolume = 0.01; // Start with minimum
+    // More aggressive volume calculation for day trading
+    let baseVolume = 0.05; // Start with larger base volume for day trading
     
     // Confidence-based sizing
-    const confidenceMultiplier = Math.max(0.5, signal.confidence / 100);
+    const confidenceMultiplier = Math.max(0.8, signal.confidence / 100); // More aggressive multiplier
     baseVolume *= confidenceMultiplier;
     
     // Time-based adjustments
@@ -200,7 +200,7 @@ class SignalProcessor {
     const isOptimalTime = (currentHour >= 8 && currentHour <= 17) || (currentHour >= 13 && currentHour <= 22);
     
     if (isOptimalTime) {
-      baseVolume *= 1.2; // 20% increase during optimal trading hours
+      baseVolume *= 1.5; // Increased to 50% during optimal trading hours
     }
     
     // Symbol-specific adjustments
@@ -216,12 +216,12 @@ class SignalProcessor {
       const riskReward = takeProfitDistance / stopLossDistance;
       
       if (riskReward >= 2.0) {
-        baseVolume *= 1.3; // 30% increase for good risk-reward
+        baseVolume *= 1.8; // Increased to 80% for good risk-reward
       }
     }
     
     // Apply safety limits
-    return Math.max(0.01, Math.min(0.1, baseVolume));
+    return Math.max(0.01, Math.min(0.5, baseVolume)); // Increased max volume to 0.5 lots
   }
 
   private async updateSignalStatus(

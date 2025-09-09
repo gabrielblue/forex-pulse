@@ -241,10 +241,11 @@ export const RiskManagement = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <Label>Stop Loss</Label>
+              <Label htmlFor="enable-stop-loss">Stop Loss</Label>
               <p className="text-sm text-muted-foreground">Automatically set stop loss on every trade</p>
             </div>
             <Switch
+              id="enable-stop-loss"
               checked={riskSettings.useStopLoss}
               onCheckedChange={(checked) => 
                 setRiskSettings(prev => ({ ...prev, useStopLoss: checked }))
@@ -256,10 +257,11 @@ export const RiskManagement = () => {
 
           <div className="flex items-center justify-between">
             <div>
-              <Label>Take Profit</Label>
+              <Label htmlFor="enable-take-profit">Take Profit</Label>
               <p className="text-sm text-muted-foreground">Automatically set take profit targets</p>
             </div>
             <Switch
+              id="enable-take-profit"
               checked={riskSettings.useTakeProfit}
               onCheckedChange={(checked) => 
                 setRiskSettings(prev => ({ ...prev, useTakeProfit: checked }))
@@ -271,10 +273,11 @@ export const RiskManagement = () => {
 
           <div className="flex items-center justify-between">
             <div>
-              <Label>Trailing Stop</Label>
+              <Label htmlFor="enable-trailing-stop">Trailing Stop</Label>
               <p className="text-sm text-muted-foreground">Move stop loss to protect profits</p>
             </div>
             <Switch
+              id="enable-trailing-stop"
               checked={riskSettings.useTrailingStop}
               onCheckedChange={(checked) => 
                 setRiskSettings(prev => ({ ...prev, useTrailingStop: checked }))
@@ -319,10 +322,11 @@ export const RiskManagement = () => {
 
           <div className="flex items-center justify-between">
             <div>
-              <Label>News Event Pause</Label>
+              <Label htmlFor="enable-news-pause">News Event Pause</Label>
               <p className="text-sm text-muted-foreground">Stop trading during high-impact news</p>
             </div>
             <Switch
+              id="enable-news-pause"
               checked={circuitBreakers.newsEventPause}
               onCheckedChange={(checked) => 
                 setCircuitBreakers(prev => ({ ...prev, newsEventPause: checked }))
@@ -345,10 +349,11 @@ export const RiskManagement = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <Label>Emergency Stop</Label>
+              <Label htmlFor="enable-emergency-stop">Emergency Stop</Label>
               <p className="text-sm text-muted-foreground">Enable emergency stop-all functionality</p>
             </div>
             <Switch
+              id="enable-emergency-stop"
               checked={riskSettings.emergencyStopEnabled}
               onCheckedChange={(checked) => 
                 setRiskSettings(prev => ({ ...prev, emergencyStopEnabled: checked }))

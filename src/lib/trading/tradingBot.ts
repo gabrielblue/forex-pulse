@@ -47,10 +47,10 @@ class TradingBot {
   };
 
   private configuration: BotConfiguration = {
-    minConfidence: 80,
-    maxRiskPerTrade: 1, // Conservative 1% for real trading
-    maxDailyLoss: 3, // Conservative 3% for real trading
-    enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY'],
+    minConfidence: 65, // Reduced from 80 to 65 for more trading opportunities
+    maxRiskPerTrade: 3, // Increased to 3% for day trading
+    maxDailyLoss: 8, // Increased to 8% for day trading
+    enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD'], // Added more pairs
     tradingHours: {
       start: '00:00',
       end: '23:59',
@@ -120,10 +120,10 @@ class TradingBot {
 
       if (botSettings) {
         this.configuration = {
-          minConfidence: parseFloat(botSettings.min_confidence_score?.toString() || '80'),
-          maxRiskPerTrade: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '1'), 2.0), // Cap at 2%
-          maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '3'), 5.0), // Cap at 5%
-          enabledPairs: botSettings.allowed_pairs || ['EURUSD', 'GBPUSD', 'USDJPY'],
+          minConfidence: parseFloat(botSettings.min_confidence_score?.toString() || '65'), // Reduced confidence threshold
+          maxRiskPerTrade: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '3'), 5.0), // Increased cap to 5%
+          maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '8'), 15.0), // Increased cap to 15%
+          enabledPairs: botSettings.allowed_pairs || ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD'],
           tradingHours: botSettings.trading_hours as any || {
             start: '00:00',
             end: '23:59',
@@ -229,7 +229,7 @@ class TradingBot {
       // Initialize signal manager
       await botSignalManager.initialize({
         enabled: true,
-        interval: this.configuration.signalCheckInterval || 30000,
+        interval: this.configuration.signalCheckInterval || 15000, // Reduced to 15 seconds for more frequent analysis
         symbols: this.configuration.enabledPairs,
         minConfidence: this.configuration.minConfidence,
         autoExecute: this.status.autoTradingEnabled
@@ -389,23 +389,29 @@ class TradingBot {
       const dailyLossPercentage = (Math.abs(dailyLoss) / accountInfo.balance) * 100;
       
       if (dailyLossPercentage >= this.configuration.maxDailyLoss) {
-        console.warn(`⚠️ Daily loss limit reached: ${dailyLossPercentage.toFixed(2)}%, stopping bot`);
-        await this.emergencyStop('Daily loss limit exceeded');
+        console.warn(`⚠️ Daily loss limit reached: ${dailyLossPercentage.toFixed(2)}%, but continuing with reduced risk for day trading`);
+        // For day trading, reduce position sizes instead of stopping completely
+        this.riskParams.maxRiskPerTrade = Math.max(0.5, this.riskParams.maxRiskPerTrade * 0.5);
+        console.log(`📉 Reduced risk per trade to ${this.riskParams.maxRiskPerTrade}% for remainder of day`);
         return;
       }
     }
 
     // Check margin level - more lenient for demo accounts
     if (accountInfo.marginLevel > 0) {
-      const minMarginLevel = accountInfo.isDemo ? 50 : 150; // More lenient for demo accounts
-      const criticalMarginLevel = accountInfo.isDemo ? 30 : 100;
+      const minMarginLevel = accountInfo.isDemo ? 30 : 80; // Even more lenient for aggressive day trading
+      const criticalMarginLevel = accountInfo.isDemo ? 20 : 50; // Lower critical levels
       
       if (accountInfo.marginLevel < minMarginLevel) {
         console.warn(`⚠️ Low margin level: ${accountInfo.marginLevel.toFixed(1)}% (demo: ${accountInfo.isDemo})`);
         
         if (accountInfo.marginLevel < criticalMarginLevel) {
-          console.error('🚨 Critical margin level, stopping auto trading');
-          await this.enableAutoTrading(false);
+          console.warn('⚠️ Critical margin level, reducing position sizes but continuing day trading');
+          // Reduce position sizes instead of stopping for day trading
+          orderManager.updateRiskParameters({
+            maxRiskPerTrade: Math.max(0.5, this.configuration.maxRiskPerTrade * 0.3),
+            maxPositionSize: Math.max(0.01, this.configuration.maxRiskPerTrade * 0.5)
+          });
         }
       }
     }
@@ -603,8 +609,8 @@ class TradingBot {
     // Apply conservative limits for real trading
     const safeConfig = {
       ...config,
-      maxRiskPerTrade: config.maxRiskPerTrade ? Math.min(config.maxRiskPerTrade, 2.0) : undefined,
-      maxDailyLoss: config.maxDailyLoss ? Math.min(config.maxDailyLoss, 5.0) : undefined,
+      maxRiskPerTrade: config.maxRiskPerTrade ? Math.min(config.maxRiskPerTrade, 5.0) : undefined, // Increased to 5%
+      maxDailyLoss: config.maxDailyLoss ? Math.min(config.maxDailyLoss, 15.0) : undefined, // Increased to 15%
       useStopLoss: true, // Always enforce stop loss
       useTakeProfit: true, // Always enforce take profit
       emergencyStopEnabled: true // Always keep emergency stop enabled
@@ -623,6 +629,8 @@ class TradingBot {
     orderManager.updateRiskParameters({
       maxRiskPerTrade: this.configuration.maxRiskPerTrade,
       maxDailyLoss: this.configuration.maxDailyLoss,
+      maxConcurrentPositions: 10, // Allow more concurrent positions for day trading
+      maxPositionSize: 5.0, // Larger position sizes
       useStopLoss: this.configuration.useStopLoss,
       useTakeProfit: this.configuration.useTakeProfit,
       emergencyStopEnabled: this.configuration.emergencyStopEnabled

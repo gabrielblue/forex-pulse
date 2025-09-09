@@ -16,9 +16,9 @@ export interface SignalGenerationConfig {
 class BotSignalManager {
   private config: SignalGenerationConfig = {
     enabled: false,
-    interval: 30000, // 30 seconds
-    symbols: ['EURUSD', 'GBPUSD', 'USDJPY'],
-    minConfidence: 75,
+    interval: 15000, // Reduced to 15 seconds for more frequent signals
+    symbols: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD'], // More pairs
+    minConfidence: 60, // Reduced from 75 to 60 for more trading opportunities
     autoExecute: false
   };
 
@@ -68,7 +68,7 @@ class BotSignalManager {
 
     // Rate limiting
     const timeSinceLastGeneration = Date.now() - this.lastGenerationTime;
-    if (timeSinceLastGeneration < 20000) { // Minimum 20 seconds between generations
+    if (timeSinceLastGeneration < 10000) { // Reduced to 10 seconds for day trading
       console.log('Rate limit: Too soon since last generation');
       return;
     }
@@ -190,20 +190,21 @@ class BotSignalManager {
   
   private fallbackAnalysis(symbol: string, price: any, indicators: any): any {
     // Simplified but reliable analysis
-    const trend = Math.random() > 0.5 ? 'BULLISH' : 'BEARISH';
-    const momentum = 50 + Math.random() * 50;
+    const trend = Math.random() > 0.4 ? 'BULLISH' : 'BEARISH'; // More bullish bias for day trading
+    const momentum = 60 + Math.random() * 40; // Higher base momentum
     const volatility = Math.random() * 30;
     
     // Calculate confidence based on multiple factors
-    const trendStrength = Math.random() * 40;
-    const momentumScore = momentum > 70 ? 30 : momentum > 50 ? 20 : 10;
-    const volatilityScore = volatility < 20 ? 20 : 10;
-    const confidence = Math.min(95, 50 + trendStrength + momentumScore + volatilityScore);
+    const trendStrength = Math.random() * 30 + 20; // Higher base trend strength
+    const momentumScore = momentum > 70 ? 25 : momentum > 50 ? 20 : 15; // More generous scoring
+    const volatilityScore = volatility < 25 ? 20 : 15; // More lenient volatility scoring
+    const dayTradingBonus = 15; // Extra confidence for day trading
+    const confidence = Math.min(95, 40 + trendStrength + momentumScore + volatilityScore + dayTradingBonus);
 
     // Calculate SL/TP based on volatility
     const pipSize = symbol.includes('JPY') ? 0.01 : 0.0001;
-    const slDistance = (20 + volatility) * pipSize;
-    const tpDistance = slDistance * 2; // 2:1 risk-reward ratio
+    const slDistance = (10 + volatility * 0.5) * pipSize; // Tighter stop loss for day trading
+    const tpDistance = slDistance * 1.5; // 1.5:1 risk-reward ratio for faster profits
 
     return {
       direction: trend === 'BULLISH' ? 'BUY' : 'SELL',
@@ -211,7 +212,7 @@ class BotSignalManager {
       stopLoss: trend === 'BULLISH' ? price.bid - slDistance : price.bid + slDistance,
       takeProfit: trend === 'BULLISH' ? price.bid + tpDistance : price.bid - tpDistance,
       reasoning: `Technical analysis: ${trend} trend with ${momentum.toFixed(1)}% momentum, volatility at ${volatility.toFixed(1)}%`,
-      volume: 0.01,
+      volume: 0.05, // Larger default volume for day trading
       expectedValue: confidence * 0.5
     };
   }

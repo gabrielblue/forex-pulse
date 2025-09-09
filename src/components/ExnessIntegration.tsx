@@ -394,9 +394,9 @@ export const ExnessIntegration = () => {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="accountNumber">Account Number</Label>
+                  <Label htmlFor="account-number">Account Number</Label>
                   <Input
-                    id="accountNumber"
+                    id="account-number"
                     type="text"
                     placeholder="Enter your MT5 account number"
                     value={credentials.accountNumber}
@@ -407,10 +407,10 @@ export const ExnessIntegration = () => {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="mt5-password">Password</Label>
                   <div className="relative">
                     <Input
-                      id="password"
+                      id="mt5-password"
                       type={showPassword ? "text" : "password"}
                       placeholder="Enter your MT5 password"
                       value={credentials.password}
@@ -437,13 +437,13 @@ export const ExnessIntegration = () => {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="server">MT5 Server</Label>
+                <Label htmlFor="mt5-server">MT5 Server</Label>
                 <Select 
                   value={credentials.server} 
                   onValueChange={(value) => setCredentials(prev => ({ ...prev, server: value }))}
                   disabled={isConnecting || isTesting}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="mt5-server">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

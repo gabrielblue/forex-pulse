@@ -26,32 +26,32 @@ export class ProfessionalTradingStrategies {
     const currentPrice = marketData.prices[marketData.prices.length - 1];
     
     // RSI oversold/overbought with MACD confirmation
-    if (rsi < 30 && macd.value > macd.signal && ema20 > ema50) {
+    if (rsi < 40 && macd.value > macd.signal && ema20 > ema50) { // More lenient RSI for day trading
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'BUY',
-        confidence: 85,
+        confidence: 75, // Slightly lower confidence but more opportunities
         entryPrice: currentPrice,
-        stopLoss: currentPrice - (0.0005 * this.getPipValue(marketData.symbol)),
-        takeProfit: currentPrice + (0.001 * this.getPipValue(marketData.symbol)),
+        stopLoss: currentPrice - (0.0003 * this.getPipValue(marketData.symbol)), // Tighter stop loss
+        takeProfit: currentPrice + (0.0008 * this.getPipValue(marketData.symbol)), // Closer take profit
         timeframe: '1M',
-        reasoning: 'Scalping: RSI oversold with bullish MACD crossover',
+        reasoning: 'Day trading scalping: RSI oversold with bullish MACD crossover',
         source: 'Scalping Strategy'
       };
     }
     
-    if (rsi > 70 && macd.value < macd.signal && ema20 < ema50) {
+    if (rsi > 60 && macd.value < macd.signal && ema20 < ema50) { // More lenient RSI for day trading
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'SELL',
-        confidence: 85,
+        confidence: 75,
         entryPrice: currentPrice,
-        stopLoss: currentPrice + (0.0005 * this.getPipValue(marketData.symbol)),
-        takeProfit: currentPrice - (0.001 * this.getPipValue(marketData.symbol)),
+        stopLoss: currentPrice + (0.0003 * this.getPipValue(marketData.symbol)), // Tighter stop loss
+        takeProfit: currentPrice - (0.0008 * this.getPipValue(marketData.symbol)), // Closer take profit
         timeframe: '1M',
-        reasoning: 'Scalping: RSI overbought with bearish MACD crossover',
+        reasoning: 'Day trading scalping: RSI overbought with bearish MACD crossover',
         source: 'Scalping Strategy'
       };
     }
@@ -65,33 +65,33 @@ export class ProfessionalTradingStrategies {
     const currentPrice = marketData.prices[marketData.prices.length - 1];
     
     // Golden Cross with trend confirmation
-    if (ema20 > ema50 && ema50 > sma200 && currentPrice > bollinger.middle && rsi > 50) {
+    if (ema20 > ema50 && currentPrice > bollinger.middle && rsi > 45) { // Removed SMA200 requirement and lowered RSI
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'BUY',
-        confidence: 90,
+        confidence: 80, // Slightly lower confidence for more opportunities
         entryPrice: currentPrice,
-        stopLoss: ema50,
-        takeProfit: currentPrice + ((currentPrice - ema50) * 2),
+        stopLoss: currentPrice - (currentPrice * 0.008), // Tighter stop loss (0.8%)
+        takeProfit: currentPrice + (currentPrice * 0.012), // Closer take profit (1.2%)
         timeframe: '4H',
-        reasoning: 'Swing: Golden cross with strong uptrend confirmation',
+        reasoning: 'Day trading swing: EMA bullish alignment with momentum',
         source: 'Swing Trading Strategy'
       };
     }
     
     // Death Cross with trend confirmation
-    if (ema20 < ema50 && ema50 < sma200 && currentPrice < bollinger.middle && rsi < 50) {
+    if (ema20 < ema50 && currentPrice < bollinger.middle && rsi < 55) { // More lenient conditions
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'SELL',
-        confidence: 90,
+        confidence: 80,
         entryPrice: currentPrice,
-        stopLoss: ema50,
-        takeProfit: currentPrice - ((ema50 - currentPrice) * 2),
+        stopLoss: currentPrice + (currentPrice * 0.008), // Tighter stop loss
+        takeProfit: currentPrice - (currentPrice * 0.012), // Closer take profit
         timeframe: '4H',
-        reasoning: 'Swing: Death cross with strong downtrend confirmation',
+        reasoning: 'Day trading swing: EMA bearish alignment with momentum',
         source: 'Swing Trading Strategy'
       };
     }
@@ -108,32 +108,32 @@ export class ProfessionalTradingStrategies {
     const support = Math.min(...recentPrices);
     
     // Bollinger Band breakout with volume confirmation
-    if (currentPrice > bollinger.upper && rsi < 80) {
+    if (currentPrice > bollinger.upper && rsi < 85) { // More lenient RSI
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'BUY',
-        confidence: 88,
+        confidence: 78, // Lower confidence for more opportunities
         entryPrice: currentPrice,
-        stopLoss: bollinger.middle,
-        takeProfit: currentPrice + (atr * 2),
+        stopLoss: currentPrice - (atr * 0.8), // Tighter stop loss
+        takeProfit: currentPrice + (atr * 1.2), // Closer take profit
         timeframe: '1H',
-        reasoning: 'Breakout: Bollinger band upper breakout with momentum',
+        reasoning: 'Day trading breakout: Bollinger upper breakout with momentum',
         source: 'Breakout Strategy'
       };
     }
     
-    if (currentPrice < bollinger.lower && rsi > 20) {
+    if (currentPrice < bollinger.lower && rsi > 15) { // More lenient RSI
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'SELL',
-        confidence: 88,
+        confidence: 78,
         entryPrice: currentPrice,
-        stopLoss: bollinger.middle,
-        takeProfit: currentPrice - (atr * 2),
+        stopLoss: currentPrice + (atr * 0.8), // Tighter stop loss
+        takeProfit: currentPrice - (atr * 1.2), // Closer take profit
         timeframe: '1H',
-        reasoning: 'Breakout: Bollinger band lower breakout with momentum',
+        reasoning: 'Day trading breakout: Bollinger lower breakout with momentum',
         source: 'Breakout Strategy'
       };
     }
@@ -147,33 +147,33 @@ export class ProfessionalTradingStrategies {
     const currentPrice = marketData.prices[marketData.prices.length - 1];
     
     // Oversold conditions with mean reversion signals
-    if (currentPrice < bollinger.lower && rsi < 25 && stochastic.k < 20) {
+    if (currentPrice < bollinger.middle && rsi < 35 && stochastic.k < 30) { // More lenient conditions
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'BUY',
-        confidence: 87,
+        confidence: 72, // Lower confidence for more opportunities
         entryPrice: currentPrice,
-        stopLoss: currentPrice - (indicators.atr * 1.5),
-        takeProfit: bollinger.middle,
+        stopLoss: currentPrice - (indicators.atr * 0.8), // Tighter stop loss
+        takeProfit: currentPrice + (indicators.atr * 1.0), // Closer take profit
         timeframe: '1H',
-        reasoning: 'Mean Reversion: Multiple oversold indicators suggest reversal',
+        reasoning: 'Day trading mean reversion: Oversold conditions with reversal potential',
         source: 'Mean Reversion Strategy'
       };
     }
     
     // Overbought conditions with mean reversion signals
-    if (currentPrice > bollinger.upper && rsi > 75 && stochastic.k > 80) {
+    if (currentPrice > bollinger.middle && rsi > 65 && stochastic.k > 70) { // More lenient conditions
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'SELL',
-        confidence: 87,
+        confidence: 72,
         entryPrice: currentPrice,
-        stopLoss: currentPrice + (indicators.atr * 1.5),
-        takeProfit: bollinger.middle,
+        stopLoss: currentPrice + (indicators.atr * 0.8), // Tighter stop loss
+        takeProfit: currentPrice - (indicators.atr * 1.0), // Closer take profit
         timeframe: '1H',
-        reasoning: 'Mean Reversion: Multiple overbought indicators suggest reversal',
+        reasoning: 'Day trading mean reversion: Overbought conditions with reversal potential',
         source: 'Mean Reversion Strategy'
       };
     }
