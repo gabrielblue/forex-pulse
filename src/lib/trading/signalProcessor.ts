@@ -161,15 +161,15 @@ class SignalProcessor {
   private async executeSignal(signal: TradingSignal): Promise<void> {
     try {
       // Calculate position size based on confidence and risk
-      const volume = this.calculateVolumeFromSignal(signal);
+      const volume = this.calculateOptimalVolumeFromSignal(signal);
 
       const orderRequest: OrderRequest = {
         symbol: signal.symbol,
         type: signal.type,
-        volume,
+        volume: this.calculateOptimalVolumeFromSignal(signal),
         stopLoss: signal.stopLoss,
         takeProfit: signal.takeProfit,
-        comment: `AI Signal ${signal.id} (${signal.confidence}%)`
+        comment: `Enhanced AI Signal ${signal.id} (${signal.confidence}% confidence)`
       };
 
       // Execute the order
@@ -187,16 +187,41 @@ class SignalProcessor {
     }
   }
 
-  private calculateVolumeFromSignal(signal: TradingSignal): number {
-    // Base volume calculation
-    let baseVolume = 0.1; // Standard lot size
-
-    // Adjust based on confidence
-    const confidenceMultiplier = signal.confidence / 100;
+  private calculateOptimalVolumeFromSignal(signal: TradingSignal): number {
+    // Enhanced volume calculation based on signal strength and market conditions
+    let baseVolume = 0.01; // Start with minimum
+    
+    // Confidence-based sizing
+    const confidenceMultiplier = Math.max(0.5, signal.confidence / 100);
     baseVolume *= confidenceMultiplier;
-
-    // Ensure minimum and maximum limits
-    return Math.max(0.01, Math.min(baseVolume, 1.0));
+    
+    // Time-based adjustments
+    const currentHour = new Date().getUTCHours();
+    const isOptimalTime = (currentHour >= 8 && currentHour <= 17) || (currentHour >= 13 && currentHour <= 22);
+    
+    if (isOptimalTime) {
+      baseVolume *= 1.2; // 20% increase during optimal trading hours
+    }
+    
+    // Symbol-specific adjustments
+    if (signal.symbol === 'EURUSD' || signal.symbol === 'GBPUSD') {
+      baseVolume *= 1.1; // Slightly larger positions for major pairs
+    }
+    
+    // Risk-reward ratio bonus
+    if (signal.takeProfit && signal.stopLoss) {
+      const entryPrice = signal.entryPrice;
+      const takeProfitDistance = Math.abs(signal.takeProfit - entryPrice);
+      const stopLossDistance = Math.abs(entryPrice - signal.stopLoss);
+      const riskReward = takeProfitDistance / stopLossDistance;
+      
+      if (riskReward >= 2.0) {
+        baseVolume *= 1.3; // 30% increase for good risk-reward
+      }
+    }
+    
+    // Apply safety limits
+    return Math.max(0.01, Math.min(0.1, baseVolume));
   }
 
   private async updateSignalStatus(
@@ -243,7 +268,7 @@ class SignalProcessor {
           marketData.volumes
         );
 
-        // Apply multiple strategies
+        // Apply enhanced strategies with market context
         const strategies = [
           () => professionalStrategies.scalpingStrategy(marketData, indicators),
           () => professionalStrategies.swingTradingStrategy(marketData, indicators),

@@ -780,6 +780,31 @@ class OrderManager {
   getRiskParameters(): RiskParameters {
     return { ...this.riskParams };
   }
+  
+  // Enhanced helper methods for better profitability
+  private calculatePipValue(symbol: string, accountSize: number): number {
+    // Simplified pip value calculation
+    if (symbol.includes('JPY')) {
+      return 0.01 * (accountSize / 100000); // JPY pairs
+    } else {
+      return 0.0001 * (accountSize / 100000); // Standard pairs
+    }
+  }
+  
+  private convertPriceToPips(priceDistance: number, symbol: string): number {
+    const pipSize = symbol.includes('JPY') ? 0.01 : 0.0001;
+    return priceDistance / pipSize;
+  }
+  
+  private async getCurrentPrice(symbol: string): Promise<number> {
+    try {
+      const price = await exnessAPI.getCurrentPrice(symbol);
+      return price ? (price.bid + price.ask) / 2 : 0;
+    } catch (error) {
+      console.error('Failed to get current price:', error);
+      return 0;
+    }
+  }
 }
 
 export const orderManager = new OrderManager();
