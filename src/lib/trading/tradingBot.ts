@@ -345,7 +345,7 @@ class TradingBot {
   }
 
   private startHealthMonitoring(): void {
-    // Health check every 2 minutes
+    // Health check every 5 minutes to reduce spam
     this.healthCheckInterval = setInterval(async () => {
       try {
         await this.performComprehensiveHealthCheck();
@@ -353,7 +353,7 @@ class TradingBot {
       } catch (error) {
         console.error('Health check error:', error);
       }
-    }, 120000);
+    }, 300000); // 5 minutes instead of 2
   }
 
   private async performHealthChecks(): Promise<void> {
@@ -395,12 +395,18 @@ class TradingBot {
       }
     }
 
-    // Check margin level
-    if (accountInfo.marginLevel > 0 && accountInfo.marginLevel < 200) {
-      console.warn(`⚠️ Low margin level: ${accountInfo.marginLevel.toFixed(1)}%`);
-      if (accountInfo.marginLevel < 100) {
-        console.error('🚨 Critical margin level, stopping auto trading');
-        await this.enableAutoTrading(false);
+    // Check margin level - more lenient for demo accounts
+    if (accountInfo.marginLevel > 0) {
+      const minMarginLevel = accountInfo.isDemo ? 50 : 150; // More lenient for demo accounts
+      const criticalMarginLevel = accountInfo.isDemo ? 30 : 100;
+      
+      if (accountInfo.marginLevel < minMarginLevel) {
+        console.warn(`⚠️ Low margin level: ${accountInfo.marginLevel.toFixed(1)}% (demo: ${accountInfo.isDemo})`);
+        
+        if (accountInfo.marginLevel < criticalMarginLevel) {
+          console.error('🚨 Critical margin level, stopping auto trading');
+          await this.enableAutoTrading(false);
+        }
       }
     }
 

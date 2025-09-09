@@ -217,9 +217,13 @@ class OrderManager {
         return { allowed: false, reason: `Account balance too low: ${accountStatus.accountInfo.currency} ${accountStatus.accountInfo.balance} (min: $${this.riskParams.minAccountBalance})` };
       }
 
-      // Check margin level - prevent margin calls
-      if (accountStatus.accountInfo.marginLevel > 0 && accountStatus.accountInfo.marginLevel < this.riskParams.minMarginLevel) {
-        return { allowed: false, reason: `Margin level too low: ${accountStatus.accountInfo.marginLevel.toFixed(1)}% (min: ${this.riskParams.minMarginLevel}%)` };
+      // Check margin level - prevent margin calls (more lenient for demo)
+      const minMarginForDemo = 50; // Very lenient for demo accounts
+      const minMarginForLive = this.riskParams.minMarginLevel;
+      const minMargin = accountStatus.accountInfo.isDemo ? minMarginForDemo : minMarginForLive;
+      
+      if (accountStatus.accountInfo.marginLevel > 0 && accountStatus.accountInfo.marginLevel < minMargin) {
+        return { allowed: false, reason: `Margin level too low: ${accountStatus.accountInfo.marginLevel.toFixed(1)}% (min: ${minMargin}% for ${accountStatus.accountInfo.isDemo ? 'demo' : 'live'})` };
       }
 
       // Verify symbol is tradeable

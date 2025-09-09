@@ -151,13 +151,23 @@ class ExnessAPI {
   }
 
   private mapMT5AccountInfo(mt5Info: any): AccountInfo {
+    const margin = parseFloat(mt5Info.margin?.toString() || '0');
+    const equity = parseFloat(mt5Info.equity?.toString() || '0');
+    
+    // Calculate margin level safely - handle division by zero for demo accounts
+    let marginLevel = parseFloat(mt5Info.margin_level?.toString() || '0');
+    if (marginLevel === 0 && margin === 0 && equity > 0) {
+      // Demo account with no margin used - set to a high safe value
+      marginLevel = 99999; // Effectively unlimited margin for demo
+    }
+    
     return {
       accountNumber: mt5Info.login?.toString() || '',
       balance: parseFloat(mt5Info.balance?.toString() || '0'),
-      equity: parseFloat(mt5Info.equity?.toString() || '0'),
-      margin: parseFloat(mt5Info.margin?.toString() || '0'),
+      equity,
+      margin,
       freeMargin: parseFloat(mt5Info.free_margin?.toString() || '0'),
-      marginLevel: parseFloat(mt5Info.margin_level?.toString() || '0'),
+      marginLevel,
       currency: mt5Info.currency || 'USD',
       leverage: mt5Info.leverage?.toString() || '1:100',
       server: mt5Info.server || '',
@@ -404,8 +414,9 @@ class ExnessAPI {
         issues.push('Account balance too low');
       }
       
-      if (this.accountInfo.marginLevel > 0 && this.accountInfo.marginLevel < 200) {
-        issues.push('Margin level too low');
+      const minMarginLevel = this.accountInfo.isDemo ? 50 : 200;
+      if (this.accountInfo.marginLevel > 0 && this.accountInfo.marginLevel < minMarginLevel) {
+        issues.push(`Margin level too low (${this.accountInfo.marginLevel.toFixed(1)}% < ${minMarginLevel}%)`);
       }
     }
 
