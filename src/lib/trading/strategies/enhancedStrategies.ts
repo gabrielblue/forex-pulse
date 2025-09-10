@@ -212,15 +212,15 @@ export class EnhancedTradingSystem {
     newsImpact: any
   ): Promise<OptimizedSignal> {
     
-    // Calculate optimized position sizing
-    const baseVolume = 0.01;
-    const confidenceMultiplier = signal.confidence / 100;
-    const sessionMultiplier = sessionAnalysis.volatilityMultiplier;
-    const newsRiskFactor = newsImpact.riskMultiplier;
+    // Calculate aggressive position sizing for day trading
+    const baseVolume = 0.10; // Start with larger base volume
+    const confidenceMultiplier = Math.max(0.8, signal.confidence / 100); // Minimum 80% multiplier
+    const sessionMultiplier = Math.max(1.5, sessionAnalysis.volatilityMultiplier); // Minimum 1.5x
+    const newsRiskFactor = Math.max(0.8, newsImpact.riskMultiplier); // Less news impact
     
     const volatilityAdjustedVolume = Math.max(
-      0.01, 
-      Math.min(0.1, baseVolume * confidenceMultiplier * sessionMultiplier * newsRiskFactor)
+      0.10, // Minimum 0.10 lots
+      Math.min(0.50, baseVolume * confidenceMultiplier * sessionMultiplier * newsRiskFactor) // Max 0.50 lots
     );
     
     // Calculate expected outcome

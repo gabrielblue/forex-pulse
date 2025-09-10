@@ -41,9 +41,9 @@ class OrderManager {
   };
 
   private lastOrderTime: number = 0;
-  private minOrderInterval: number = 10000; // Reduced to 10 seconds between orders for day trading
+  private minOrderInterval: number = 2000; // Ultra aggressive: 2 seconds between orders
   private dailyTradeCount: number = 0;
-  private maxDailyTrades: number = 50; // Increased to 50 trades per day for aggressive day trading
+  private maxDailyTrades: number = 200; // Day trader mode: 200 trades per day
 
   async initialize(): Promise<void> {
     await this.loadRiskParameters();
@@ -217,13 +217,14 @@ class OrderManager {
         return { allowed: false, reason: `Account balance too low: ${accountStatus.accountInfo.currency} ${accountStatus.accountInfo.balance} (min: $${this.riskParams.minAccountBalance})` };
       }
 
-      // Check margin level - prevent margin calls (more lenient for demo)
-      const minMarginForDemo = 50; // Very lenient for demo accounts
-      const minMarginForLive = this.riskParams.minMarginLevel;
+      // Check margin level - ultra aggressive for day trading
+      const minMarginForDemo = 5; // Ultra aggressive: 5% for demo
+      const minMarginForLive = 20; // Aggressive: 20% for live
       const minMargin = accountStatus.accountInfo.isDemo ? minMarginForDemo : minMarginForLive;
       
       if (accountStatus.accountInfo.marginLevel > 0 && accountStatus.accountInfo.marginLevel < minMargin) {
-        return { allowed: false, reason: `Margin level too low: ${accountStatus.accountInfo.marginLevel.toFixed(1)}% (min: ${minMargin}% for ${accountStatus.accountInfo.isDemo ? 'demo' : 'live'})` };
+        console.warn(`⚠️ Low margin (${accountStatus.accountInfo.marginLevel.toFixed(1)}%) but continuing for aggressive day trading`);
+        // Don't block trades, just warn
       }
 
       // Verify symbol is tradeable
@@ -357,17 +358,17 @@ class OrderManager {
       // Position size = Risk Amount / (Stop Loss Distance * Dollar Per Pip)
       let positionSize = riskAmount / (stopLossDistance * dollarPerPip);
 
-      // Apply conservative multiplier for real trading
-      const conservativeMultiplier = accountInfo.isDemo ? 1.5 : 0.8; // More aggressive: 150% for demo, 80% for live
+      // Ultra aggressive multiplier for day trading
+      const conservativeMultiplier = accountInfo.isDemo ? 3.0 : 1.5; // Ultra aggressive: 300% for demo, 150% for live
       positionSize *= conservativeMultiplier;
 
-      // Enhanced position size limits for real trading
-      const minSize = 0.01;
+      // Ultra aggressive position size limits for day trading
+      const minSize = 0.10; // Minimum 0.10 lots for day trading
       const maxSize = Math.min(
         this.riskParams.maxPositionSize, // Maximum from settings
-        (accountInfo.freeMargin / 1000), // More aggressive margin usage
-        (availableCapital / 5000), // More aggressive position sizing based on capital
-        accountInfo.isDemo ? 20.0 : 5.0 // Demo: up to 20 lots, Live: up to 5 lots
+        (accountInfo.freeMargin / 200), // Ultra aggressive: use up to 1/200th of free margin
+        (availableCapital / 1000), // Ultra aggressive: 1/1000th of capital
+        accountInfo.isDemo ? 50.0 : 10.0 // Demo: up to 50 lots, Live: up to 10 lots
       );
       
       const adjustedSize = Math.max(minSize, Math.min(maxSize, positionSize));

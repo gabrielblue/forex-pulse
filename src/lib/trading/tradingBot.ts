@@ -47,10 +47,10 @@ class TradingBot {
   };
 
   private configuration: BotConfiguration = {
-    minConfidence: 65, // Reduced from 80 to 65 for more trading opportunities
-    maxRiskPerTrade: 3, // Increased to 3% for day trading
-    maxDailyLoss: 8, // Increased to 8% for day trading
-    enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD'], // Added more pairs
+    minConfidence: 30, // Ultra aggressive: 30% threshold
+    maxRiskPerTrade: 10, // Ultra aggressive: 10% per trade
+    maxDailyLoss: 50, // Day trader: 50% daily loss allowed
+    enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'], // All pairs
     tradingHours: {
       start: '00:00',
       end: '23:59',
@@ -120,10 +120,10 @@ class TradingBot {
 
       if (botSettings) {
         this.configuration = {
-          minConfidence: parseFloat(botSettings.min_confidence_score?.toString() || '65'), // Reduced confidence threshold
-          maxRiskPerTrade: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '3'), 5.0), // Increased cap to 5%
-          maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '8'), 15.0), // Increased cap to 15%
-          enabledPairs: botSettings.allowed_pairs || ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD'],
+          minConfidence: parseFloat(botSettings.min_confidence_score?.toString() || '35'), // Ultra low: 35% for max trades
+          maxRiskPerTrade: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '5'), 10.0), // Cap at 10%
+          maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '20'), 30.0), // Cap at 30%
+          enabledPairs: botSettings.allowed_pairs || ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'],
           tradingHours: botSettings.trading_hours as any || {
             start: '00:00',
             end: '23:59',
@@ -226,12 +226,12 @@ class TradingBot {
         await marketAnalyzer.startContinuousAnalysis();
       }
 
-      // Initialize signal manager
+      // Initialize signal manager with ultra aggressive settings
       await botSignalManager.initialize({
         enabled: true,
-        interval: this.configuration.signalCheckInterval || 15000, // Reduced to 15 seconds for more frequent analysis
+        interval: this.configuration.signalCheckInterval || 2000, // Ultra fast: 2 seconds
         symbols: this.configuration.enabledPairs,
-        minConfidence: this.configuration.minConfidence,
+        minConfidence: Math.min(30, this.configuration.minConfidence), // Force low threshold
         autoExecute: this.status.autoTradingEnabled
       });
       
@@ -391,27 +391,23 @@ class TradingBot {
       if (dailyLossPercentage >= this.configuration.maxDailyLoss) {
         console.warn(`⚠️ Daily loss limit reached: ${dailyLossPercentage.toFixed(2)}%, but continuing with reduced risk for day trading`);
         // For day trading, reduce position sizes instead of stopping completely
-        this.riskParams.maxRiskPerTrade = Math.max(0.5, this.riskParams.maxRiskPerTrade * 0.5);
-        console.log(`📉 Reduced risk per trade to ${this.riskParams.maxRiskPerTrade}% for remainder of day`);
+        this.configuration.maxRiskPerTrade = Math.max(0.5, this.configuration.maxRiskPerTrade * 0.5);
+        console.log(`📉 Reduced risk per trade to ${this.configuration.maxRiskPerTrade}% for remainder of day`);
         return;
       }
     }
 
-    // Check margin level - more lenient for demo accounts
+    // Ultra aggressive margin requirements for day trading
     if (accountInfo.marginLevel > 0) {
-      const minMarginLevel = accountInfo.isDemo ? 30 : 80; // Even more lenient for aggressive day trading
-      const criticalMarginLevel = accountInfo.isDemo ? 20 : 50; // Lower critical levels
+      const minMarginLevel = accountInfo.isDemo ? 5 : 20; // Ultra low: 5% demo, 20% live
+      const criticalMarginLevel = accountInfo.isDemo ? 2 : 10; // Extreme: 2% demo, 10% live
       
       if (accountInfo.marginLevel < minMarginLevel) {
-        console.warn(`⚠️ Low margin level: ${accountInfo.marginLevel.toFixed(1)}% (demo: ${accountInfo.isDemo})`);
+        console.log(`💪 Aggressive mode: Trading with ${accountInfo.marginLevel.toFixed(1)}% margin`);
         
         if (accountInfo.marginLevel < criticalMarginLevel) {
-          console.warn('⚠️ Critical margin level, reducing position sizes but continuing day trading');
-          // Reduce position sizes instead of stopping for day trading
-          orderManager.updateRiskParameters({
-            maxRiskPerTrade: Math.max(0.5, this.configuration.maxRiskPerTrade * 0.3),
-            maxPositionSize: Math.max(0.01, this.configuration.maxRiskPerTrade * 0.5)
-          });
+          console.warn('⚠️ Ultra low margin, but continuing aggressive day trading');
+          // Don't reduce, maintain aggressive stance
         }
       }
     }

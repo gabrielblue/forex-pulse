@@ -25,9 +25,9 @@ export interface SignalProcessorConfig {
 
 class SignalProcessor {
   private config: SignalProcessorConfig = {
-    minConfidence: 60, // Reduced for more trading opportunities
-    enabledTimeframes: ['1H', '4H', '1D'],
-    enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD'], // More pairs
+    minConfidence: 30, // Ultra low for maximum day trading opportunities
+    enabledTimeframes: ['5M', '15M', '30M', '1H'], // Short timeframes for day trading
+    enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'], // All major pairs
     autoExecute: false
   };
 

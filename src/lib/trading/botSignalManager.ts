@@ -16,9 +16,9 @@ export interface SignalGenerationConfig {
 class BotSignalManager {
   private config: SignalGenerationConfig = {
     enabled: false,
-    interval: 15000, // Reduced to 15 seconds for more frequent signals
-    symbols: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD'], // More pairs
-    minConfidence: 60, // Reduced from 75 to 60 for more trading opportunities
+    interval: 5000, // Ultra aggressive: 5 seconds for day trading
+    symbols: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY'], // More pairs for day trading
+    minConfidence: 40, // Very aggressive: lowered to 40% for maximum trades
     autoExecute: false
   };
 
