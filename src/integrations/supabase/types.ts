@@ -1036,51 +1036,7 @@ export type Database = {
       }
     }
     Views: {
-      exness_sessions_public: {
-        Row: {
-          account_balance: number | null
-          account_currency: string | null
-          account_equity: number | null
-          account_free_margin: number | null
-          account_margin: number | null
-          created_at: string | null
-          id: string | null
-          is_connected: boolean | null
-          login_id: number | null
-          server_name: string | null
-          updated_at: string | null
-          user_id: string | null
-        }
-        Insert: {
-          account_balance?: number | null
-          account_currency?: string | null
-          account_equity?: number | null
-          account_free_margin?: number | null
-          account_margin?: number | null
-          created_at?: string | null
-          id?: string | null
-          is_connected?: boolean | null
-          login_id?: number | null
-          server_name?: string | null
-          updated_at?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          account_balance?: number | null
-          account_currency?: string | null
-          account_equity?: number | null
-          account_free_margin?: number | null
-          account_margin?: number | null
-          created_at?: string | null
-          id?: string | null
-          is_connected?: boolean | null
-          login_id?: number | null
-          server_name?: string | null
-          updated_at?: string | null
-          user_id?: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       check_and_update_rate_limit: {
