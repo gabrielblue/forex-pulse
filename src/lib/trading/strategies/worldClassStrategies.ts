@@ -303,7 +303,15 @@ export class WorldClassTradingStrategies {
   async millenniumHFMeanReversion(marketData: any, indicators: any): Promise<AdvancedSignal | null> {
     const { prices } = marketData;
     const currentPrice = prices[prices.length - 1];
-    const { bollinger, rsi, stochastic } = indicators;
+    
+    // Ensure all indicators exist with fallback values
+    const rsi = indicators.rsi || 50;
+    const bollinger = indicators.bollinger || {
+      upper: currentPrice * 1.01,
+      middle: currentPrice,
+      lower: currentPrice * 0.99
+    };
+    const stochastic = indicators.stochastic || this.calculateStochastic(prices, 14);
     
     // Multiple oversold/overbought confirmations
     const oversoldSignals = [
@@ -363,6 +371,21 @@ export class WorldClassTradingStrategies {
     }
     
     return null;
+  }
+
+  // Add missing stochastic calculation method
+  private calculateStochastic(prices: number[], period: number): { k: number; d: number } {
+    if (prices.length < period) return { k: 50, d: 50 };
+    
+    const recentPrices = prices.slice(-period);
+    const highest = Math.max(...recentPrices);
+    const lowest = Math.min(...recentPrices);
+    const current = prices[prices.length - 1];
+    
+    const k = ((current - lowest) / (highest - lowest)) * 100;
+    const d = k * 0.9; // Simplified D% calculation
+    
+    return { k, d };
   }
 
   // 8. Jane Street Style - Volatility Trading

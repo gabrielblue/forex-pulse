@@ -30,8 +30,17 @@ export class EnhancedTradingSystem {
   ): Promise<OptimizedSignal | null> {
     
     try {
+      // Validate input data
+      if (!marketData || !marketData.prices || marketData.prices.length === 0) {
+        console.warn('Invalid market data for', symbol);
+        return null;
+      }
+      
+      // Ensure indicators have all required properties
+      const safeIndicators = this.ensureCompleteIndicators(indicators, marketData);
+      
       // 1. Analyze market regime
-      const marketRegime = this.analyzeMarketRegime(marketData, indicators);
+      const marketRegime = this.analyzeMarketRegime(marketData, safeIndicators);
       
       // 2. Get session-specific analysis
       const sessionAnalysis = this.analyzeSessionContext(sessionInfo, symbol);
@@ -40,7 +49,7 @@ export class EnhancedTradingSystem {
       const newsImpact = this.assessNewsImpact(newsEvents, symbol);
       
       // 4. Run multiple world-class strategies
-      const strategySignals = await this.runAllStrategies(marketData, indicators);
+      const strategySignals = await this.runAllStrategies(marketData, safeIndicators);
       
       // 5. Select best strategy based on market conditions
       const bestSignal = this.selectOptimalStrategy(strategySignals, marketRegime, sessionAnalysis);
@@ -61,6 +70,27 @@ export class EnhancedTradingSystem {
       console.error('Error in enhanced strategy generation:', error);
       return null;
     }
+  }
+  
+  private ensureCompleteIndicators(indicators: any, marketData: any): any {
+    const currentPrice = marketData.prices[marketData.prices.length - 1] || 1.0000;
+    
+    return {
+      rsi: indicators.rsi || 50,
+      macd: indicators.macd || { value: 0, signal: 0, histogram: 0 },
+      ema20: indicators.ema20 || currentPrice,
+      ema50: indicators.ema50 || currentPrice,
+      ema200: indicators.ema200 || currentPrice,
+      sma200: indicators.sma200 || currentPrice,
+      bollinger: indicators.bollinger || {
+        upper: currentPrice * 1.01,
+        middle: currentPrice,
+        lower: currentPrice * 0.99
+      },
+      stochastic: indicators.stochastic || { k: 50, d: 50 },
+      atr: indicators.atr || 0.001,
+      adx: indicators.adx || 30
+    };
   }
   
   private analyzeMarketRegime(marketData: any, indicators: any): 'TRENDING' | 'RANGING' | 'VOLATILE' | 'QUIET' {

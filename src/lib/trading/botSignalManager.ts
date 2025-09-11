@@ -120,6 +120,12 @@ class BotSignalManager {
       // Perform technical analysis
       const analysis = await this.performTechnicalAnalysis(symbol, marketPrice);
       
+      // Validate analysis result
+      if (!analysis || typeof analysis.confidence !== 'number') {
+        console.warn(`Invalid analysis result for ${symbol}:`, analysis);
+        return;
+      }
+      
       // Generate signal if confidence is high enough
       if (analysis.confidence >= this.config.minConfidence) {
         await this.saveSignal({

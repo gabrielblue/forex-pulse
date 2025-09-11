@@ -286,6 +286,21 @@ export class ProfessionalTradingStrategies {
 
   // Technical Indicators Calculator
   calculateTechnicalIndicators(prices: number[], volumes: number[]): TechnicalIndicators {
+    // Ensure we have enough data
+    if (prices.length < 20) {
+      const currentPrice = prices[prices.length - 1] || 1.0000;
+      return {
+        rsi: 50,
+        macd: { value: 0, signal: 0, histogram: 0 },
+        ema20: currentPrice,
+        ema50: currentPrice,
+        sma200: currentPrice,
+        bollinger: { upper: currentPrice * 1.01, middle: currentPrice, lower: currentPrice * 0.99 },
+        stochastic: { k: 50, d: 50 },
+        atr: 0.001
+      };
+    }
+    
     return {
       rsi: this.calculateRSI(prices, 14),
       macd: this.calculateMACD(prices),
@@ -296,6 +311,20 @@ export class ProfessionalTradingStrategies {
       stochastic: this.calculateStochastic(prices, 14),
       atr: this.calculateATR(prices, 14)
     };
+  }
+  
+  private calculateStochastic(prices: number[], period: number): { k: number; d: number } {
+    if (prices.length < period) return { k: 50, d: 50 };
+    
+    const recentPrices = prices.slice(-period);
+    const highest = Math.max(...recentPrices);
+    const lowest = Math.min(...recentPrices);
+    const current = prices[prices.length - 1];
+    
+    const k = ((current - lowest) / (highest - lowest)) * 100;
+    const d = k * 0.9; // Simplified D% calculation
+    
+    return { k, d };
   }
 
   private calculateRSI(prices: number[], period: number): number {
