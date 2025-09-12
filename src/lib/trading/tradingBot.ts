@@ -304,7 +304,9 @@ class TradingBot {
     if (enabled) {
       const accountInfo = await exnessAPI.getAccountInfo();
       if (accountInfo && !accountInfo.isDemo) {
-        console.warn('⚠️ Enabling auto trading on LIVE account with real money');
+        console.warn('⚠️ ENABLING AUTO TRADING ON LIVE ACCOUNT WITH REAL MONEY');
+      } else if (accountInfo && accountInfo.isDemo) {
+        console.log('✅ Enabling auto trading on DEMO account for testing');
       }
     }
 
@@ -320,15 +322,17 @@ class TradingBot {
     
     // Start or stop automatic generation based on enabled status
     if (enabled && this.status.isActive) {
+      console.log('🚀 Starting automatic signal generation and execution...');
       botSignalManager.startAutomaticGeneration();
     } else if (!enabled) {
+      console.log('🛑 Stopping automatic signal generation...');
       botSignalManager.stopAutomaticGeneration();
     }
     
     await this.updateStatus();
     
     const accountType = exnessAPI.getAccountType();
-    console.log(`${enabled ? '🤖 Auto trading enabled' : '✋ Auto trading disabled'} on ${accountType?.toUpperCase()} account`);
+    console.log(`${enabled ? '🤖 AUTO TRADING ENABLED' : '✋ AUTO TRADING DISABLED'} on ${accountType?.toUpperCase()} account`);
   }
 
   private startMonitoring(): void {

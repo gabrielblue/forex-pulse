@@ -16,9 +16,9 @@ export interface SignalGenerationConfig {
 class BotSignalManager {
   private config: SignalGenerationConfig = {
     enabled: false,
-    interval: 5000, // Ultra aggressive: 5 seconds for day trading
+    interval: 3000, // Ultra aggressive: 3 seconds for maximum day trading
     symbols: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY'], // More pairs for day trading
-    minConfidence: 40, // Very aggressive: lowered to 40% for maximum trades
+    minConfidence: 30, // Ultra aggressive: lowered to 30% for maximum trades
     autoExecute: false
   };
 
@@ -35,11 +35,11 @@ class BotSignalManager {
 
   startAutomaticGeneration(): void {
     if (this.generationInterval) {
-      console.log('Signal generation already running');
+      console.log('🔄 Signal generation already running');
       return;
     }
 
-    console.log(`🔄 Starting automatic signal generation (interval: ${this.config.interval/1000}s)`);
+    console.log(`🚀 Starting ULTRA AGGRESSIVE signal generation (interval: ${this.config.interval/1000}s, min confidence: ${this.config.minConfidence}%)`);
     
     // Start generation loop
     this.generationInterval = setInterval(async () => {
@@ -49,7 +49,9 @@ class BotSignalManager {
     }, this.config.interval);
 
     // Generate immediately
-    this.generateAndProcessSignals();
+    setTimeout(() => {
+      this.generateAndProcessSignals();
+    }, 1000); // Start after 1 second
   }
 
   stopAutomaticGeneration(): void {
@@ -68,7 +70,7 @@ class BotSignalManager {
 
     // Rate limiting
     const timeSinceLastGeneration = Date.now() - this.lastGenerationTime;
-    if (timeSinceLastGeneration < 10000) { // Reduced to 10 seconds for day trading
+    if (timeSinceLastGeneration < 5000) { // Reduced to 5 seconds for ultra aggressive day trading
       console.log('Rate limit: Too soon since last generation');
       return;
     }
@@ -81,15 +83,17 @@ class BotSignalManager {
       
       // Check if we're connected and can trade
       if (!exnessAPI.isConnectedToExness()) {
-        console.warn('Not connected to Exness, skipping signal generation');
+        console.warn('⚠️ Not connected to Exness, skipping signal generation');
         return;
       }
 
       const { canTrade, issues } = await exnessAPI.verifyTradingCapabilities();
       if (!canTrade) {
-        console.warn('Cannot trade:', issues.join(', '));
+        console.warn('⚠️ Cannot trade:', issues.join(', '));
         return;
       }
+
+      console.log('✅ Trading capabilities verified, proceeding with signal generation');
 
       // Generate signals for each symbol
       for (const symbol of this.config.symbols) {
@@ -98,7 +102,10 @@ class BotSignalManager {
 
       // Process any pending signals if auto-execution is enabled
       if (this.config.autoExecute && orderManager.isAutoTradingActive()) {
+        console.log('🤖 Auto-execution enabled, processing pending signals...');
         await this.executePendingSignals();
+      } else {
+        console.log('⏸️ Auto-execution disabled or order manager not active');
       }
 
     } catch (error) {
@@ -196,29 +203,29 @@ class BotSignalManager {
   
   private fallbackAnalysis(symbol: string, price: any, indicators: any): any {
     // Simplified but reliable analysis
-    const trend = Math.random() > 0.4 ? 'BULLISH' : 'BEARISH'; // More bullish bias for day trading
-    const momentum = 60 + Math.random() * 40; // Higher base momentum
+    const trend = Math.random() > 0.3 ? 'BULLISH' : 'BEARISH'; // Ultra bullish bias for day trading
+    const momentum = 70 + Math.random() * 30; // Ultra high base momentum
     const volatility = Math.random() * 30;
     
     // Calculate confidence based on multiple factors
-    const trendStrength = Math.random() * 30 + 20; // Higher base trend strength
-    const momentumScore = momentum > 70 ? 25 : momentum > 50 ? 20 : 15; // More generous scoring
-    const volatilityScore = volatility < 25 ? 20 : 15; // More lenient volatility scoring
-    const dayTradingBonus = 15; // Extra confidence for day trading
-    const confidence = Math.min(95, 40 + trendStrength + momentumScore + volatilityScore + dayTradingBonus);
+    const trendStrength = Math.random() * 25 + 30; // Ultra high base trend strength
+    const momentumScore = momentum > 80 ? 30 : momentum > 60 ? 25 : 20; // Ultra generous scoring
+    const volatilityScore = volatility < 30 ? 25 : 20; // Ultra lenient volatility scoring
+    const dayTradingBonus = 20; // Ultra bonus for day trading
+    const confidence = Math.min(98, 50 + trendStrength + momentumScore + volatilityScore + dayTradingBonus);
 
     // Calculate SL/TP based on volatility
     const pipSize = symbol.includes('JPY') ? 0.01 : 0.0001;
-    const slDistance = (10 + volatility * 0.5) * pipSize; // Tighter stop loss for day trading
-    const tpDistance = slDistance * 1.5; // 1.5:1 risk-reward ratio for faster profits
+    const slDistance = (8 + volatility * 0.3) * pipSize; // Ultra tight stop loss for day trading
+    const tpDistance = slDistance * 1.2; // 1.2:1 risk-reward ratio for ultra fast profits
 
     return {
       direction: trend === 'BULLISH' ? 'BUY' : 'SELL',
       confidence,
       stopLoss: trend === 'BULLISH' ? price.bid - slDistance : price.bid + slDistance,
       takeProfit: trend === 'BULLISH' ? price.bid + tpDistance : price.bid - tpDistance,
-      reasoning: `Technical analysis: ${trend} trend with ${momentum.toFixed(1)}% momentum, volatility at ${volatility.toFixed(1)}%`,
-      volume: 0.05, // Larger default volume for day trading
+      reasoning: `Ultra aggressive day trading: ${trend} trend with ${momentum.toFixed(1)}% momentum, volatility at ${volatility.toFixed(1)}%`,
+      volume: 0.10, // Ultra large default volume for day trading
       expectedValue: confidence * 0.5
     };
   }
@@ -284,6 +291,8 @@ class BotSignalManager {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      console.log('🎯 Checking for pending signals to execute...');
+
       // Get active signals that haven't been executed
       const { data: signals } = await supabase
         .from('trading_signals')
@@ -292,23 +301,36 @@ class BotSignalManager {
         .eq('status', 'ACTIVE')
         .gte('confidence_score', this.config.minConfidence)
         .order('confidence_score', { ascending: false })
-        .limit(3); // Process top 3 signals
+        .limit(5); // Process top 5 signals for more opportunities
 
-      if (!signals || signals.length === 0) return;
+      if (!signals || signals.length === 0) {
+        console.log('📭 No pending signals found for execution');
+        return;
+      }
+
+      console.log(`🔍 Found ${signals.length} pending signals to process`);
 
       for (const signal of signals) {
         try {
           // Check if we should execute this signal
-          if (signal.confidence_score < this.config.minConfidence) continue;
+          if (signal.confidence_score < this.config.minConfidence) {
+            console.log(`⏭️ Skipping signal ${signal.id}: confidence ${signal.confidence_score}% < ${this.config.minConfidence}%`);
+            continue;
+          }
 
           const symbol = signal.currency_pairs?.symbol;
-          if (!symbol || !this.config.symbols.includes(symbol)) continue;
+          if (!symbol || !this.config.symbols.includes(symbol)) {
+            console.log(`⏭️ Skipping signal ${signal.id}: symbol ${symbol} not in enabled pairs`);
+            continue;
+          }
+
+          console.log(`🎯 Executing signal ${signal.id}: ${signal.signal_type} ${symbol} with ${signal.confidence_score}% confidence`);
 
           // Execute the trade
           const orderRequest = {
             symbol,
             type: signal.signal_type as 'BUY' | 'SELL',
-            volume: 0.01, // Start with minimum lot size
+            volume: 0.05, // Increased volume for day trading
             stopLoss: signal.stop_loss ? parseFloat(signal.stop_loss.toString()) : undefined,
             takeProfit: signal.take_profit ? parseFloat(signal.take_profit.toString()) : undefined,
             comment: `AutoSignal-${signal.id.substring(0, 8)}`
@@ -322,22 +344,23 @@ class BotSignalManager {
               .from('trading_signals')
               .update({ 
                 status: 'EXECUTED',
-                order_id: orderId,
                 updated_at: new Date().toISOString()
               })
               .eq('id', signal.id);
 
-            console.log(`✅ Signal ${signal.id} executed: Order ${orderId}`);
+            console.log(`✅ Signal ${signal.id} executed successfully: Order ${orderId}`);
+          } else {
+            console.error(`❌ Failed to execute signal ${signal.id}: No order ID returned`);
           }
         } catch (error) {
-          console.error(`Failed to execute signal ${signal.id}:`, error);
+          console.error(`❌ Failed to execute signal ${signal.id}:`, error);
           
           // Mark signal as failed
           await supabase
             .from('trading_signals')
             .update({ 
               status: 'FAILED',
-              error_message: error.message,
+              error_message: error instanceof Error ? error.message : 'Unknown error',
               updated_at: new Date().toISOString()
             })
             .eq('id', signal.id);
@@ -350,7 +373,13 @@ class BotSignalManager {
 
   setConfiguration(config: Partial<SignalGenerationConfig>): void {
     this.config = { ...this.config, ...config };
-    console.log('Signal manager configuration updated:', this.config);
+    console.log('🔧 Signal manager configuration updated:', {
+      enabled: this.config.enabled,
+      interval: this.config.interval + 'ms',
+      minConfidence: this.config.minConfidence + '%',
+      autoExecute: this.config.autoExecute,
+      symbolCount: this.config.symbols.length
+    });
   }
 
   getConfiguration(): SignalGenerationConfig {

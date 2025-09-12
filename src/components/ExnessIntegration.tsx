@@ -356,11 +356,11 @@ export const ExnessIntegration = () => {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant={status.isConnected ? "default" : "secondary"}>
+                <strong>🤖 ULTRA AGGRESSIVE AUTO-TRADING IS ACTIVE</strong> on your {realAccountInfo?.isDemo ? 'DEMO' : 'LIVE'} account. 
+                The AI will execute trades every 3 seconds with 30% minimum confidence for maximum day trading opportunities.
                 {status.isConnected ? (
                   <><Wifi className="w-3 h-3 mr-1" />Connected</>
-                ) : (
+                    ⚠️ CRITICAL WARNING: This is a LIVE account with REAL MONEY. Ultra aggressive settings active - monitor constantly!
                   <><WifiOff className="w-3 h-3 mr-1" />Disconnected</>
                 )}
               </Badge>

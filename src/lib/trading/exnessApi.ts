@@ -279,7 +279,13 @@ class ExnessAPI {
     }
 
     try {
-      console.log('📈 Placing real order on Exness:', order);
+      console.log('📈 Placing REAL order on Exness MT5:', {
+        symbol: order.symbol,
+        type: order.type,
+        volume: order.volume,
+        stopLoss: order.stopLoss,
+        takeProfit: order.takeProfit
+      });
 
       const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/place_order`, {
         method: 'POST',
@@ -299,19 +305,26 @@ class ExnessAPI {
       });
 
       if (!response.ok) {
-        throw new Error(`Order placement failed: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`Order placement failed: ${response.status} - ${errorText}`);
       }
 
       const result = await response.json();
       
       if (result.success && result.data) {
-        console.log('✅ Order placed successfully:', result.data.ticket);
+        console.log('🎉 REAL order placed successfully on Exness:', {
+          ticket: result.data.ticket,
+          symbol: result.data.symbol,
+          type: result.data.type === 0 ? 'BUY' : 'SELL',
+          volume: result.data.volume,
+          price: result.data.price
+        });
         return result.data.ticket.toString();
       } else {
         throw new Error(result.error || 'Order placement failed');
       }
     } catch (error) {
-      console.error('Failed to place real order:', error);
+      console.error('❌ Failed to place REAL order on Exness:', error);
       throw error;
     }
   }
