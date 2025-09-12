@@ -393,7 +393,6 @@ export class ProfessionalTradingStrategies {
     };
   }
 
-
   private calculateATR(prices: number[], period: number): number {
     if (prices.length < period + 1) return 0.001;
     
