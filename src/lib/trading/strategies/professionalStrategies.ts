@@ -393,19 +393,6 @@ export class ProfessionalTradingStrategies {
     };
   }
 
-  private calculateStochastic(prices: number[], period: number): { k: number; d: number } {
-    if (prices.length < period) return { k: 50, d: 50 };
-    
-    const recentPrices = prices.slice(-period);
-    const highest = Math.max(...recentPrices);
-    const lowest = Math.min(...recentPrices);
-    const current = prices[prices.length - 1];
-    
-    const k = ((current - lowest) / (highest - lowest)) * 100;
-    const d = k * 0.9; // Simplified D% calculation
-    
-    return { k, d };
-  }
 
   private calculateATR(prices: number[], period: number): number {
     if (prices.length < period + 1) return 0.001;
