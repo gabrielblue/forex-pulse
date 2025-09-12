@@ -311,7 +311,7 @@ export class WorldClassTradingStrategies {
       middle: currentPrice,
       lower: currentPrice * 0.99
     };
-    const stochastic = indicators.stochastic || this.calculateStochastic(prices, 14);
+    const stochastic = indicators.stochastic || { k: 50, d: 50 };
     
     // Multiple oversold/overbought confirmations
     const oversoldSignals = [
