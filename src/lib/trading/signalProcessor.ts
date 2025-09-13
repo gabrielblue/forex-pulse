@@ -25,7 +25,7 @@ export interface SignalProcessorConfig {
 
 class SignalProcessor {
   private config: SignalProcessorConfig = {
-    minConfidence: 30, // Ultra low for maximum day trading opportunities
+    minConfidence: 20, // Ultra low for maximum day trading opportunities
     enabledTimeframes: ['5M', '15M', '30M', '1H'], // Short timeframes for day trading
     enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'], // All major pairs
     autoExecute: false
@@ -63,7 +63,7 @@ class SignalProcessor {
   }
 
   private startSignalMonitoring(): void {
-    // Monitor for new signals every 15 seconds for day trading
+    // Monitor for new signals every 5 seconds for ultra aggressive day trading
     setInterval(async () => {
       if (this.isProcessing) return;
       
@@ -75,7 +75,7 @@ class SignalProcessor {
       } finally {
         this.isProcessing = false;
       }
-    }, 15000); // Reduced interval for more frequent processing
+    }, 5000); // Ultra reduced interval for maximum processing frequency
   }
 
   private async processNewSignals(): Promise<void> {
@@ -189,10 +189,10 @@ class SignalProcessor {
 
   private calculateOptimalVolumeFromSignal(signal: TradingSignal): number {
     // More aggressive volume calculation for day trading
-    let baseVolume = 0.05; // Start with larger base volume for day trading
+    let baseVolume = 0.15; // Start with much larger base volume for day trading
     
     // Confidence-based sizing
-    const confidenceMultiplier = Math.max(0.8, signal.confidence / 100); // More aggressive multiplier
+    const confidenceMultiplier = Math.max(1.0, signal.confidence / 80); // Ultra aggressive multiplier
     baseVolume *= confidenceMultiplier;
     
     // Time-based adjustments
@@ -200,12 +200,12 @@ class SignalProcessor {
     const isOptimalTime = (currentHour >= 8 && currentHour <= 17) || (currentHour >= 13 && currentHour <= 22);
     
     if (isOptimalTime) {
-      baseVolume *= 1.5; // Increased to 50% during optimal trading hours
+      baseVolume *= 2.0; // Increased to 100% during optimal trading hours
     }
     
     // Symbol-specific adjustments
     if (signal.symbol === 'EURUSD' || signal.symbol === 'GBPUSD') {
-      baseVolume *= 1.1; // Slightly larger positions for major pairs
+      baseVolume *= 1.3; // Larger positions for major pairs
     }
     
     // Risk-reward ratio bonus
@@ -216,12 +216,12 @@ class SignalProcessor {
       const riskReward = takeProfitDistance / stopLossDistance;
       
       if (riskReward >= 2.0) {
-        baseVolume *= 1.8; // Increased to 80% for good risk-reward
+        baseVolume *= 2.5; // Increased to 150% for good risk-reward
       }
     }
     
     // Apply safety limits
-    return Math.max(0.01, Math.min(0.5, baseVolume)); // Increased max volume to 0.5 lots
+    return Math.max(0.05, Math.min(1.0, baseVolume)); // Increased max volume to 1.0 lots
   }
 
   private async updateSignalStatus(

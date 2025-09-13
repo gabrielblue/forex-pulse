@@ -546,9 +546,15 @@ export const ExnessIntegration = () => {
                 </Button>
               </div>
             </CardContent>
-          </Card>
-        </TabsContent>
-
+              <>
+                <Wifi className="w-3 h-3 mr-1" />
+                Connected
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-3 h-3 mr-1" />
+                Disconnected
+              </>
         <TabsContent value="account" className="space-y-6">
           {/* Account Information */}
           {realAccountInfo && (
@@ -752,8 +758,8 @@ export const ExnessIntegration = () => {
                 <Alert variant={realAccountInfo?.isDemo ? "default" : "destructive"}>
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>
-                    <strong>Auto-trading is ACTIVE</strong> on your {realAccountInfo?.isDemo ? 'DEMO' : 'LIVE'} account. 
-                    The AI will execute trades automatically based on your strategy settings and risk management rules.
+                    <strong>🤖 ULTRA AGGRESSIVE AUTO-TRADING IS ACTIVE</strong> on your {realAccountInfo?.isDemo ? 'DEMO' : 'LIVE'} account. 
+                    The AI will execute trades every 3 seconds with 30% minimum confidence for maximum day trading opportunities.
                     {!realAccountInfo?.isDemo && (
                       <div className="mt-2 font-semibold text-red-600">
                         ⚠️ WARNING: This is a LIVE account with real money. Monitor your trades carefully!

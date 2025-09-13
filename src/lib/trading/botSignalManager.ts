@@ -16,9 +16,9 @@ export interface SignalGenerationConfig {
 class BotSignalManager {
   private config: SignalGenerationConfig = {
     enabled: false,
-    interval: 3000, // Ultra aggressive: 3 seconds for maximum day trading
+    interval: 5000, // Aggressive: 5 seconds for maximum day trading
     symbols: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY'], // More pairs for day trading
-    minConfidence: 30, // Ultra aggressive: lowered to 30% for maximum trades
+    minConfidence: 25, // Ultra aggressive: lowered to 25% for maximum trades
     autoExecute: false
   };
 
@@ -70,7 +70,7 @@ class BotSignalManager {
 
     // Rate limiting
     const timeSinceLastGeneration = Date.now() - this.lastGenerationTime;
-    if (timeSinceLastGeneration < 5000) { // Reduced to 5 seconds for ultra aggressive day trading
+    if (timeSinceLastGeneration < 2000) { // Reduced to 2 seconds for ultra aggressive day trading
       console.log('Rate limit: Too soon since last generation');
       return;
     }
@@ -105,7 +105,7 @@ class BotSignalManager {
         console.log('🤖 Auto-execution enabled, processing pending signals...');
         await this.executePendingSignals();
       } else {
-        console.log('⏸️ Auto-execution disabled or order manager not active');
+        console.log('⏸️ Auto-execution disabled or order manager not active - signals saved for manual review');
       }
 
     } catch (error) {
@@ -301,7 +301,7 @@ class BotSignalManager {
         .eq('status', 'ACTIVE')
         .gte('confidence_score', this.config.minConfidence)
         .order('confidence_score', { ascending: false })
-        .limit(5); // Process top 5 signals for more opportunities
+        .limit(10); // Process top 10 signals for maximum opportunities
 
       if (!signals || signals.length === 0) {
         console.log('📭 No pending signals found for execution');
@@ -330,7 +330,7 @@ class BotSignalManager {
           const orderRequest = {
             symbol,
             type: signal.signal_type as 'BUY' | 'SELL',
-            volume: 0.05, // Increased volume for day trading
+            volume: 0.10, // Increased volume for aggressive day trading
             stopLoss: signal.stop_loss ? parseFloat(signal.stop_loss.toString()) : undefined,
             takeProfit: signal.take_profit ? parseFloat(signal.take_profit.toString()) : undefined,
             comment: `AutoSignal-${signal.id.substring(0, 8)}`
@@ -343,8 +343,7 @@ class BotSignalManager {
             await supabase
               .from('trading_signals')
               .update({ 
-                status: 'EXECUTED',
-                updated_at: new Date().toISOString()
+                status: 'EXPIRED',
               })
               .eq('id', signal.id);
 
