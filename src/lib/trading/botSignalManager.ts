@@ -370,6 +370,23 @@ class BotSignalManager {
     }
   }
 
+  async enableAutoExecution(enabled: boolean): Promise<void> {
+    this.config.autoExecute = enabled;
+    console.log(`🤖 Auto-execution ${enabled ? 'ENABLED' : 'DISABLED'} in signal manager`);
+    
+    if (enabled && this.config.enabled) {
+      // Start generation if not already running
+      if (!this.generationInterval) {
+        this.startAutomaticGeneration();
+      }
+    }
+  }
+
+  async forceExecutePendingSignals(): Promise<void> {
+    console.log('🎯 Force executing all pending signals...');
+    await this.executePendingSignals();
+  }
+
   setConfiguration(config: Partial<SignalGenerationConfig>): void {
     this.config = { ...this.config, ...config };
     console.log('🔧 Signal manager configuration updated:', {
@@ -379,6 +396,12 @@ class BotSignalManager {
       autoExecute: this.config.autoExecute,
       symbolCount: this.config.symbols.length
     });
+    
+    // Restart generation with new config if currently running
+    if (this.generationInterval && this.config.enabled) {
+      this.stopAutomaticGeneration();
+      this.startAutomaticGeneration();
+    }
   }
 
   getConfiguration(): SignalGenerationConfig {

@@ -26,30 +26,30 @@ export class ProfessionalTradingStrategies {
     const currentPrice = marketData.prices[marketData.prices.length - 1];
     
     // RSI oversold/overbought with MACD confirmation
-    if (rsi < 40 && macd.value > macd.signal && ema20 > ema50) { // More lenient RSI for day trading
+    if (rsi < 45 && macd.value > macd.signal && ema20 > ema50) { // Ultra lenient RSI for day trading
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'BUY',
-        confidence: 75, // Slightly lower confidence but more opportunities
+        confidence: 70, // Lower confidence for maximum opportunities
         entryPrice: currentPrice,
-        stopLoss: currentPrice - (0.0003 * this.getPipValue(marketData.symbol)), // Tighter stop loss
-        takeProfit: currentPrice + (0.0008 * this.getPipValue(marketData.symbol)), // Closer take profit
+        stopLoss: currentPrice - (0.0002 * this.getPipValue(marketData.symbol)), // Ultra tight stop loss
+        takeProfit: currentPrice + (0.0006 * this.getPipValue(marketData.symbol)), // Ultra close take profit
         timeframe: '1M',
         reasoning: 'Day trading scalping: RSI oversold with bullish MACD crossover',
         source: 'Scalping Strategy'
       };
     }
     
-    if (rsi > 60 && macd.value < macd.signal && ema20 < ema50) { // More lenient RSI for day trading
+    if (rsi > 55 && macd.value < macd.signal && ema20 < ema50) { // Ultra lenient RSI for day trading
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'SELL',
-        confidence: 75,
+        confidence: 70,
         entryPrice: currentPrice,
-        stopLoss: currentPrice + (0.0003 * this.getPipValue(marketData.symbol)), // Tighter stop loss
-        takeProfit: currentPrice - (0.0008 * this.getPipValue(marketData.symbol)), // Closer take profit
+        stopLoss: currentPrice + (0.0002 * this.getPipValue(marketData.symbol)), // Ultra tight stop loss
+        takeProfit: currentPrice - (0.0006 * this.getPipValue(marketData.symbol)), // Ultra close take profit
         timeframe: '1M',
         reasoning: 'Day trading scalping: RSI overbought with bearish MACD crossover',
         source: 'Scalping Strategy'
@@ -65,15 +65,15 @@ export class ProfessionalTradingStrategies {
     const currentPrice = marketData.prices[marketData.prices.length - 1];
     
     // Golden Cross with trend confirmation
-    if (ema20 > ema50 && currentPrice > bollinger.middle && rsi > 45) { // Removed SMA200 requirement and lowered RSI
+    if (ema20 > ema50 && currentPrice > bollinger.middle && rsi > 40) { // Ultra lenient conditions
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'BUY',
-        confidence: 80, // Slightly lower confidence for more opportunities
+        confidence: 75, // Lower confidence for maximum opportunities
         entryPrice: currentPrice,
-        stopLoss: currentPrice - (currentPrice * 0.008), // Tighter stop loss (0.8%)
-        takeProfit: currentPrice + (currentPrice * 0.012), // Closer take profit (1.2%)
+        stopLoss: currentPrice - (currentPrice * 0.006), // Ultra tight stop loss (0.6%)
+        takeProfit: currentPrice + (currentPrice * 0.009), // Closer take profit (0.9%)
         timeframe: '4H',
         reasoning: 'Day trading swing: EMA bullish alignment with momentum',
         source: 'Swing Trading Strategy'
@@ -81,15 +81,15 @@ export class ProfessionalTradingStrategies {
     }
     
     // Death Cross with trend confirmation
-    if (ema20 < ema50 && currentPrice < bollinger.middle && rsi < 55) { // More lenient conditions
+    if (ema20 < ema50 && currentPrice < bollinger.middle && rsi < 60) { // Ultra lenient conditions
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'SELL',
-        confidence: 80,
+        confidence: 75,
         entryPrice: currentPrice,
-        stopLoss: currentPrice + (currentPrice * 0.008), // Tighter stop loss
-        takeProfit: currentPrice - (currentPrice * 0.012), // Closer take profit
+        stopLoss: currentPrice + (currentPrice * 0.006), // Ultra tight stop loss
+        takeProfit: currentPrice - (currentPrice * 0.009), // Closer take profit
         timeframe: '4H',
         reasoning: 'Day trading swing: EMA bearish alignment with momentum',
         source: 'Swing Trading Strategy'
@@ -108,30 +108,30 @@ export class ProfessionalTradingStrategies {
     const support = Math.min(...recentPrices);
     
     // Bollinger Band breakout with volume confirmation
-    if (currentPrice > bollinger.upper && rsi < 85) { // More lenient RSI
+    if (currentPrice > bollinger.upper && rsi < 90) { // Ultra lenient RSI
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'BUY',
-        confidence: 78, // Lower confidence for more opportunities
+        confidence: 72, // Ultra low confidence for maximum opportunities
         entryPrice: currentPrice,
-        stopLoss: currentPrice - (atr * 0.8), // Tighter stop loss
-        takeProfit: currentPrice + (atr * 1.2), // Closer take profit
+        stopLoss: currentPrice - (atr * 0.6), // Ultra tight stop loss
+        takeProfit: currentPrice + (atr * 0.9), // Ultra close take profit
         timeframe: '1H',
         reasoning: 'Day trading breakout: Bollinger upper breakout with momentum',
         source: 'Breakout Strategy'
       };
     }
     
-    if (currentPrice < bollinger.lower && rsi > 15) { // More lenient RSI
+    if (currentPrice < bollinger.lower && rsi > 10) { // Ultra lenient RSI
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'SELL',
-        confidence: 78,
+        confidence: 72,
         entryPrice: currentPrice,
-        stopLoss: currentPrice + (atr * 0.8), // Tighter stop loss
-        takeProfit: currentPrice - (atr * 1.2), // Closer take profit
+        stopLoss: currentPrice + (atr * 0.6), // Ultra tight stop loss
+        takeProfit: currentPrice - (atr * 0.9), // Ultra close take profit
         timeframe: '1H',
         reasoning: 'Day trading breakout: Bollinger lower breakout with momentum',
         source: 'Breakout Strategy'
@@ -147,15 +147,15 @@ export class ProfessionalTradingStrategies {
     const currentPrice = marketData.prices[marketData.prices.length - 1];
     
     // Oversold conditions with mean reversion signals
-    if (currentPrice < bollinger.middle && rsi < 35 && stochastic.k < 30) { // More lenient conditions
+    if (currentPrice < bollinger.middle && rsi < 40 && stochastic.k < 35) { // Ultra lenient conditions
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'BUY',
-        confidence: 72, // Lower confidence for more opportunities
+        confidence: 68, // Ultra low confidence for maximum opportunities
         entryPrice: currentPrice,
-        stopLoss: currentPrice - (indicators.atr * 0.8), // Tighter stop loss
-        takeProfit: currentPrice + (indicators.atr * 1.0), // Closer take profit
+        stopLoss: currentPrice - (indicators.atr * 0.6), // Ultra tight stop loss
+        takeProfit: currentPrice + (indicators.atr * 0.8), // Ultra close take profit
         timeframe: '1H',
         reasoning: 'Day trading mean reversion: Oversold conditions with reversal potential',
         source: 'Mean Reversion Strategy'
@@ -163,15 +163,15 @@ export class ProfessionalTradingStrategies {
     }
     
     // Overbought conditions with mean reversion signals
-    if (currentPrice > bollinger.middle && rsi > 65 && stochastic.k > 70) { // More lenient conditions
+    if (currentPrice > bollinger.middle && rsi > 60 && stochastic.k > 65) { // Ultra lenient conditions
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'SELL',
-        confidence: 72,
+        confidence: 68,
         entryPrice: currentPrice,
-        stopLoss: currentPrice + (indicators.atr * 0.8), // Tighter stop loss
-        takeProfit: currentPrice - (indicators.atr * 1.0), // Closer take profit
+        stopLoss: currentPrice + (indicators.atr * 0.6), // Ultra tight stop loss
+        takeProfit: currentPrice - (indicators.atr * 0.8), // Ultra close take profit
         timeframe: '1H',
         reasoning: 'Day trading mean reversion: Overbought conditions with reversal potential',
         source: 'Mean Reversion Strategy'

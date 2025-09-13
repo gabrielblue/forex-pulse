@@ -96,7 +96,7 @@ export class SecurityValidator {
   // Rate limiting check (client-side)
   private static requestCounts: Map<string, { count: number; resetTime: number }> = new Map();
   
-  static checkRateLimit(action: string, limit: number = 10, windowMs: number = 60000): boolean {
+  static checkRateLimit(action: string, limit: number = 50, windowMs: number = 30000): boolean {
     const now = Date.now();
     const record = this.requestCounts.get(action);
     

@@ -130,6 +130,11 @@ export const useTradingBot = () => {
       setError(null);
       
       await tradingBot.enableAutoTrading(enabled);
+      
+      // Also enable auto-execution in signal manager
+      const { botSignalManager } = await import('@/lib/trading/botSignalManager');
+      await botSignalManager.enableAutoExecution(enabled);
+      
       updateStatus();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to toggle auto trading';
@@ -169,6 +174,12 @@ export const useTradingBot = () => {
       setError(null);
       
       await tradingBot.generateTestSignal();
+      
+      // Force execute pending signals if auto-trading is enabled
+      if (status.autoTradingEnabled) {
+        const { botSignalManager } = await import('@/lib/trading/botSignalManager');
+        await botSignalManager.forceExecutePendingSignals();
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate test signal';
       setError(errorMessage);

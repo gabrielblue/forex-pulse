@@ -47,9 +47,9 @@ class TradingBot {
   };
 
   private configuration: BotConfiguration = {
-    minConfidence: 30, // Ultra aggressive: 30% threshold
-    maxRiskPerTrade: 10, // Ultra aggressive: 10% per trade
-    maxDailyLoss: 50, // Day trader: 50% daily loss allowed
+    minConfidence: 20, // Ultra aggressive: 20% threshold
+    maxRiskPerTrade: 15, // Ultra aggressive: 15% per trade
+    maxDailyLoss: 40, // Day trader: 40% daily loss allowed
     enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'], // All pairs
     tradingHours: {
       start: '00:00',
@@ -229,9 +229,9 @@ class TradingBot {
       // Initialize signal manager with ultra aggressive settings
       await botSignalManager.initialize({
         enabled: true,
-        interval: this.configuration.signalCheckInterval || 2000, // Ultra fast: 2 seconds
+        interval: this.configuration.signalCheckInterval || 3000, // Ultra fast: 3 seconds
         symbols: this.configuration.enabledPairs,
-        minConfidence: Math.min(30, this.configuration.minConfidence), // Force low threshold
+        minConfidence: Math.min(20, this.configuration.minConfidence), // Force ultra low threshold
         autoExecute: this.status.autoTradingEnabled
       });
       
@@ -395,7 +395,7 @@ class TradingBot {
       if (dailyLossPercentage >= this.configuration.maxDailyLoss) {
         console.warn(`⚠️ Daily loss limit reached: ${dailyLossPercentage.toFixed(2)}%, but continuing with reduced risk for day trading`);
         // For day trading, reduce position sizes instead of stopping completely
-        this.configuration.maxRiskPerTrade = Math.max(0.5, this.configuration.maxRiskPerTrade * 0.5);
+        this.configuration.maxRiskPerTrade = Math.max(1.0, this.configuration.maxRiskPerTrade * 0.7);
         console.log(`📉 Reduced risk per trade to ${this.configuration.maxRiskPerTrade}% for remainder of day`);
         return;
       }
@@ -403,14 +403,14 @@ class TradingBot {
 
     // Ultra aggressive margin requirements for day trading
     if (accountInfo.marginLevel > 0) {
-      const minMarginLevel = accountInfo.isDemo ? 5 : 20; // Ultra low: 5% demo, 20% live
-      const criticalMarginLevel = accountInfo.isDemo ? 2 : 10; // Extreme: 2% demo, 10% live
+      const minMarginLevel = accountInfo.isDemo ? 3 : 15; // Ultra low: 3% demo, 15% live
+      const criticalMarginLevel = accountInfo.isDemo ? 1 : 5; // Extreme: 1% demo, 5% live
       
       if (accountInfo.marginLevel < minMarginLevel) {
         console.log(`💪 Aggressive mode: Trading with ${accountInfo.marginLevel.toFixed(1)}% margin`);
         
         if (accountInfo.marginLevel < criticalMarginLevel) {
-          console.warn('⚠️ Ultra low margin, but continuing aggressive day trading');
+          console.warn('⚠️ EXTREME margin level, but continuing ultra aggressive day trading');
           // Don't reduce, maintain aggressive stance
         }
       }
@@ -609,8 +609,8 @@ class TradingBot {
     // Apply conservative limits for real trading
     const safeConfig = {
       ...config,
-      maxRiskPerTrade: config.maxRiskPerTrade ? Math.min(config.maxRiskPerTrade, 5.0) : undefined, // Increased to 5%
-      maxDailyLoss: config.maxDailyLoss ? Math.min(config.maxDailyLoss, 15.0) : undefined, // Increased to 15%
+      maxRiskPerTrade: config.maxRiskPerTrade ? Math.min(config.maxRiskPerTrade, 15.0) : undefined, // Increased to 15%
+      maxDailyLoss: config.maxDailyLoss ? Math.min(config.maxDailyLoss, 40.0) : undefined, // Increased to 40%
       useStopLoss: true, // Always enforce stop loss
       useTakeProfit: true, // Always enforce take profit
       emergencyStopEnabled: true // Always keep emergency stop enabled
@@ -629,8 +629,8 @@ class TradingBot {
     orderManager.updateRiskParameters({
       maxRiskPerTrade: this.configuration.maxRiskPerTrade,
       maxDailyLoss: this.configuration.maxDailyLoss,
-      maxConcurrentPositions: 10, // Allow more concurrent positions for day trading
-      maxPositionSize: 5.0, // Larger position sizes
+      maxConcurrentPositions: 25, // Allow many more concurrent positions for day trading
+      maxPositionSize: 20.0, // Much larger position sizes
       useStopLoss: this.configuration.useStopLoss,
       useTakeProfit: this.configuration.useTakeProfit,
       emergencyStopEnabled: this.configuration.emergencyStopEnabled
