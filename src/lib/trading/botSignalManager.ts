@@ -7,30 +7,46 @@ import { enhancedTradingSystem } from './strategies/enhancedStrategies';
 
 export interface SignalGenerationConfig {
   enabled: boolean;
-  interval: number; // milliseconds
+  interval: number; // milliseconds - ultra aggressive for day trading
   symbols: string[];
   minConfidence: number;
   autoExecute: boolean;
+  maxDailySignals: number;
+  aggressiveMode: boolean;
 }
 
 class BotSignalManager {
   private config: SignalGenerationConfig = {
     enabled: false,
-    interval: 5000, // Aggressive: 5 seconds for maximum day trading
-    symbols: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY'], // More pairs for day trading
-    minConfidence: 25, // Ultra aggressive: lowered to 25% for maximum trades
-    autoExecute: false
+    interval: 2000, // Ultra aggressive: 2 seconds for maximum day trading
+    symbols: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'], // All major pairs
+    minConfidence: 15, // Ultra aggressive: lowered to 15% for maximum trades
+    autoExecute: false,
+    maxDailySignals: 1000, // Ultra high limit for day trading
+    aggressiveMode: true
   };
 
   private generationInterval: NodeJS.Timeout | null = null;
   private isGenerating = false;
   private lastGenerationTime = 0;
+  private dailySignalCount = 0;
+  private lastResetDate = new Date().toDateString();
 
   async initialize(config?: Partial<SignalGenerationConfig>): Promise<void> {
     if (config) {
       this.config = { ...this.config, ...config };
     }
+    this.resetDailyCountersIfNeeded();
     console.log('📡 Signal Manager initialized with config:', this.config);
+  }
+
+  private resetDailyCountersIfNeeded(): void {
+    const today = new Date().toDateString();
+    if (this.lastResetDate !== today) {
+      this.dailySignalCount = 0;
+      this.lastResetDate = today;
+      console.log('🔄 Daily signal counters reset for new trading day');
+    }
   }
 
   startAutomaticGeneration(): void {
@@ -39,19 +55,26 @@ class BotSignalManager {
       return;
     }
 
-    console.log(`🚀 Starting ULTRA AGGRESSIVE signal generation (interval: ${this.config.interval/1000}s, min confidence: ${this.config.minConfidence}%)`);
+    console.log(`🚀 Starting ULTRA AGGRESSIVE signal generation (interval: ${this.config.interval/1000}s, min confidence: ${this.config.minConfidence}%, max daily: ${this.config.maxDailySignals})`);
     
     // Start generation loop
     this.generationInterval = setInterval(async () => {
-      if (this.config.enabled && !this.isGenerating) {
+      if (this.config.enabled && !this.isGenerating && this.canGenerateMoreSignals()) {
         await this.generateAndProcessSignals();
       }
     }, this.config.interval);
 
     // Generate immediately
     setTimeout(() => {
-      this.generateAndProcessSignals();
+      if (this.canGenerateMoreSignals()) {
+        this.generateAndProcessSignals();
+      }
     }, 1000); // Start after 1 second
+  }
+
+  private canGenerateMoreSignals(): boolean {
+    this.resetDailyCountersIfNeeded();
+    return this.dailySignalCount < this.config.maxDailySignals;
   }
 
   stopAutomaticGeneration(): void {
@@ -64,48 +87,45 @@ class BotSignalManager {
 
   async generateAndProcessSignals(): Promise<void> {
     if (this.isGenerating) {
-      console.log('Signal generation already in progress, skipping...');
       return;
     }
 
     // Rate limiting
     const timeSinceLastGeneration = Date.now() - this.lastGenerationTime;
-    if (timeSinceLastGeneration < 2000) { // Reduced to 2 seconds for ultra aggressive day trading
-      console.log('Rate limit: Too soon since last generation');
+    if (timeSinceLastGeneration < 1000) { // Ultra aggressive: 1 second minimum
+      return;
+    }
+
+    if (!this.canGenerateMoreSignals()) {
+      console.log(`📊 Daily signal limit reached: ${this.dailySignalCount}/${this.config.maxDailySignals}`);
       return;
     }
 
     this.isGenerating = true;
     this.lastGenerationTime = Date.now();
+    this.dailySignalCount++;
 
     try {
-      console.log('🔍 Analyzing market for trading opportunities...');
+      console.log(`🔍 Analyzing market for trading opportunities... (${this.dailySignalCount}/${this.config.maxDailySignals} today)`);
       
       // Check if we're connected and can trade
       if (!exnessAPI.isConnectedToExness()) {
-        console.warn('⚠️ Not connected to Exness, skipping signal generation');
         return;
       }
 
       const { canTrade, issues } = await exnessAPI.verifyTradingCapabilities();
       if (!canTrade) {
-        console.warn('⚠️ Cannot trade:', issues.join(', '));
         return;
       }
 
-      console.log('✅ Trading capabilities verified, proceeding with signal generation');
-
-      // Generate signals for each symbol
+      // Generate signals for each symbol with enhanced processing
       for (const symbol of this.config.symbols) {
         await this.analyzeAndGenerateSignal(symbol);
       }
 
       // Process any pending signals if auto-execution is enabled
       if (this.config.autoExecute && orderManager.isAutoTradingActive()) {
-        console.log('🤖 Auto-execution enabled, processing pending signals...');
         await this.executePendingSignals();
-      } else {
-        console.log('⏸️ Auto-execution disabled or order manager not active - signals saved for manual review');
       }
 
     } catch (error) {
@@ -142,10 +162,11 @@ class BotSignalManager {
           entryPrice: marketPrice.bid,
           stopLoss: analysis.stopLoss,
           takeProfit: analysis.takeProfit,
-          reasoning: analysis.reasoning
+          reasoning: analysis.reasoning,
+          volume: analysis.volume || 0.15 // Enhanced default volume
         });
 
-        console.log(`📊 Signal generated for ${symbol}: ${analysis.direction} with ${analysis.confidence.toFixed(1)}% confidence`);
+        console.log(`📊 Enhanced signal generated for ${symbol}: ${analysis.direction} with ${analysis.confidence.toFixed(1)}% confidence, volume: ${analysis.volume || 0.15}`);
       }
     } catch (error) {
       console.error(`Failed to analyze ${symbol}:`, error);
@@ -312,28 +333,27 @@ class BotSignalManager {
 
       for (const signal of signals) {
         try {
-          // Check if we should execute this signal
+          // Enhanced signal validation
           if (signal.confidence_score < this.config.minConfidence) {
-            console.log(`⏭️ Skipping signal ${signal.id}: confidence ${signal.confidence_score}% < ${this.config.minConfidence}%`);
             continue;
           }
 
           const symbol = signal.currency_pairs?.symbol;
           if (!symbol || !this.config.symbols.includes(symbol)) {
-            console.log(`⏭️ Skipping signal ${signal.id}: symbol ${symbol} not in enabled pairs`);
             continue;
           }
 
-          console.log(`🎯 Executing signal ${signal.id}: ${signal.signal_type} ${symbol} with ${signal.confidence_score}% confidence`);
+          console.log(`🎯 Executing enhanced signal ${signal.id}: ${signal.signal_type} ${symbol} with ${signal.confidence_score}% confidence`);
 
-          // Execute the trade
+          // Execute the trade with enhanced volume calculation
+          const enhancedVolume = this.calculateEnhancedVolume(signal);
           const orderRequest = {
             symbol,
             type: signal.signal_type as 'BUY' | 'SELL',
-            volume: 0.10, // Increased volume for aggressive day trading
+            volume: enhancedVolume,
             stopLoss: signal.stop_loss ? parseFloat(signal.stop_loss.toString()) : undefined,
             takeProfit: signal.take_profit ? parseFloat(signal.take_profit.toString()) : undefined,
-            comment: `AutoSignal-${signal.id.substring(0, 8)}`
+            comment: `EnhancedAuto-${signal.confidence_score.toFixed(0)}%-${signal.id.substring(0, 8)}`
           };
 
           const orderId = await orderManager.executeOrder(orderRequest);
@@ -343,11 +363,12 @@ class BotSignalManager {
             await supabase
               .from('trading_signals')
               .update({ 
-                status: 'EXPIRED',
+                status: 'EXECUTED',
+                updated_at: new Date().toISOString()
               })
               .eq('id', signal.id);
 
-            console.log(`✅ Signal ${signal.id} executed successfully: Order ${orderId}`);
+            console.log(`✅ Enhanced signal ${signal.id} executed successfully: Order ${orderId}, Volume: ${enhancedVolume}`);
           } else {
             console.error(`❌ Failed to execute signal ${signal.id}: No order ID returned`);
           }
@@ -358,8 +379,7 @@ class BotSignalManager {
           await supabase
             .from('trading_signals')
             .update({ 
-              status: 'FAILED',
-              error_message: error instanceof Error ? error.message : 'Unknown error',
+              status: 'CANCELLED',
               updated_at: new Date().toISOString()
             })
             .eq('id', signal.id);
@@ -370,9 +390,35 @@ class BotSignalManager {
     }
   }
 
+  private calculateEnhancedVolume(signal: any): number {
+    // Enhanced volume calculation for aggressive day trading
+    let baseVolume = 0.20; // Increased base volume
+    
+    // Confidence-based multiplier
+    const confidenceMultiplier = Math.max(1.5, signal.confidence_score / 60); // More aggressive multiplier
+    baseVolume *= confidenceMultiplier;
+    
+    // Session-based adjustments
+    const currentHour = new Date().getUTCHours();
+    const isOptimalSession = (currentHour >= 8 && currentHour <= 17) || (currentHour >= 13 && currentHour <= 22);
+    
+    if (isOptimalSession) {
+      baseVolume *= 2.5; // Massive boost during optimal sessions
+    }
+    
+    // Symbol-specific adjustments for major pairs
+    const majorPairs = ['EURUSD', 'GBPUSD', 'USDJPY'];
+    if (majorPairs.includes(signal.currency_pairs?.symbol)) {
+      baseVolume *= 1.5; // Boost for major pairs
+    }
+    
+    // Apply aggressive limits
+    return Math.max(0.10, Math.min(2.0, baseVolume)); // Increased max to 2.0 lots
+  }
+
   async enableAutoExecution(enabled: boolean): Promise<void> {
     this.config.autoExecute = enabled;
-    console.log(`🤖 Auto-execution ${enabled ? 'ENABLED' : 'DISABLED'} in signal manager`);
+    console.log(`🤖 Enhanced auto-execution ${enabled ? 'ENABLED' : 'DISABLED'} in signal manager`);
     
     if (enabled && this.config.enabled) {
       // Start generation if not already running
@@ -389,12 +435,14 @@ class BotSignalManager {
 
   setConfiguration(config: Partial<SignalGenerationConfig>): void {
     this.config = { ...this.config, ...config };
-    console.log('🔧 Signal manager configuration updated:', {
+    console.log('🔧 Enhanced signal manager configuration updated:', {
       enabled: this.config.enabled,
       interval: this.config.interval + 'ms',
       minConfidence: this.config.minConfidence + '%',
       autoExecute: this.config.autoExecute,
-      symbolCount: this.config.symbols.length
+      symbolCount: this.config.symbols.length,
+      maxDailySignals: this.config.maxDailySignals,
+      aggressiveMode: this.config.aggressiveMode
     });
     
     // Restart generation with new config if currently running
@@ -409,8 +457,17 @@ class BotSignalManager {
   }
 
   async forceGenerateSignal(symbol: string): Promise<void> {
-    console.log(`🎯 Force generating signal for ${symbol}...`);
+    console.log(`🎯 Force generating enhanced signal for ${symbol}...`);
     await this.analyzeAndGenerateSignal(symbol);
+  }
+
+  getDailyStats(): { signalsGenerated: number; maxDaily: number; remaining: number } {
+    this.resetDailyCountersIfNeeded();
+    return {
+      signalsGenerated: this.dailySignalCount,
+      maxDaily: this.config.maxDailySignals,
+      remaining: Math.max(0, this.config.maxDailySignals - this.dailySignalCount)
+    };
   }
   
   // Helper methods for enhanced analysis

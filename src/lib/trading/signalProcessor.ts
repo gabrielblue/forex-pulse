@@ -25,17 +25,21 @@ export interface SignalProcessorConfig {
 
 class SignalProcessor {
   private config: SignalProcessorConfig = {
-    minConfidence: 20, // Ultra low for maximum day trading opportunities
+    minConfidence: 15, // Ultra low for maximum day trading opportunities
     enabledTimeframes: ['5M', '15M', '30M', '1H'], // Short timeframes for day trading
     enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'], // All major pairs
     autoExecute: false
   };
 
   private isProcessing = false;
+  private lastProcessTime = 0;
+  private processedSignalsToday = 0;
+  private maxDailyProcessing = 5000; // Ultra high processing limit
 
   async initialize(): Promise<void> {
     await this.loadConfiguration();
     this.startSignalMonitoring();
+    console.log('🔧 Enhanced Signal Processor initialized with ultra aggressive parameters');
   }
 
   private async loadConfiguration(): Promise<void> {
@@ -63,11 +67,23 @@ class SignalProcessor {
   }
 
   private startSignalMonitoring(): void {
-    // Monitor for new signals every 5 seconds for ultra aggressive day trading
+    // Monitor for new signals every 2 seconds for ultra aggressive day trading
     setInterval(async () => {
       if (this.isProcessing) return;
       
+      // Enhanced rate limiting
+      const timeSinceLastProcess = Date.now() - this.lastProcessTime;
+      if (timeSinceLastProcess < 1000) return; // 1 second minimum
+      
+      if (this.processedSignalsToday >= this.maxDailyProcessing) {
+        console.log(`📊 Daily signal processing limit reached: ${this.processedSignalsToday}/${this.maxDailyProcessing}`);
+        return;
+      }
+      
       this.isProcessing = true;
+      this.lastProcessTime = Date.now();
+      this.processedSignalsToday++;
+      
       try {
         await this.processNewSignals();
       } catch (error) {
@@ -75,7 +91,7 @@ class SignalProcessor {
       } finally {
         this.isProcessing = false;
       }
-    }, 5000); // Ultra reduced interval for maximum processing frequency
+    }, 2000); // Ultra reduced interval for maximum processing frequency
   }
 
   private async processNewSignals(): Promise<void> {
@@ -83,7 +99,7 @@ class SignalProcessor {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Get unprocessed signals
+      // Get unprocessed signals with enhanced filtering
       const { data: signals } = await supabase
         .from('trading_signals')
         .select(`
@@ -93,9 +109,13 @@ class SignalProcessor {
         .eq('user_id', user.id)
         .eq('status', 'ACTIVE')
         .gte('confidence_score', this.config.minConfidence)
-        .in('timeframe', this.config.enabledTimeframes);
+        .in('timeframe', this.config.enabledTimeframes)
+        .order('confidence_score', { ascending: false })
+        .limit(20); // Process top 20 signals for maximum opportunities
 
       if (!signals || signals.length === 0) return;
+
+      console.log(`🔍 Processing ${signals.length} enhanced signals...`);
 
       for (const signal of signals) {
         await this.processSignal(signal);
@@ -139,7 +159,7 @@ class SignalProcessor {
   }
 
   private shouldExecuteSignal(signal: TradingSignal): boolean {
-    // Check confidence threshold
+    // Enhanced signal validation with more lenient criteria
     if (signal.confidence < this.config.minConfidence) {
       return false;
     }
@@ -154,22 +174,30 @@ class SignalProcessor {
       return false;
     }
 
-    // Additional signal validation logic can be added here
+    // Enhanced validation - allow signals during optimal trading sessions
+    const currentHour = new Date().getUTCHours();
+    const isOptimalSession = (currentHour >= 8 && currentHour <= 17) || (currentHour >= 13 && currentHour <= 22);
+    
+    // Lower confidence threshold during optimal sessions
+    if (isOptimalSession && signal.confidence >= this.config.minConfidence * 0.8) {
+      return true;
+    }
+    
     return true;
   }
 
   private async executeSignal(signal: TradingSignal): Promise<void> {
     try {
-      // Calculate position size based on confidence and risk
-      const volume = this.calculateOptimalVolumeFromSignal(signal);
+      // Enhanced position size calculation
+      const volume = this.calculateEnhancedVolumeFromSignal(signal);
 
       const orderRequest: OrderRequest = {
         symbol: signal.symbol,
         type: signal.type,
-        volume: this.calculateOptimalVolumeFromSignal(signal),
+        volume,
         stopLoss: signal.stopLoss,
         takeProfit: signal.takeProfit,
-        comment: `Enhanced AI Signal ${signal.id} (${signal.confidence}% confidence)`
+        comment: `UltraAI-${signal.confidence.toFixed(0)}%-${signal.id.substring(0, 6)}`
       };
 
       // Execute the order
@@ -178,7 +206,7 @@ class SignalProcessor {
       if (orderId) {
         // Update signal status
         await this.updateSignalStatus(signal.id, 'EXECUTED', orderId);
-        console.log(`Signal ${signal.id} executed successfully. Order ID: ${orderId}`);
+        console.log(`Enhanced signal ${signal.id} executed successfully. Order ID: ${orderId}, Volume: ${volume}`);
       }
 
     } catch (error) {
@@ -187,41 +215,49 @@ class SignalProcessor {
     }
   }
 
-  private calculateOptimalVolumeFromSignal(signal: TradingSignal): number {
-    // More aggressive volume calculation for day trading
-    let baseVolume = 0.15; // Start with much larger base volume for day trading
+  private calculateEnhancedVolumeFromSignal(signal: TradingSignal): number {
+    // Ultra aggressive volume calculation for enhanced day trading
+    let baseVolume = 0.25; // Start with even larger base volume for day trading
     
-    // Confidence-based sizing
-    const confidenceMultiplier = Math.max(1.0, signal.confidence / 80); // Ultra aggressive multiplier
+    // Enhanced confidence-based sizing
+    const confidenceMultiplier = Math.max(1.2, signal.confidence / 60); // Ultra aggressive multiplier
     baseVolume *= confidenceMultiplier;
     
-    // Time-based adjustments
+    // Enhanced time-based adjustments
     const currentHour = new Date().getUTCHours();
     const isOptimalTime = (currentHour >= 8 && currentHour <= 17) || (currentHour >= 13 && currentHour <= 22);
     
     if (isOptimalTime) {
-      baseVolume *= 2.0; // Increased to 100% during optimal trading hours
+      baseVolume *= 3.0; // Massive boost during optimal trading hours
     }
     
-    // Symbol-specific adjustments
+    // Enhanced symbol-specific adjustments
     if (signal.symbol === 'EURUSD' || signal.symbol === 'GBPUSD') {
-      baseVolume *= 1.3; // Larger positions for major pairs
+      baseVolume *= 1.8; // Much larger positions for major pairs
     }
     
-    // Risk-reward ratio bonus
+    // Gold trading boost
+    if (signal.symbol === 'XAUUSD') {
+      baseVolume *= 1.5; // Boost for gold trading
+    }
+    
+    // Enhanced risk-reward ratio bonus
     if (signal.takeProfit && signal.stopLoss) {
       const entryPrice = signal.entryPrice;
       const takeProfitDistance = Math.abs(signal.takeProfit - entryPrice);
       const stopLossDistance = Math.abs(entryPrice - signal.stopLoss);
       const riskReward = takeProfitDistance / stopLossDistance;
       
+      if (riskReward >= 1.5) {
+        baseVolume *= 2.0; // Boost for decent risk-reward
+      }
       if (riskReward >= 2.0) {
-        baseVolume *= 2.5; // Increased to 150% for good risk-reward
+        baseVolume *= 3.0; // Massive boost for excellent risk-reward
       }
     }
     
-    // Apply safety limits
-    return Math.max(0.05, Math.min(1.0, baseVolume)); // Increased max volume to 1.0 lots
+    // Apply enhanced safety limits
+    return Math.max(0.10, Math.min(3.0, baseVolume)); // Increased max volume to 3.0 lots
   }
 
   private async updateSignalStatus(
@@ -260,6 +296,8 @@ class SignalProcessor {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      console.log(`🔍 Generating enhanced advanced signals for ${symbols.length} symbols...`);
+
       for (const symbol of symbols) {
         // Get market data for the symbol
         const marketData = await this.getMarketData(symbol);
@@ -268,7 +306,7 @@ class SignalProcessor {
           marketData.volumes
         );
 
-        // Apply enhanced strategies with market context
+        // Apply ultra enhanced strategies with market context
         const strategies = [
           () => professionalStrategies.scalpingStrategy(marketData, indicators),
           () => professionalStrategies.swingTradingStrategy(marketData, indicators),
@@ -279,8 +317,10 @@ class SignalProcessor {
 
         for (const strategy of strategies) {
           const signal = await strategy();
-          if (signal && signal.confidence > this.config.minConfidence) {
+          // Enhanced signal acceptance with lower threshold
+          if (signal && signal.confidence >= this.config.minConfidence * 0.9) {
             await this.saveSignalToDatabase(signal, symbol);
+            console.log(`💎 Enhanced signal saved: ${signal.source} - ${signal.type} ${symbol} (${signal.confidence.toFixed(1)}%)`);
           }
         }
       }
@@ -386,7 +426,7 @@ class SignalProcessor {
   async generateTestSignal(symbol: string = 'EURUSD'): Promise<void> {
     try {
       const accountType = exnessAPI.getAccountType();
-      console.log(`🧪 Generating test signal for ${symbol} on ${accountType?.toUpperCase()} account...`);
+      console.log(`🧪 Generating enhanced test signal for ${symbol} on ${accountType?.toUpperCase()} account...`);
       
       // Generate a realistic test signal
       const { data: { user } } = await supabase.auth.getUser();
@@ -408,12 +448,13 @@ class SignalProcessor {
       const currentPrice = await exnessAPI.getCurrentPrice(symbol);
       const basePrice = currentPrice?.bid || this.getBasePrice(symbol);
       
-      // Generate realistic signal
+      // Generate enhanced realistic signal
       const signalType = Math.random() > 0.5 ? 'BUY' : 'SELL';
-      const confidence = 75 + Math.random() * 20; // 75-95% confidence
+      const confidence = 60 + Math.random() * 35; // 60-95% confidence for more variety
       
-      const stopLossDistance = 0.002; // 20 pips
-      const takeProfitDistance = 0.004; // 40 pips (2:1 ratio)
+      // Enhanced stop loss and take profit for day trading
+      const stopLossDistance = 0.001; // 10 pips for day trading
+      const takeProfitDistance = 0.0015; // 15 pips (1.5:1 ratio for faster profits)
       
       const stopLoss = signalType === 'BUY' 
         ? basePrice - stopLossDistance 
@@ -431,9 +472,9 @@ class SignalProcessor {
         entry_price: basePrice,
         stop_loss: stopLoss,
         take_profit: takeProfit,
-        timeframe: '1H',
-        reasoning: `Test signal generated for ${accountType?.toUpperCase()} account: ${signalType} signal with ${confidence.toFixed(1)}% confidence based on technical analysis`,
-        ai_model: 'test_signal_generator',
+        timeframe: '15M', // Shorter timeframe for day trading
+        reasoning: `Enhanced test signal for ${accountType?.toUpperCase()} account: ${signalType} signal with ${confidence.toFixed(1)}% confidence based on advanced technical analysis and market conditions`,
+        ai_model: 'enhanced_test_signal_generator',
         status: 'ACTIVE'
       };
 
@@ -443,16 +484,18 @@ class SignalProcessor {
 
       if (error) throw error;
       
-      console.log(`✅ Test signal generated successfully:`, {
+      console.log(`✅ Enhanced test signal generated successfully:`, {
         symbol,
         type: signalType,
         confidence: confidence.toFixed(1) + '%',
         entryPrice: basePrice.toFixed(4),
+        stopLoss: stopLoss.toFixed(4),
+        takeProfit: takeProfit.toFixed(4),
         accountType: accountType?.toUpperCase()
       });
       
     } catch (error) {
-      console.error('❌ Failed to generate test signal:', error);
+      console.error('❌ Failed to generate enhanced test signal:', error);
       throw error;
     }
   }
@@ -479,6 +522,7 @@ class SignalProcessor {
 
   async enableAutoExecution(enabled: boolean): Promise<void> {
     this.config.autoExecute = enabled;
+    console.log(`🤖 Enhanced auto-execution ${enabled ? 'ENABLED' : 'DISABLED'} in signal processor`);
     
     // Update bot settings in database
     try {
@@ -490,11 +534,43 @@ class SignalProcessor {
         .upsert({
           user_id: user.id,
           is_active: enabled,
+          min_confidence_score: this.config.minConfidence,
           updated_at: new Date().toISOString()
         });
+        
+      console.log(`📊 Enhanced signal processor settings saved: auto-execute ${enabled}, min confidence ${this.config.minConfidence}%`);
     } catch (error) {
       console.error('Failed to update auto execution setting:', error);
     }
+  }
+
+  // Enhanced method to get processing statistics
+  getProcessingStats(): any {
+    return {
+      processedToday: this.processedSignalsToday,
+      maxDaily: this.maxDailyProcessing,
+      remaining: Math.max(0, this.maxDailyProcessing - this.processedSignalsToday),
+      lastProcessTime: new Date(this.lastProcessTime),
+      isProcessing: this.isProcessing,
+      config: this.config
+    };
+  }
+
+  // Method to boost processing for high-opportunity periods
+  async boostProcessing(durationMinutes: number = 60): Promise<void> {
+    const originalMinConfidence = this.config.minConfidence;
+    const originalInterval = 2000;
+    
+    // Temporarily reduce confidence threshold and increase processing
+    this.config.minConfidence = Math.max(10, originalMinConfidence * 0.7);
+    
+    console.log(`🚀 Signal processing boosted for ${durationMinutes} minutes: confidence threshold ${originalMinConfidence}% → ${this.config.minConfidence}%`);
+    
+    // Reset after duration
+    setTimeout(() => {
+      this.config.minConfidence = originalMinConfidence;
+      console.log('🔄 Signal processing parameters reset to normal levels');
+    }, durationMinutes * 60 * 1000);
   }
 }
 
