@@ -47,9 +47,9 @@ class TradingBot {
   };
 
   private configuration: BotConfiguration = {
-    minConfidence: 20, // Ultra aggressive: 20% threshold
-    maxRiskPerTrade: 15, // Ultra aggressive: 15% per trade
-    maxDailyLoss: 40, // Day trader: 40% daily loss allowed
+    minConfidence: 15, // Ultra aggressive: 15% threshold
+    maxRiskPerTrade: 20, // Ultra aggressive: 20% per trade
+    maxDailyLoss: 50, // Day trader: 50% daily loss allowed
     enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'], // All pairs
     tradingHours: {
       start: '00:00',
@@ -58,7 +58,8 @@ class TradingBot {
     },
     useStopLoss: true,
     useTakeProfit: true,
-    emergencyStopEnabled: true
+    emergencyStopEnabled: true,
+    signalCheckInterval: 1500 // Ultra fast: 1.5 seconds
   };
 
   private monitoringInterval: NodeJS.Timeout | null = null;
@@ -120,9 +121,9 @@ class TradingBot {
 
       if (botSettings) {
         this.configuration = {
-          minConfidence: parseFloat(botSettings.min_confidence_score?.toString() || '35'), // Ultra low: 35% for max trades
-          maxRiskPerTrade: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '5'), 10.0), // Cap at 10%
-          maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '20'), 30.0), // Cap at 30%
+          minConfidence: parseFloat(botSettings.min_confidence_score?.toString() || '20'), // Ultra low: 20% for max trades
+          maxRiskPerTrade: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '8'), 20.0), // Increased cap to 20%
+          maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '30'), 50.0), // Increased cap to 50%
           enabledPairs: botSettings.allowed_pairs || ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'],
           tradingHours: botSettings.trading_hours as any || {
             start: '00:00',
@@ -131,7 +132,8 @@ class TradingBot {
           },
           useStopLoss: true, // Always true for real trading
           useTakeProfit: true, // Always true for real trading
-          emergencyStopEnabled: true
+          emergencyStopEnabled: true,
+          signalCheckInterval: 1500 // Ultra fast signal checking
         };
 
         this.status.isActive = botSettings.is_active || false;
@@ -229,20 +231,23 @@ class TradingBot {
       // Initialize signal manager with ultra aggressive settings
       await botSignalManager.initialize({
         enabled: true,
-        interval: this.configuration.signalCheckInterval || 3000, // Ultra fast: 3 seconds
+        interval: this.configuration.signalCheckInterval || 1500, // Ultra fast: 1.5 seconds
         symbols: this.configuration.enabledPairs,
-        minConfidence: Math.min(20, this.configuration.minConfidence), // Force ultra low threshold
-        autoExecute: this.status.autoTradingEnabled
+        minConfidence: Math.min(15, this.configuration.minConfidence), // Force ultra low threshold
+        autoExecute: this.status.autoTradingEnabled,
+        maxDailySignals: 2000, // Ultra high daily signal limit
+        aggressiveMode: true
       });
       
       // Start automatic signal generation
       botSignalManager.startAutomaticGeneration();
 
       const accountType = exnessAPI.getAccountType();
-      console.log(`🚀 Trading bot started successfully on ${accountType?.toUpperCase()} account`);
+      console.log(`🚀 Enhanced trading bot started successfully on ${accountType?.toUpperCase()} account with ultra aggressive parameters`);
       console.log(`💰 Account Balance: ${accountInfo.currency} ${accountInfo.balance.toFixed(2)}`);
       console.log(`📊 Account Equity: ${accountInfo.currency} ${accountInfo.equity.toFixed(2)}`);
       console.log(`⚖️ Leverage: ${accountInfo.leverage}`);
+      console.log(`⚡ Enhanced settings: ${this.configuration.minConfidence}% min confidence, ${this.configuration.maxRiskPerTrade}% max risk, ${this.configuration.signalCheckInterval}ms interval`);
     } catch (error) {
       console.error('❌ Failed to start trading bot:', error);
       throw error;
@@ -317,22 +322,23 @@ class TradingBot {
     // Update signal manager configuration for auto-execution
     botSignalManager.setConfiguration({
       enabled: enabled,
-      autoExecute: enabled
+      autoExecute: enabled,
+      aggressiveMode: enabled
     });
     
     // Start or stop automatic generation based on enabled status
     if (enabled && this.status.isActive) {
-      console.log('🚀 Starting automatic signal generation and execution...');
+      console.log('🚀 Starting enhanced automatic signal generation and execution...');
       botSignalManager.startAutomaticGeneration();
     } else if (!enabled) {
-      console.log('🛑 Stopping automatic signal generation...');
+      console.log('🛑 Stopping enhanced automatic signal generation...');
       botSignalManager.stopAutomaticGeneration();
     }
     
     await this.updateStatus();
     
     const accountType = exnessAPI.getAccountType();
-    console.log(`${enabled ? '🤖 AUTO TRADING ENABLED' : '✋ AUTO TRADING DISABLED'} on ${accountType?.toUpperCase()} account`);
+    console.log(`${enabled ? '🤖 ENHANCED AUTO TRADING ENABLED' : '✋ ENHANCED AUTO TRADING DISABLED'} on ${accountType?.toUpperCase()} account`);
   }
 
   private startMonitoring(): void {
@@ -393,25 +399,25 @@ class TradingBot {
       const dailyLossPercentage = (Math.abs(dailyLoss) / accountInfo.balance) * 100;
       
       if (dailyLossPercentage >= this.configuration.maxDailyLoss) {
-        console.warn(`⚠️ Daily loss limit reached: ${dailyLossPercentage.toFixed(2)}%, but continuing with reduced risk for day trading`);
-        // For day trading, reduce position sizes instead of stopping completely
-        this.configuration.maxRiskPerTrade = Math.max(1.0, this.configuration.maxRiskPerTrade * 0.7);
-        console.log(`📉 Reduced risk per trade to ${this.configuration.maxRiskPerTrade}% for remainder of day`);
+        console.warn(`⚠️ Daily loss limit reached: ${dailyLossPercentage.toFixed(2)}%, but continuing with enhanced reduced risk for aggressive day trading`);
+        // For aggressive day trading, reduce position sizes but continue trading
+        this.configuration.maxRiskPerTrade = Math.max(2.0, this.configuration.maxRiskPerTrade * 0.8);
+        console.log(`📉 Enhanced risk reduction: risk per trade reduced to ${this.configuration.maxRiskPerTrade}% for remainder of day`);
         return;
       }
     }
 
-    // Ultra aggressive margin requirements for day trading
+    // Ultra aggressive margin requirements for enhanced day trading
     if (accountInfo.marginLevel > 0) {
-      const minMarginLevel = accountInfo.isDemo ? 3 : 15; // Ultra low: 3% demo, 15% live
-      const criticalMarginLevel = accountInfo.isDemo ? 1 : 5; // Extreme: 1% demo, 5% live
+      const minMarginLevel = accountInfo.isDemo ? 2 : 10; // Ultra low: 2% demo, 10% live
+      const criticalMarginLevel = accountInfo.isDemo ? 0.5 : 3; // Extreme: 0.5% demo, 3% live
       
       if (accountInfo.marginLevel < minMarginLevel) {
-        console.log(`💪 Aggressive mode: Trading with ${accountInfo.marginLevel.toFixed(1)}% margin`);
+        console.log(`💪 Ultra aggressive mode: Trading with ${accountInfo.marginLevel.toFixed(1)}% margin`);
         
         if (accountInfo.marginLevel < criticalMarginLevel) {
-          console.warn('⚠️ EXTREME margin level, but continuing ultra aggressive day trading');
-          // Don't reduce, maintain aggressive stance
+          console.warn('⚠️ EXTREME margin level, but continuing ultra enhanced aggressive day trading');
+          // Don't reduce, maintain ultra aggressive stance
         }
       }
     }
@@ -756,13 +762,13 @@ class TradingBot {
 
   async generateTestSignal(): Promise<void> {
     const accountType = exnessAPI.getAccountType();
-    console.log(`🧪 Generating enhanced test signal with chart analysis for ${accountType?.toUpperCase()} account...`);
+    console.log(`🧪 Generating ultra enhanced test signal with advanced chart analysis for ${accountType?.toUpperCase()} account...`);
     
     if (!this.status.isConnected) {
       throw new Error('Must be connected to Exness to generate test signals');
     }
     
-    // Force generate a signal for all enabled pairs
+    // Force generate enhanced signals for all enabled pairs
     for (const symbol of this.configuration.enabledPairs) {
       await botSignalManager.forceGenerateSignal(symbol);
     }
@@ -771,23 +777,78 @@ class TradingBot {
       Math.floor(Math.random() * this.configuration.enabledPairs.length)
     ];
     
-    // Perform chart analysis before generating signal
+    // Perform enhanced chart analysis before generating signal
     const chartAnalysis = await this.performAdvancedChartAnalysis(randomPair, "1H");
     
-    // Generate signals through both processors
+    // Generate enhanced signals through both processors
     await signalProcessor.generateTestSignal(randomPair);
     await botSignalManager.forceGenerateSignal(randomPair);
     
-    console.log(`✅ Enhanced test signal generated for ${randomPair} on ${accountType?.toUpperCase()} account`);
+    console.log(`✅ Ultra enhanced test signal generated for ${randomPair} on ${accountType?.toUpperCase()} account`);
     if (chartAnalysis) {
-      console.log(`📊 Chart analysis: ${chartAnalysis.recommendation.action} with ${chartAnalysis.recommendation.confidence.toFixed(1)}% confidence`);
+      console.log(`📊 Enhanced chart analysis: ${chartAnalysis.recommendation.action} with ${chartAnalysis.recommendation.confidence.toFixed(1)}% confidence`);
     }
     
     // If auto-trading is enabled, execute pending signals immediately
     if (this.status.autoTradingEnabled && orderManager.isAutoTradingActive()) {
-      console.log('🎯 Auto-executing test signal...');
+      console.log('🎯 Enhanced auto-executing test signal...');
       await botSignalManager.generateAndProcessSignals();
     }
+  }
+
+  // Enhanced method to get comprehensive bot statistics
+  async getEnhancedBotStatistics(): Promise<any> {
+    try {
+      const basicStats = await this.getTradingStatus();
+      const signalStats = botSignalManager.getDailyStats();
+      const processingStats = signalProcessor.getProcessingStats();
+      const orderStats = await orderManager.getEnhancedTradingStatistics();
+      
+      return {
+        ...basicStats,
+        enhancedMetrics: {
+          signalGeneration: signalStats,
+          signalProcessing: processingStats,
+          orderExecution: orderStats?.enhancedMetrics,
+          systemPerformance: {
+            signalsPerHour: signalStats.signalsGenerated / Math.max(1, (Date.now() - new Date().setHours(0,0,0,0)) / (1000 * 60 * 60)),
+            executionSuccessRate: orderStats ? (orderStats.winningTrades / Math.max(1, orderStats.totalTrades)) * 100 : 0,
+            averageExecutionTime: this.configuration.signalCheckInterval,
+            aggressiveMode: true
+          }
+        }
+      };
+    } catch (error) {
+      console.error('Failed to get enhanced bot statistics:', error);
+      return null;
+    }
+  }
+
+  // Method to temporarily boost all trading parameters for high-opportunity periods
+  async activateUltraAggressiveMode(durationMinutes: number = 30): Promise<void> {
+    console.log(`🚀 Activating ULTRA AGGRESSIVE MODE for ${durationMinutes} minutes...`);
+    
+    // Boost signal processing
+    await signalProcessor.boostProcessing(durationMinutes);
+    
+    // Boost order management
+    await orderManager.boostTradingParameters(durationMinutes);
+    
+    // Boost signal generation
+    botSignalManager.setConfiguration({
+      interval: 1000, // 1 second intervals
+      minConfidence: 10, // Ultra low threshold
+      maxDailySignals: 3000, // Ultra high limit
+      aggressiveMode: true
+    });
+    
+    console.log('🔥 ULTRA AGGRESSIVE MODE ACTIVATED - Maximum trading frequency enabled');
+    
+    // Reset after duration
+    setTimeout(() => {
+      console.log('🔄 Returning to normal aggressive mode...');
+      this.loadConfiguration(); // Reload normal configuration
+    }, durationMinutes * 60 * 1000);
   }
 
   async getRecentTrades(limit: number = 10) {
@@ -955,6 +1016,3 @@ class TradingBot {
     
     console.log(`${enabled ? '✅' : '❌'} ${feature} ${enabled ? 'enabled' : 'disabled'}`);
   }
-}
-
-export const tradingBot = new TradingBot();
