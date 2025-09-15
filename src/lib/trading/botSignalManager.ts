@@ -18,11 +18,11 @@ export interface SignalGenerationConfig {
 class BotSignalManager {
   private config: SignalGenerationConfig = {
     enabled: false,
-    interval: 2000, // Ultra aggressive: 2 seconds for maximum day trading
+    interval: 1000, // Ultra aggressive: 1 second for maximum day trading
     symbols: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'], // All major pairs
-    minConfidence: 15, // Ultra aggressive: lowered to 15% for maximum trades
+    minConfidence: 10, // Ultra aggressive: lowered to 10% for maximum trades
     autoExecute: false,
-    maxDailySignals: 1000, // Ultra high limit for day trading
+    maxDailySignals: 2000, // Ultra high limit for day trading
     aggressiveMode: true
   };
 
@@ -418,6 +418,15 @@ class BotSignalManager {
 
   async enableAutoExecution(enabled: boolean): Promise<void> {
     this.config.autoExecute = enabled;
+    
+    // Force immediate signal processing when enabling auto-execution
+    if (enabled && this.config.enabled) {
+      console.log('🚀 Auto-execution enabled - forcing immediate signal processing...');
+      setTimeout(() => {
+        this.generateAndProcessSignals();
+      }, 500);
+    }
+    
     console.log(`🤖 Enhanced auto-execution ${enabled ? 'ENABLED' : 'DISABLED'} in signal manager`);
     
     if (enabled && this.config.enabled) {
@@ -425,6 +434,9 @@ class BotSignalManager {
       if (!this.generationInterval) {
         this.startAutomaticGeneration();
       }
+      
+      // Force execute any pending signals immediately
+      await this.executePendingSignals();
     }
   }
 

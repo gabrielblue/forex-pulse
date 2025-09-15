@@ -26,30 +26,30 @@ export class ProfessionalTradingStrategies {
     const currentPrice = marketData.prices[marketData.prices.length - 1];
     
     // RSI oversold/overbought with MACD confirmation
-    if (rsi < 45 && macd.value > macd.signal && ema20 > ema50) { // Ultra lenient RSI for day trading
+    if (rsi < 60 && macd.value > macd.signal && ema20 > ema50) { // Ultra lenient RSI for day trading
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'BUY',
-        confidence: 70, // Lower confidence for maximum opportunities
+        confidence: 60, // Lower confidence for maximum opportunities
         entryPrice: currentPrice,
-        stopLoss: currentPrice - (0.0002 * this.getPipValue(marketData.symbol)), // Ultra tight stop loss
-        takeProfit: currentPrice + (0.0006 * this.getPipValue(marketData.symbol)), // Ultra close take profit
+        stopLoss: currentPrice - (0.0001 * this.getPipValue(marketData.symbol)), // Ultra tight stop loss
+        takeProfit: currentPrice + (0.0003 * this.getPipValue(marketData.symbol)), // Ultra close take profit
         timeframe: '1M',
         reasoning: 'Day trading scalping: RSI oversold with bullish MACD crossover',
         source: 'Scalping Strategy'
       };
     }
     
-    if (rsi > 55 && macd.value < macd.signal && ema20 < ema50) { // Ultra lenient RSI for day trading
+    if (rsi > 40 && macd.value < macd.signal && ema20 < ema50) { // Ultra lenient RSI for day trading
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'SELL',
-        confidence: 70,
+        confidence: 60,
         entryPrice: currentPrice,
-        stopLoss: currentPrice + (0.0002 * this.getPipValue(marketData.symbol)), // Ultra tight stop loss
-        takeProfit: currentPrice - (0.0006 * this.getPipValue(marketData.symbol)), // Ultra close take profit
+        stopLoss: currentPrice + (0.0001 * this.getPipValue(marketData.symbol)), // Ultra tight stop loss
+        takeProfit: currentPrice - (0.0003 * this.getPipValue(marketData.symbol)), // Ultra close take profit
         timeframe: '1M',
         reasoning: 'Day trading scalping: RSI overbought with bearish MACD crossover',
         source: 'Scalping Strategy'

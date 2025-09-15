@@ -135,6 +135,14 @@ export const useTradingBot = () => {
       const { botSignalManager } = await import('@/lib/trading/botSignalManager');
       await botSignalManager.enableAutoExecution(enabled);
       
+      // Force immediate signal processing when enabling
+      if (enabled) {
+        console.log('🚀 Auto-trading enabled - forcing immediate signal processing...');
+        setTimeout(async () => {
+          await botSignalManager.generateAndProcessSignals();
+        }, 1000);
+      }
+      
       updateStatus();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to toggle auto trading';

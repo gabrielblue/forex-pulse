@@ -47,9 +47,9 @@ class TradingBot {
   };
 
   private configuration: BotConfiguration = {
-    minConfidence: 15, // Ultra aggressive: 15% threshold
-    maxRiskPerTrade: 20, // Ultra aggressive: 20% per trade
-    maxDailyLoss: 50, // Day trader: 50% daily loss allowed
+    minConfidence: 10, // Ultra aggressive: 10% threshold
+    maxRiskPerTrade: 25, // Ultra aggressive: 25% per trade
+    maxDailyLoss: 60, // Day trader: 60% daily loss allowed
     enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'], // All pairs
     tradingHours: {
       start: '00:00',
@@ -59,7 +59,7 @@ class TradingBot {
     useStopLoss: true,
     useTakeProfit: true,
     emergencyStopEnabled: true,
-    signalCheckInterval: 1500 // Ultra fast: 1.5 seconds
+    signalCheckInterval: 500 // Ultra fast: 0.5 seconds
   };
 
   private monitoringInterval: NodeJS.Timeout | null = null;
@@ -121,9 +121,9 @@ class TradingBot {
 
       if (botSettings) {
         this.configuration = {
-          minConfidence: parseFloat(botSettings.min_confidence_score?.toString() || '20'), // Ultra low: 20% for max trades
-          maxRiskPerTrade: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '8'), 20.0), // Increased cap to 20%
-          maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '30'), 50.0), // Increased cap to 50%
+          minConfidence: parseFloat(botSettings.min_confidence_score?.toString() || '10'), // Ultra low: 10% for max trades
+          maxRiskPerTrade: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '15'), 25.0), // Increased cap to 25%
+          maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '40'), 60.0), // Increased cap to 60%
           enabledPairs: botSettings.allowed_pairs || ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'],
           tradingHours: botSettings.trading_hours as any || {
             start: '00:00',
@@ -133,7 +133,7 @@ class TradingBot {
           useStopLoss: true, // Always true for real trading
           useTakeProfit: true, // Always true for real trading
           emergencyStopEnabled: true,
-          signalCheckInterval: 1500 // Ultra fast signal checking
+          signalCheckInterval: 500 // Ultra fast signal checking
         };
 
         this.status.isActive = botSettings.is_active || false;
@@ -231,11 +231,11 @@ class TradingBot {
       // Initialize signal manager with ultra aggressive settings
       await botSignalManager.initialize({
         enabled: true,
-        interval: this.configuration.signalCheckInterval || 1500, // Ultra fast: 1.5 seconds
+        interval: this.configuration.signalCheckInterval || 500, // Ultra fast: 0.5 seconds
         symbols: this.configuration.enabledPairs,
-        minConfidence: Math.min(15, this.configuration.minConfidence), // Force ultra low threshold
+        minConfidence: Math.min(10, this.configuration.minConfidence), // Force ultra low threshold
         autoExecute: this.status.autoTradingEnabled,
-        maxDailySignals: 2000, // Ultra high daily signal limit
+        maxDailySignals: 5000, // Ultra high daily signal limit
         aggressiveMode: true
       });
       
@@ -323,13 +323,21 @@ class TradingBot {
     botSignalManager.setConfiguration({
       enabled: enabled,
       autoExecute: enabled,
-      aggressiveMode: enabled
+      aggressiveMode: enabled,
+      interval: enabled ? 500 : 2000, // Ultra fast when enabled
+      minConfidence: enabled ? 8 : this.configuration.minConfidence, // Ultra low when auto-executing
+      maxDailySignals: enabled ? 10000 : 2000 // Ultra high when auto-executing
     });
     
     // Start or stop automatic generation based on enabled status
     if (enabled && this.status.isActive) {
       console.log('🚀 Starting enhanced automatic signal generation and execution...');
       botSignalManager.startAutomaticGeneration();
+      
+      // Force immediate signal processing
+      setTimeout(() => {
+        botSignalManager.generateAndProcessSignals();
+      }, 1000);
     } else if (!enabled) {
       console.log('🛑 Stopping enhanced automatic signal generation...');
       botSignalManager.stopAutomaticGeneration();

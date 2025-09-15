@@ -25,7 +25,7 @@ export interface SignalProcessorConfig {
 
 class SignalProcessor {
   private config: SignalProcessorConfig = {
-    minConfidence: 15, // Ultra low for maximum day trading opportunities
+    minConfidence: 10, // Ultra low for maximum day trading opportunities
     enabledTimeframes: ['5M', '15M', '30M', '1H'], // Short timeframes for day trading
     enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'], // All major pairs
     autoExecute: false
@@ -34,7 +34,7 @@ class SignalProcessor {
   private isProcessing = false;
   private lastProcessTime = 0;
   private processedSignalsToday = 0;
-  private maxDailyProcessing = 5000; // Ultra high processing limit
+  private maxDailyProcessing = 10000; // Ultra high processing limit
 
   async initialize(): Promise<void> {
     await this.loadConfiguration();
@@ -67,13 +67,13 @@ class SignalProcessor {
   }
 
   private startSignalMonitoring(): void {
-    // Monitor for new signals every 2 seconds for ultra aggressive day trading
+    // Monitor for new signals every 1 second for ultra aggressive day trading
     setInterval(async () => {
       if (this.isProcessing) return;
       
       // Enhanced rate limiting
       const timeSinceLastProcess = Date.now() - this.lastProcessTime;
-      if (timeSinceLastProcess < 1000) return; // 1 second minimum
+      if (timeSinceLastProcess < 500) return; // 0.5 second minimum
       
       if (this.processedSignalsToday >= this.maxDailyProcessing) {
         console.log(`📊 Daily signal processing limit reached: ${this.processedSignalsToday}/${this.maxDailyProcessing}`);
@@ -91,7 +91,7 @@ class SignalProcessor {
       } finally {
         this.isProcessing = false;
       }
-    }, 2000); // Ultra reduced interval for maximum processing frequency
+    }, 1000); // Ultra reduced interval for maximum processing frequency
   }
 
   private async processNewSignals(): Promise<void> {
@@ -217,10 +217,10 @@ class SignalProcessor {
 
   private calculateEnhancedVolumeFromSignal(signal: TradingSignal): number {
     // Ultra aggressive volume calculation for enhanced day trading
-    let baseVolume = 0.25; // Start with even larger base volume for day trading
+    let baseVolume = 0.50; // Start with ultra large base volume for day trading
     
     // Enhanced confidence-based sizing
-    const confidenceMultiplier = Math.max(1.2, signal.confidence / 60); // Ultra aggressive multiplier
+    const confidenceMultiplier = Math.max(1.5, signal.confidence / 50); // Ultra aggressive multiplier
     baseVolume *= confidenceMultiplier;
     
     // Enhanced time-based adjustments
@@ -228,17 +228,17 @@ class SignalProcessor {
     const isOptimalTime = (currentHour >= 8 && currentHour <= 17) || (currentHour >= 13 && currentHour <= 22);
     
     if (isOptimalTime) {
-      baseVolume *= 3.0; // Massive boost during optimal trading hours
+      baseVolume *= 4.0; // Massive boost during optimal trading hours
     }
     
     // Enhanced symbol-specific adjustments
     if (signal.symbol === 'EURUSD' || signal.symbol === 'GBPUSD') {
-      baseVolume *= 1.8; // Much larger positions for major pairs
+      baseVolume *= 2.5; // Much larger positions for major pairs
     }
     
     // Gold trading boost
     if (signal.symbol === 'XAUUSD') {
-      baseVolume *= 1.5; // Boost for gold trading
+      baseVolume *= 2.0; // Boost for gold trading
     }
     
     // Enhanced risk-reward ratio bonus
@@ -249,15 +249,15 @@ class SignalProcessor {
       const riskReward = takeProfitDistance / stopLossDistance;
       
       if (riskReward >= 1.5) {
-        baseVolume *= 2.0; // Boost for decent risk-reward
+        baseVolume *= 3.0; // Boost for decent risk-reward
       }
       if (riskReward >= 2.0) {
-        baseVolume *= 3.0; // Massive boost for excellent risk-reward
+        baseVolume *= 5.0; // Massive boost for excellent risk-reward
       }
     }
     
     // Apply enhanced safety limits
-    return Math.max(0.10, Math.min(3.0, baseVolume)); // Increased max volume to 3.0 lots
+    return Math.max(0.20, Math.min(10.0, baseVolume)); // Increased max volume to 10.0 lots
   }
 
   private async updateSignalStatus(

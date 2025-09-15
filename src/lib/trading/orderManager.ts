@@ -27,23 +27,23 @@ export interface RiskParameters {
 class OrderManager {
   private isAutoTradingEnabled = false;
   private riskParams: RiskParameters = {
-    maxRiskPerTrade: 12.0, // Ultra aggressive: 12% for maximum day trading
-    maxDailyLoss: 35.0, // Ultra aggressive: 35% for day trading
+    maxRiskPerTrade: 15.0, // Ultra aggressive: 15% for maximum day trading
+    maxDailyLoss: 40.0, // Ultra aggressive: 40% for day trading
     maxDrawdown: 15.0,
-    maxPositionSize: 50.0, // Ultra aggressive: 50 lots for larger positions
-    maxConcurrentPositions: 50, // Ultra aggressive: 50 positions for maximum opportunities
+    maxPositionSize: 100.0, // Ultra aggressive: 100 lots for larger positions
+    maxConcurrentPositions: 100, // Ultra aggressive: 100 positions for maximum opportunities
     useStopLoss: true,
     useTakeProfit: true,
-    minAccountBalance: 50, // Reduced: $50 minimum for accessibility
-    minMarginLevel: 10, // Ultra aggressive: 10% for maximum leverage usage
+    minAccountBalance: 25, // Reduced: $25 minimum for accessibility
+    minMarginLevel: 5, // Ultra aggressive: 5% for maximum leverage usage
     maxLeverage: 500, // Max 1:500 leverage
     emergencyStopEnabled: true
   };
 
   private lastOrderTime: number = 0;
-  private minOrderInterval: number = 200; // Ultra aggressive: 0.2 seconds between orders
+  private minOrderInterval: number = 100; // Ultra aggressive: 0.1 seconds between orders
   private dailyTradeCount: number = 0;
-  private maxDailyTrades: number = 2000; // Ultra aggressive: 2000 trades per day
+  private maxDailyTrades: number = 5000; // Ultra aggressive: 5000 trades per day
 
   async initialize(): Promise<void> {
     await this.loadRiskParameters();
@@ -72,20 +72,20 @@ class OrderManager {
       if (botSettings) {
         // Override with user settings but keep conservative limits for real trading
         this.riskParams = {
-          maxRiskPerTrade: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '8'), 12.0), // Increased to max 12%
-          maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '25'), 35.0), // Increased to max 35%
+          maxRiskPerTrade: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '10'), 15.0), // Increased to max 15%
+          maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '30'), 40.0), // Increased to max 40%
           maxDrawdown: 15.0,
-          maxPositionSize: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '8') * 5, 50.0), // Increased to max 50 lots
-          maxConcurrentPositions: Math.min(parseInt(botSettings.max_daily_trades?.toString() || '30'), 50), // Increased to max 50 positions
+          maxPositionSize: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '10') * 10, 100.0), // Increased to max 100 lots
+          maxConcurrentPositions: Math.min(parseInt(botSettings.max_daily_trades?.toString() || '50'), 100), // Increased to max 100 positions
           useStopLoss: true, // Always required for real trading
           useTakeProfit: true,
-          minAccountBalance: 25, // Further reduced minimum balance
-          minMarginLevel: 25, // Reduced margin level requirement
+          minAccountBalance: 10, // Ultra reduced minimum balance
+          minMarginLevel: 5, // Ultra reduced margin level requirement
           maxLeverage: 500,
           emergencyStopEnabled: true
         };
         
-        this.maxDailyTrades = Math.min(parseInt(botSettings.max_daily_trades?.toString() || '500'), 2000); // Increased daily trade limit
+        this.maxDailyTrades = Math.min(parseInt(botSettings.max_daily_trades?.toString() || '1000'), 5000); // Increased daily trade limit
       }
       
       console.log('Ultra enhanced risk parameters loaded for aggressive day trading:', this.riskParams);
@@ -216,9 +216,9 @@ class OrderManager {
         const dailyLossPercentage = (Math.abs(dailyLoss) / accountStatus.accountInfo.balance) * 100;
         
         if (dailyLossPercentage >= this.riskParams.maxDailyLoss) {
-          // For ultra aggressive day trading, reduce risk but continue trading
-          this.riskParams.maxRiskPerTrade = Math.max(2.0, this.riskParams.maxRiskPerTrade * 0.7);
-          console.log(`📉 Reduced risk per trade to ${this.riskParams.maxRiskPerTrade}% due to daily loss, but continuing aggressive trading`);
+          // For ultra aggressive day trading, only slightly reduce risk but continue trading
+          this.riskParams.maxRiskPerTrade = Math.max(5.0, this.riskParams.maxRiskPerTrade * 0.9);
+          console.log(`📉 Slightly reduced risk per trade to ${this.riskParams.maxRiskPerTrade}% due to daily loss, continuing ultra aggressive trading`);
         }
       }
 
@@ -286,16 +286,19 @@ class OrderManager {
 
       // Check daily trade count
       if (this.dailyTradeCount >= this.maxDailyTrades) {
-        // Allow 10% overflow for aggressive day trading
-        if (this.dailyTradeCount >= this.maxDailyTrades * 1.1) {
-          return { allowed: false, reason: `Daily trade limit reached: ${this.dailyTradeCount}/${Math.floor(this.maxDailyTrades * 1.1)}` };
+        // Allow 20% overflow for ultra aggressive day trading
+        if (this.dailyTradeCount >= this.maxDailyTrades * 1.2) {
+          return { allowed: false, reason: `Daily trade limit reached: ${this.dailyTradeCount}/${Math.floor(this.maxDailyTrades * 1.2)}` };
         }
       }
 
       // Check order frequency with reduced restrictions
       const timeSinceLastOrder = Date.now() - this.lastOrderTime;
-      if (timeSinceLastOrder < this.minOrderInterval) { // Ultra aggressive: 0.2 second minimum
-        return { allowed: false, reason: `Order frequency limit: ${Math.ceil((this.minOrderInterval - timeSinceLastOrder))}ms remaining` };
+      if (timeSinceLastOrder < this.minOrderInterval) { // Ultra aggressive: 0.1 second minimum
+        // For ultra aggressive trading, allow some frequency violations
+        if (timeSinceLastOrder < this.minOrderInterval * 0.5) {
+          return { allowed: false, reason: `Order frequency limit: ${Math.ceil((this.minOrderInterval - timeSinceLastOrder))}ms remaining` };
+        }
       }
 
       console.log(`✅ All ultra enhanced risk checks passed for ${accountType?.toUpperCase()} aggressive day trading`);
@@ -379,7 +382,7 @@ class OrderManager {
       }
 
       // Calculate stop loss distance in pips - tighter for day trading
-      let stopLossDistance = 15; // Reduced to 15 pips for day trading
+      let stopLossDistance = 8; // Ultra tight: 8 pips for day trading
       if (orderRequest.stopLoss) {
         const pipValue = this.getPipValue(orderRequest.symbol);
         const priceToUse = orderRequest.type === 'BUY' ? currentPrice.ask : currentPrice.bid;
@@ -387,8 +390,8 @@ class OrderManager {
       }
 
       // Ensure minimum stop loss distance for safety - tighter for day trading
-      stopLossDistance = Math.max(stopLossDistance, 5); // Ultra aggressive: Minimum 5 pips
-      stopLossDistance = Math.min(stopLossDistance, 50); // Maximum 50 pips for day trading
+      stopLossDistance = Math.max(stopLossDistance, 3); // Ultra aggressive: Minimum 3 pips
+      stopLossDistance = Math.min(stopLossDistance, 25); // Maximum 25 pips for day trading
 
       // Calculate position size based on risk management
       const pipValue = this.getPipValue(orderRequest.symbol);
@@ -398,16 +401,16 @@ class OrderManager {
       let positionSize = riskAmount / (stopLossDistance * dollarPerPip);
 
       // Ultra aggressive multiplier for enhanced day trading
-      const aggressiveMultiplier = accountInfo.isDemo ? 12.0 : 6.0; // Ultra aggressive: 1200% for demo, 600% for live
+      const aggressiveMultiplier = accountInfo.isDemo ? 20.0 : 10.0; // Ultra aggressive: 2000% for demo, 1000% for live
       positionSize *= aggressiveMultiplier;
 
       // Ultra aggressive position size limits for enhanced day trading
-      const minSize = 0.15; // Increased minimum to 0.15 lots for day trading
+      const minSize = 0.25; // Increased minimum to 0.25 lots for day trading
       const maxSize = Math.min(
         this.riskParams.maxPositionSize, // Maximum from settings
-        (accountInfo.freeMargin / 20), // Ultra aggressive: use up to 1/20th of free margin
-        (availableCapital / 100), // Ultra aggressive: 1/100th of capital
-        accountInfo.isDemo ? 500.0 : 100.0 // Demo: up to 500 lots, Live: up to 100 lots
+        (accountInfo.freeMargin / 10), // Ultra aggressive: use up to 1/10th of free margin
+        (availableCapital / 50), // Ultra aggressive: 1/50th of capital
+        accountInfo.isDemo ? 1000.0 : 200.0 // Demo: up to 1000 lots, Live: up to 200 lots
       );
       
       const adjustedSize = Math.max(minSize, Math.min(maxSize, positionSize));
