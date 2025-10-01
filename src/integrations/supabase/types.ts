@@ -1060,6 +1060,23 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: Database["public"]["Enums"]["app_role"]
       }
+      get_user_exness_session_metrics: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          account_balance: number
+          account_currency: string
+          account_equity: number
+          account_free_margin: number
+          account_margin: number
+          created_at: string
+          expires_at: string
+          id: string
+          is_connected: boolean
+          login_id: number
+          server_name: string
+          updated_at: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
