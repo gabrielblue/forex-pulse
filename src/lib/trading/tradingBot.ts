@@ -71,25 +71,53 @@ class TradingBot {
     if (!this.status.isConnected) {
       throw new Error('Please connect to Exness first');
     }
+    
+    // Verify Exness connection
+    if (!exnessAPI.isConnectedToExness()) {
+      throw new Error('Exness API not connected. Please ensure MT5 Bridge is running.');
+    }
+
     this.status.isActive = true;
     this.status.lastUpdate = new Date();
-    console.log('✅ Trading bot started');
+    
+    // Start signal generation
+    console.log('✅ Trading bot started - activating signal generation...');
+    botSignalManager.setConfiguration({ enabled: true });
+    botSignalManager.startAutomaticGeneration();
   }
 
   async stopBot(): Promise<void> {
     this.status.isActive = false;
     this.status.autoTradingEnabled = false;
     this.status.lastUpdate = new Date();
-    console.log('⏸️ Trading bot stopped');
+    
+    // Stop signal generation
+    console.log('⏸️ Trading bot stopped - deactivating signal generation...');
+    botSignalManager.stopAutomaticGeneration();
+    botSignalManager.setConfiguration({ enabled: false });
   }
 
   async enableAutoTrading(enabled: boolean): Promise<void> {
     if (!this.status.isActive) {
       throw new Error('Bot must be started first');
     }
+    
+    // Verify Exness connection before enabling auto-trading
+    if (enabled && !exnessAPI.isConnectedToExness()) {
+      throw new Error('Cannot enable auto-trading: Not connected to Exness');
+    }
+
     this.status.autoTradingEnabled = enabled;
     this.status.lastUpdate = new Date();
-    console.log(`${enabled ? '🚀' : '⏸️'} Auto-trading ${enabled ? 'enabled' : 'disabled'}`);
+    
+    // Enable/disable auto-execution in signal manager
+    await botSignalManager.enableAutoExecution(enabled);
+    
+    console.log(`${enabled ? '🚀' : '⏸️'} Auto-trading ${enabled ? 'ENABLED - REAL TRADES WILL BE EXECUTED' : 'disabled'}`);
+    
+    if (enabled) {
+      console.log('⚠️ WARNING: Auto-trading is now ACTIVE. Real orders will be placed on your Exness account!');
+    }
   }
 
   async updateConfiguration(config: Partial<BotConfiguration>): Promise<void> {
@@ -106,12 +134,29 @@ class TradingBot {
 
   async generateTestSignal(): Promise<void> {
     console.log('🧪 Generating test signal...');
+    
+    // Generate signals for all configured pairs
     await botSignalManager.generateAndProcessSignals();
+    
+    // If auto-trading is enabled, execute immediately
+    if (this.status.autoTradingEnabled) {
+      console.log('🚀 Auto-trading enabled - executing pending signals...');
+      await botSignalManager.forceExecutePendingSignals();
+    }
   }
 
   async closeAllPositions(): Promise<void> {
-    console.log('📤 Closing all positions...');
-    // Implementation would close all open positions via Exness API
+    console.log('📤 Closing all positions via Exness API...');
+    
+    if (!exnessAPI.isConnectedToExness()) {
+      throw new Error('Not connected to Exness');
+    }
+
+    // Close all positions through order manager
+    const { orderManager } = await import('./orderManager');
+    await orderManager.closeAllPositions();
+    
+    console.log('✅ All positions closed');
   }
 
   updateConnectionStatus(connected: boolean): void {
