@@ -223,31 +223,25 @@ class BotSignalManager {
   }
   
   private fallbackAnalysis(symbol: string, price: any, indicators: any): any {
-    // Simplified but reliable analysis
-    const trend = Math.random() > 0.3 ? 'BULLISH' : 'BEARISH'; // Ultra bullish bias for day trading
-    const momentum = 70 + Math.random() * 30; // Ultra high base momentum
-    const volatility = Math.random() * 30;
+    // NOTE: This fallback should NOT be used in production
+    // Real signals must come from proper technical analysis with historical data
+    // This is only for system stability when enhanced analysis fails
     
-    // Calculate confidence based on multiple factors
-    const trendStrength = Math.random() * 25 + 30; // Ultra high base trend strength
-    const momentumScore = momentum > 80 ? 30 : momentum > 60 ? 25 : 20; // Ultra generous scoring
-    const volatilityScore = volatility < 30 ? 25 : 20; // Ultra lenient volatility scoring
-    const dayTradingBonus = 20; // Ultra bonus for day trading
-    const confidence = Math.min(98, 50 + trendStrength + momentumScore + volatilityScore + dayTradingBonus);
-
-    // Calculate SL/TP based on volatility
-    const pipSize = symbol.includes('JPY') ? 0.01 : 0.0001;
-    const slDistance = (8 + volatility * 0.3) * pipSize; // Ultra tight stop loss for day trading
-    const tpDistance = slDistance * 1.2; // 1.2:1 risk-reward ratio for ultra fast profits
-
+    console.warn(`⚠️ Using fallback analysis for ${symbol} - real technical analysis unavailable`);
+    
+    // Return neutral signal to avoid trading on random data
+    const pipSize = symbol.includes('JPY') ? 0.01 : symbol.includes('XAU') ? 0.01 : 0.0001;
+    const slDistance = 20 * pipSize; // Conservative stop loss
+    const tpDistance = slDistance * 1.5; // 1.5:1 risk-reward
+    
     return {
-      direction: trend === 'BULLISH' ? 'BUY' : 'SELL',
-      confidence,
-      stopLoss: trend === 'BULLISH' ? price.bid - slDistance : price.bid + slDistance,
-      takeProfit: trend === 'BULLISH' ? price.bid + tpDistance : price.bid - tpDistance,
-      reasoning: `Ultra aggressive day trading: ${trend} trend with ${momentum.toFixed(1)}% momentum, volatility at ${volatility.toFixed(1)}%`,
-      volume: 0.10, // Ultra large default volume for day trading
-      expectedValue: confidence * 0.5
+      direction: 'BUY', // Conservative default
+      confidence: 0, // Zero confidence since this is fallback
+      stopLoss: price.bid - slDistance,
+      takeProfit: price.bid + tpDistance,
+      reasoning: `FALLBACK ANALYSIS - Real technical analysis required for trading. Please ensure MT5 connection is active.`,
+      volume: 0.01, // Minimum volume for safety
+      expectedValue: 0
     };
   }
 
@@ -484,29 +478,22 @@ class BotSignalManager {
   
   // Helper methods for enhanced analysis
   private generateRecentPrices(currentPrice: number, count: number): number[] {
-    const prices = [];
-    let price = currentPrice;
+    // NOTE: This should fetch REAL historical prices from MT5
+    // For now, we cannot generate realistic price movements without real data
+    // TODO: Replace with MT5 historical price API call
+    console.warn('⚠️ generateRecentPrices should use real MT5 historical data');
     
-    for (let i = 0; i < count; i++) {
-      const volatility = 0.0002;
-      const change = (Math.random() - 0.5) * volatility;
-      price += change;
-      prices.unshift(price);
-    }
-    
-    return prices;
+    // Return minimal array with just current price until MT5 integration
+    return [currentPrice];
   }
   
   private generateRecentVolumes(count: number): number[] {
-    const volumes = [];
-    const baseVolume = 1000000;
+    // NOTE: This should fetch REAL volume data from MT5
+    // TODO: Replace with MT5 volume data API call
+    console.warn('⚠️ generateRecentVolumes should use real MT5 volume data');
     
-    for (let i = 0; i < count; i++) {
-      const volume = baseVolume * (0.5 + Math.random());
-      volumes.unshift(Math.floor(volume));
-    }
-    
-    return volumes;
+    // Return minimal array until MT5 integration
+    return [0];
   }
   
   private calculateTechnicalIndicators(prices: number[]): any {
@@ -538,7 +525,7 @@ class BotSignalManager {
       rsi,
       bollinger,
       atr: this.calculateATR(prices, 14),
-      adx: 20 + Math.random() * 60
+      adx: 0 // ADX requires real price data, not random
     };
   }
   

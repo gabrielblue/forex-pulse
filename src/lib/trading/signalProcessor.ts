@@ -425,10 +425,14 @@ class SignalProcessor {
 
   async generateTestSignal(symbol: string = 'EURUSD'): Promise<void> {
     try {
+      // Verify connection to Exness
+      if (!exnessAPI.isConnectedToExness()) {
+        throw new Error('Not connected to Exness - cannot generate signal');
+      }
+
       const accountType = exnessAPI.getAccountType();
-      console.log(`🧪 Generating enhanced test signal for ${symbol} on ${accountType?.toUpperCase()} account...`);
+      console.log(`🧪 Generating test signal for ${symbol} on ${accountType?.toUpperCase()} account using REAL price data...`);
       
-      // Generate a realistic test signal
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
@@ -444,17 +448,23 @@ class SignalProcessor {
         return;
       }
 
-      // Get current market price
+      // Get REAL current market price from Exness
       const currentPrice = await exnessAPI.getCurrentPrice(symbol);
-      const basePrice = currentPrice?.bid || this.getBasePrice(symbol);
+      if (!currentPrice) {
+        throw new Error(`Unable to get real price for ${symbol}`);
+      }
       
-      // Generate enhanced realistic signal
-      const signalType = Math.random() > 0.5 ? 'BUY' : 'SELL';
-      const confidence = 60 + Math.random() * 35; // 60-95% confidence for more variety
+      const basePrice = currentPrice.bid;
       
-      // Enhanced stop loss and take profit for day trading
-      const stopLossDistance = 0.001; // 10 pips for day trading
-      const takeProfitDistance = 0.0015; // 15 pips (1.5:1 ratio for faster profits)
+      // Use real price action to determine signal type
+      const priceSpread = currentPrice.ask - currentPrice.bid;
+      const signalType = priceSpread > (currentPrice.bid * 0.0001) ? 'SELL' : 'BUY'; // Based on real spread
+      const confidence = 75; // Fixed confidence for test signals
+      
+      // Calculate stop loss and take profit based on real market conditions
+      const pipSize = symbol.includes('JPY') ? 0.01 : symbol.includes('XAU') ? 0.01 : 0.0001;
+      const stopLossDistance = 20 * pipSize; // 20 pips
+      const takeProfitDistance = 30 * pipSize; // 30 pips (1.5:1 ratio)
       
       const stopLoss = signalType === 'BUY' 
         ? basePrice - stopLossDistance 
@@ -472,9 +482,9 @@ class SignalProcessor {
         entry_price: basePrice,
         stop_loss: stopLoss,
         take_profit: takeProfit,
-        timeframe: '15M', // Shorter timeframe for day trading
-        reasoning: `Enhanced test signal for ${accountType?.toUpperCase()} account: ${signalType} signal with ${confidence.toFixed(1)}% confidence based on advanced technical analysis and market conditions`,
-        ai_model: 'enhanced_test_signal_generator',
+        timeframe: '15M',
+        reasoning: `Test signal for ${accountType?.toUpperCase()} account: ${signalType} at real price ${basePrice.toFixed(5)} with ${confidence}% confidence`,
+        ai_model: 'test_signal_generator',
         status: 'ACTIVE'
       };
 

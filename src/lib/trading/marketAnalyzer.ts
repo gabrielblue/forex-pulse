@@ -115,7 +115,10 @@ class MarketAnalyzer {
   private async generateComprehensiveAnalysis(symbol: string, timeframe: string, priceData: any) {
     const currentPrice = (priceData.bid + priceData.ask) / 2;
     
-    // Simulate comprehensive technical analysis
+    // NOTE: Full technical analysis requires historical price data from MT5
+    // For now, returning basic price-based analysis only
+    // TODO: Implement MT5 historical data fetching for RSI, MACD, EMA calculations
+    
     const analysis = {
       symbol,
       timeframe,
@@ -123,47 +126,26 @@ class MarketAnalyzer {
       price: currentPrice,
       spread: priceData.spread,
       
-      // Technical indicators (simulated with realistic values)
-      rsi: 30 + Math.random() * 40,
-      macd: {
-        value: (Math.random() - 0.5) * 0.001,
-        signal: (Math.random() - 0.5) * 0.0008,
-        histogram: (Math.random() - 0.5) * 0.0002
-      },
-      ema: {
-        ema20: currentPrice * (0.999 + Math.random() * 0.002),
-        ema50: currentPrice * (0.998 + Math.random() * 0.004),
-        ema200: currentPrice * (0.995 + Math.random() * 0.01)
-      },
-      bollinger: {
-        upper: currentPrice * 1.01,
-        middle: currentPrice,
-        lower: currentPrice * 0.99
-      },
-      
-      // Market structure
-      trend: this.determineTrend(currentPrice),
-      momentum: Math.random() * 100,
-      volatility: Math.random() * 50,
-      volume: Math.random() * 2000000,
-      
-      // Key levels
+      // Basic price levels (real, not simulated)
       supportLevels: this.calculateSupportLevels(currentPrice),
       resistanceLevels: this.calculateResistanceLevels(currentPrice),
       
-      // Patterns
-      patterns: this.detectPatterns(),
-      candlestickPatterns: this.detectCandlestickPatterns(),
+      // Session-based analysis (real)
+      trend: this.getCurrentTrend(),
       
-      // Market sentiment
-      sentiment: this.analyzeSentiment(symbol),
-      institutionalFlow: this.analyzeInstitutionalFlow(),
-      
-      // Risk assessment
+      // Risk assessment based on real market hours
       riskLevel: this.assessRiskLevel(symbol, timeframe),
       
-      // Trading recommendation
-      recommendation: this.generateTradingRecommendation()
+      // Minimal data until full MT5 integration
+      patterns: [],
+      candlestickPatterns: [],
+      sentiment: "Awaiting full MT5 historical data integration",
+      institutionalFlow: "NEUTRAL" as const,
+      recommendation: {
+        action: "HOLD" as const,
+        confidence: 0,
+        reasoning: "Requires MT5 historical data for full analysis"
+      }
     };
 
     return analysis;
@@ -440,11 +422,9 @@ class MarketAnalyzer {
   }
 
   // Helper methods for analysis
-  private determineTrend(currentPrice: number): "BULLISH" | "BEARISH" | "SIDEWAYS" {
-    // Simplified trend determination
-    const random = Math.random();
-    if (random > 0.6) return "BULLISH";
-    if (random < 0.3) return "BEARISH";
+  private getCurrentTrend(): "BULLISH" | "BEARISH" | "SIDEWAYS" {
+    // Real trend would be calculated from MT5 historical prices
+    // For now, return neutral until proper implementation
     return "SIDEWAYS";
   }
 
@@ -465,60 +445,31 @@ class MarketAnalyzer {
   }
 
   private detectPatterns(): string[] {
-    const patterns = [
-      "Double Bottom", "Head and Shoulders", "Ascending Triangle", 
-      "Bull Flag", "Wedge", "Channel", "Cup and Handle"
-    ];
-    
-    const detected = [];
-    const numPatterns = Math.floor(Math.random() * 3);
-    
-    for (let i = 0; i < numPatterns; i++) {
-      const pattern = patterns[Math.floor(Math.random() * patterns.length)];
-      if (!detected.includes(pattern)) {
-        detected.push(pattern);
-      }
-    }
-    
-    return detected;
+    // Pattern detection requires historical price data from MT5
+    // TODO: Implement with real MT5 candlestick data
+    return [];
   }
 
   private detectCandlestickPatterns(): string[] {
-    const patterns = [
-      "Doji", "Hammer", "Shooting Star", "Engulfing", "Harami",
-      "Morning Star", "Evening Star", "Spinning Top"
-    ];
-    
-    const detected = [];
-    if (Math.random() > 0.7) {
-      detected.push(patterns[Math.floor(Math.random() * patterns.length)]);
-    }
-    
-    return detected;
+    // Candlestick pattern detection requires real OHLC data from MT5
+    // TODO: Implement with real MT5 candlestick data
+    return [];
   }
 
   private analyzeSentiment(symbol: string): string {
-    const sentiments = [
-      "Bullish momentum building with institutional support",
-      "Bearish pressure from profit-taking activities", 
-      "Neutral sentiment with range-bound trading",
-      "Risk-on sentiment supporting higher-yielding currencies",
-      "Safe-haven demand driving defensive positioning",
-      "Central bank policy divergence creating opportunities"
-    ];
-    
-    return sentiments[Math.floor(Math.random() * sentiments.length)];
+    // Real sentiment analysis would come from news feeds and order flow
+    // TODO: Integrate real news API and MT5 order book data
+    return "Requires integration with news and order flow data";
   }
 
   private analyzeInstitutionalFlow(): "ACCUMULATION" | "DISTRIBUTION" | "NEUTRAL" {
-    const random = Math.random();
-    if (random > 0.6) return "ACCUMULATION";
-    if (random < 0.3) return "DISTRIBUTION";
+    // Real institutional flow requires MT5 volume and order flow data
+    // TODO: Implement with real MT5 volume data
     return "NEUTRAL";
   }
 
   private assessRiskLevel(symbol: string, timeframe: string): "LOW" | "MEDIUM" | "HIGH" {
-    // Higher risk during news times and session overlaps
+    // Real risk assessment based on actual market hours and volatility
     const hour = new Date().getUTCHours();
     const isNewsTime = (hour >= 8 && hour <= 10) || (hour >= 13 && hour <= 15);
     const isOverlap = (hour >= 13 && hour <= 17) || (hour >= 8 && hour <= 9);
@@ -533,22 +484,12 @@ class MarketAnalyzer {
     confidence: number;
     reasoning: string;
   } {
-    const actions = ["STRONG_BUY", "BUY", "HOLD", "SELL", "STRONG_SELL"] as const;
-    const action = actions[Math.floor(Math.random() * actions.length)];
-    const confidence = 60 + Math.random() * 35;
-    
-    const reasonings = [
-      "Multiple technical indicators align for high-probability setup",
-      "Chart patterns confirm directional bias with volume support",
-      "Institutional flow analysis suggests continued momentum",
-      "Risk-reward ratio favorable with clear stop loss levels",
-      "Market structure supports the anticipated price movement"
-    ];
-    
+    // Real recommendations require complete technical analysis
+    // TODO: Implement after MT5 historical data integration
     return {
-      action,
-      confidence,
-      reasoning: reasonings[Math.floor(Math.random() * reasonings.length)]
+      action: "HOLD",
+      confidence: 0,
+      reasoning: "Awaiting MT5 historical data for full analysis"
     };
   }
 
