@@ -348,50 +348,94 @@ class ExnessAPI {
   }
 
   async getCurrentPrice(symbol: string): Promise<MarketPrice | null> {
+    if (!this.isConnected || !this.sessionId) {
+      console.warn('Not connected to Exness - cannot get current price');
+      return null;
+    }
+
     try {
-      // For real implementation, you'd get this from MT5 Bridge
-      // For now, return realistic mock data
-      const basePrices: Record<string, number> = {
-        'EURUSD': 1.0845,
-        'GBPUSD': 1.2734,
-        'USDJPY': 149.85,
-        'AUDUSD': 0.6623,
-        'USDCHF': 0.8892,
-        'NZDUSD': 0.5987
-      };
+      // Get REAL price from MT5 Bridge
+      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/account_info`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: this.sessionId
+        })
+      });
 
-      const basePrice = basePrices[symbol] || 1.0000;
-      const spread = symbol.includes('JPY') ? 0.015 : 0.00015;
-      const bid = basePrice - spread / 2;
-      const ask = basePrice + spread / 2;
+      if (!response.ok) {
+        throw new Error(`Failed to get price: ${response.status}`);
+      }
 
-      return {
-        symbol,
-        bid,
-        ask,
-        spread,
-        timestamp: new Date()
-      };
+      const result = await response.json();
+      
+      if (!result.success || !result.account_info) {
+        throw new Error('Failed to retrieve account info');
+      }
+
+      // Extract real market prices from positions or use symbol-specific endpoint
+      // For now, get from account but in production you'd have a dedicated symbol price endpoint
+      const positions = result.account_info.positions || [];
+      const position = positions.find((p: any) => p.symbol === symbol);
+      
+      if (position) {
+        return {
+          symbol,
+          bid: position.price_current,
+          ask: position.price_current + (position.price_current * 0.0001), // Approximate spread
+          spread: position.price_current * 0.0001,
+          timestamp: new Date()
+        };
+      }
+
+      // If no position exists, we still need real price - this should use MT5 symbol info endpoint
+      console.warn(`No active position for ${symbol}, returning approximate price`);
+      return null;
+      
     } catch (error) {
-      console.error('Failed to get current price:', error);
+      console.error('Failed to get REAL current price:', error);
       return null;
     }
   }
 
   async closePosition(ticket: number): Promise<boolean> {
     if (!this.isConnected || !this.sessionId) {
+      console.error('Cannot close position - not connected to Exness');
       return false;
     }
 
     try {
-      console.log('🔒 Closing position:', ticket);
+      console.log('🔒 Closing REAL position via MT5 Bridge:', ticket);
       
-      // In a real implementation, you'd call the MT5 Bridge to close the position
-      // For now, simulate success
-      console.log('✅ Position closed successfully');
-      return true;
+      // Close position through REAL MT5 Bridge
+      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/close_position`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: this.sessionId,
+          ticket: ticket
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to close position: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('✅ REAL position closed successfully:', result);
+        return true;
+      } else {
+        console.error('❌ Failed to close position:', result.error);
+        return false;
+      }
     } catch (error) {
-      console.error('Failed to close position:', error);
+      console.error('❌ Failed to close REAL position:', error);
       return false;
     }
   }
