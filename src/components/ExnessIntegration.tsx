@@ -43,14 +43,19 @@ export const ExnessIntegration = () => {
   const [autoTradingEnabled, setAutoTradingEnabled] = useState(false);
 
   const serverOptions = [
-    // Demo/Trial Servers
+    // Demo/Trial Servers (all available trial servers)
     { value: "ExnessKE-MT5Trial01", label: "ExnessKE-MT5Trial01 (Demo)", type: "demo" },
     { value: "ExnessKE-MT5Trial02", label: "ExnessKE-MT5Trial02 (Demo)", type: "demo" },
     { value: "ExnessKE-MT5Trial03", label: "ExnessKE-MT5Trial03 (Demo)", type: "demo" },
     { value: "ExnessKE-MT5Trial04", label: "ExnessKE-MT5Trial04 (Demo)", type: "demo" },
     { value: "ExnessKE-MT5Trial05", label: "ExnessKE-MT5Trial05 (Demo)", type: "demo" },
+    { value: "ExnessKE-MT5Trial06", label: "ExnessKE-MT5Trial06 (Demo)", type: "demo" },
+    { value: "ExnessKE-MT5Trial07", label: "ExnessKE-MT5Trial07 (Demo)", type: "demo" },
+    { value: "ExnessKE-MT5Trial08", label: "ExnessKE-MT5Trial08 (Demo)", type: "demo" },
+    { value: "ExnessKE-MT5Trial09", label: "ExnessKE-MT5Trial09 (Demo)", type: "demo" },
+    { value: "ExnessKE-MT5Trial10", label: "ExnessKE-MT5Trial10 (Demo)", type: "demo" },
     
-    // Live/Real Servers
+    // Live/Real Servers (all available real servers)
     { value: "ExnessKE-MT5Real01", label: "ExnessKE-MT5Real01 (Live)", type: "live" },
     { value: "ExnessKE-MT5Real02", label: "ExnessKE-MT5Real02 (Live)", type: "live" },
     { value: "ExnessKE-MT5Real03", label: "ExnessKE-MT5Real03 (Live)", type: "live" },
@@ -275,29 +280,41 @@ export const ExnessIntegration = () => {
 
               <div>
                 <Label htmlFor="server">MT5 Server</Label>
-                <select
-                  id="server"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  value={credentials.server}
-                  onChange={(e) => handleServerChange(e.target.value)}
-                  disabled={connectionStatus === "connected"}
-                >
-                  <option value="">Select MT5 Server</option>
-                  <optgroup label="Demo/Trial Servers">
-                    {serverOptions.filter(s => s.type === "demo").map(server => (
-                      <option key={server.value} value={server.value}>
-                        {server.label}
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Live/Real Servers">
-                    {serverOptions.filter(s => s.type === "live").map(server => (
-                      <option key={server.value} value={server.value}>
-                        {server.label}
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
+                <div className="flex gap-2">
+                  <select
+                    id="server"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={credentials.server}
+                    onChange={(e) => handleServerChange(e.target.value)}
+                    disabled={connectionStatus === "connected"}
+                  >
+                    <option value="">Select MT5 Server</option>
+                    <optgroup label="Demo/Trial Servers">
+                      {serverOptions.filter(s => s.type === "demo").map(server => (
+                        <option key={server.value} value={server.value}>
+                          {server.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Live/Real Servers">
+                      {serverOptions.filter(s => s.type === "live").map(server => (
+                        <option key={server.value} value={server.value}>
+                          {server.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <option value="custom">Custom Server...</option>
+                  </select>
+                </div>
+                {credentials.server === "custom" && (
+                  <Input
+                    className="mt-2"
+                    placeholder="Enter custom server name (e.g., ExnessKE-MT5Trial10)"
+                    value={credentials.server === "custom" ? "" : credentials.server}
+                    onChange={(e) => setCredentials(prev => ({ ...prev, server: e.target.value }))}
+                    disabled={connectionStatus === "connected"}
+                  />
+                )}
               </div>
 
               <div className="flex items-center space-x-2">
