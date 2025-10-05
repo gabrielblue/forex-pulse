@@ -20,7 +20,9 @@ interface Prediction {
   timestamp: Date;
 }
 
-const mockPredictions: Prediction[] = [
+// NOTE: This component shows example predictions for UI demonstration
+// Real predictions use the AI analysis system integrated with the bot
+const examplePredictions: Prediction[] = [
   {
     id: "1",
     symbol: "EURUSD",
@@ -66,7 +68,7 @@ const mockPredictions: Prediction[] = [
 ];
 
 export const AIPredictionSystem = () => {
-  const [predictions] = useState<Prediction[]>(mockPredictions);
+  const [predictions] = useState<Prediction[]>(examplePredictions);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiStatus, setAiStatus] = useState<"active" | "analyzing" | "idle">("active");
 

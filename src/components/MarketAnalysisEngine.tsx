@@ -109,31 +109,17 @@ export const MarketAnalysisEngine = () => {
   };
 
   const generateAdvancedAnalysis = (symbol: string, timeframe: string): MarketAnalysis => {
-    // Simulate advanced market analysis
+    // NOTE: This component displays example market analysis for UI demonstration
+    // Real market analysis is performed by the AI analyzer integrated with the trading bot
+    // TODO: Replace with real-time data display from the bot's AI analysis
+    
     const basePrice = getBasePrice(symbol);
-    const volatility = Math.random() * 0.02;
     
-    // Generate realistic technical indicators
-    const rsi = 30 + Math.random() * 40; // 30-70 range
-    const macdValue = (Math.random() - 0.5) * 0.001;
-    const macdSignal = macdValue * 0.8;
-    const ema20 = basePrice * (0.998 + Math.random() * 0.004);
-    const ema50 = basePrice * (0.996 + Math.random() * 0.008);
-    const atr = basePrice * (0.001 + Math.random() * 0.002);
+    // Placeholder neutral analysis for UI display
+    const trend: "BULLISH" | "BEARISH" | "NEUTRAL" = "NEUTRAL";
+    const strength = 50;
     
-    // Determine trend based on EMAs and MACD
-    let trend: "BULLISH" | "BEARISH" | "NEUTRAL" = "NEUTRAL";
-    let strength = 50;
-    
-    if (ema20 > ema50 && macdValue > macdSignal && rsi > 50) {
-      trend = "BULLISH";
-      strength = 60 + Math.random() * 30;
-    } else if (ema20 < ema50 && macdValue < macdSignal && rsi < 50) {
-      trend = "BEARISH";
-      strength = 60 + Math.random() * 30;
-    }
-
-    // Generate support and resistance levels
+    // Placeholder support and resistance levels
     const support = [
       basePrice * 0.998,
       basePrice * 0.995,
@@ -145,46 +131,32 @@ export const MarketAnalysisEngine = () => {
       basePrice * 1.008
     ];
 
-    // Detect patterns
-    const patterns = [];
-    if (Math.random() > 0.7) patterns.push("Double Bottom");
-    if (Math.random() > 0.8) patterns.push("Head and Shoulders");
-    if (Math.random() > 0.6) patterns.push("Ascending Triangle");
-    if (Math.random() > 0.9) patterns.push("Bullish Flag");
-
-    // Generate recommendation
-    let recommendation: MarketAnalysis["recommendation"] = "HOLD";
-    if (strength > 80 && trend === "BULLISH") recommendation = "STRONG_BUY";
-    else if (strength > 70 && trend === "BULLISH") recommendation = "BUY";
-    else if (strength > 80 && trend === "BEARISH") recommendation = "STRONG_SELL";
-    else if (strength > 70 && trend === "BEARISH") recommendation = "SELL";
-
     return {
       timestamp: new Date(),
       symbol,
       timeframe,
       trend,
       strength,
-      confidence: 70 + Math.random() * 25,
+      confidence: 50, // Neutral
       keyLevels: { support, resistance },
       indicators: {
-        rsi,
-        macd: { value: macdValue, signal: macdSignal, histogram: macdValue - macdSignal },
-        ema20,
-        ema50,
+        rsi: 50,
+        macd: { value: 0, signal: 0, histogram: 0 },
+        ema20: basePrice,
+        ema50: basePrice,
         bollinger: {
           upper: basePrice * 1.01,
           middle: basePrice,
           lower: basePrice * 0.99
         },
-        volume: Math.floor(Math.random() * 1000000),
-        atr
+        volume: 0,
+        atr: basePrice * 0.001
       },
-      patterns,
-      sentiment: generateMarketSentiment(),
-      riskLevel: strength > 80 ? "HIGH" : strength > 60 ? "MEDIUM" : "LOW",
-      recommendation,
-      notes: generateAnalysisNotes(symbol, trend, strength, patterns)
+      patterns: [],
+      sentiment: "NEUTRAL",
+      riskLevel: "MEDIUM",
+      recommendation: "HOLD",
+      notes: `This is example analysis for UI demonstration. Real AI-powered analysis is active in the trading bot.`
     };
   };
 

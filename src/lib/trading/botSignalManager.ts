@@ -4,6 +4,7 @@ import { exnessAPI } from './exnessApi';
 import { signalProcessor } from './signalProcessor';
 import { professionalStrategies } from './strategies/professionalStrategies';
 import { enhancedTradingSystem } from './strategies/enhancedStrategies';
+import { aiAnalyzer } from './aiAnalyzer';
 
 export interface SignalGenerationConfig {
   enabled: boolean;
@@ -192,57 +193,82 @@ class BotSignalManager {
       // Get recent news events
       const newsEvents = await this.getRecentNews(symbol);
       
-      // Use enhanced trading system for better analysis
-      const enhancedSignal = await enhancedTradingSystem.generateOptimalSignal(
+      // Use AI-powered analysis for intelligent trading decisions
+      const aiAnalysis = await aiAnalyzer.analyzeMarket({
         symbol,
-        marketData,
-        indicators,
-        sessionInfo,
-        newsEvents
-      );
-      
-      if (enhancedSignal) {
-        return {
-          direction: enhancedSignal.type,
-          confidence: enhancedSignal.confidence,
-          stopLoss: enhancedSignal.stopLoss,
-          takeProfit: enhancedSignal.takeProfit,
-          reasoning: enhancedSignal.reasoning,
-          volume: enhancedSignal.volatilityAdjustedVolume,
-          expectedValue: enhancedSignal.expectedOutcome.expectedValue
-        };
+        timeframe: '15m',
+        marketData: {
+          currentPrice: price.bid,
+          bid: price.bid,
+          ask: price.ask,
+          spread: price.spread
+        },
+        technicalIndicators: indicators
+      });
+
+      // Only trade if AI gives HIGH confidence
+      if (aiAnalysis.signal === 'HOLD' || aiAnalysis.confidence < 70) {
+        return null; // Skip low-confidence signals
       }
-      
-      // Fallback to simplified analysis if enhanced system fails
-      return this.fallbackAnalysis(symbol, price, indicators);
+
+      return {
+        direction: aiAnalysis.signal,
+        confidence: aiAnalysis.confidence,
+        stopLoss: aiAnalysis.stopLoss,
+        takeProfit: aiAnalysis.takeProfit,
+        reasoning: `AI Analysis (${aiAnalysis.confidence}% confidence): ${aiAnalysis.reasoning}. Market Regime: ${aiAnalysis.regime}. Risk: ${aiAnalysis.riskLevel}.`,
+        volume: this.calculatePositionSizeFromAI(aiAnalysis.confidence, aiAnalysis.positionSizeRecommendation, symbol),
+        expectedValue: this.calculateExpectedValue(
+          aiAnalysis.entryPrice || price.bid,
+          aiAnalysis.takeProfit,
+          aiAnalysis.stopLoss,
+          aiAnalysis.confidence
+        )
+      };
       
     } catch (error) {
-      console.error('Enhanced analysis failed, using fallback:', error);
-      return this.fallbackAnalysis(symbol, price, {});
+      console.error('AI analysis failed:', error);
+      return null; // Skip trading when AI is unavailable
     }
   }
   
-  private fallbackAnalysis(symbol: string, price: any, indicators: any): any {
-    // NOTE: This fallback should NOT be used in production
-    // Real signals must come from proper technical analysis with historical data
-    // This is only for system stability when enhanced analysis fails
-    
-    console.warn(`⚠️ Using fallback analysis for ${symbol} - real technical analysis unavailable`);
-    
-    // Return neutral signal to avoid trading on random data
-    const pipSize = symbol.includes('JPY') ? 0.01 : symbol.includes('XAU') ? 0.01 : 0.0001;
-    const slDistance = 20 * pipSize; // Conservative stop loss
-    const tpDistance = slDistance * 1.5; // 1.5:1 risk-reward
-    
-    return {
-      direction: 'BUY', // Conservative default
-      confidence: 0, // Zero confidence since this is fallback
-      stopLoss: price.bid - slDistance,
-      takeProfit: price.bid + tpDistance,
-      reasoning: `FALLBACK ANALYSIS - Real technical analysis required for trading. Please ensure MT5 connection is active.`,
-      volume: 0.01, // Minimum volume for safety
-      expectedValue: 0
-    };
+  private calculatePositionSizeFromAI(
+    confidence: number,
+    aiRecommendation: 'SMALL' | 'MEDIUM' | 'LARGE',
+    symbol: string
+  ): number {
+    let baseVolume = 0.01;
+
+    // AI-driven position sizing
+    switch (aiRecommendation) {
+      case 'LARGE':
+        baseVolume = 0.10;
+        break;
+      case 'MEDIUM':
+        baseVolume = 0.05;
+        break;
+      case 'SMALL':
+      default:
+        baseVolume = 0.01;
+        break;
+    }
+
+    // Confidence scaling (only increase for very high confidence)
+    if (confidence >= 90) {
+      baseVolume *= 1.5;
+    } else if (confidence >= 85) {
+      baseVolume *= 1.2;
+    }
+
+    // Cap maximum volume for safety
+    return Math.min(baseVolume, 0.20);
+  }
+
+  private calculateExpectedValue(entry: number, tp: number, sl: number, confidence: number): number {
+    const potentialProfit = Math.abs(tp - entry);
+    const potentialLoss = Math.abs(entry - sl);
+    const winProbability = confidence / 100;
+    return (potentialProfit * winProbability) - (potentialLoss * (1 - winProbability));
   }
 
   private async saveSignal(signal: any): Promise<void> {

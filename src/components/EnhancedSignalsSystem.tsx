@@ -58,15 +58,16 @@ export const EnhancedSignalsSystem = () => {
   });
   const [selectedTab, setSelectedTab] = useState("live");
   
-  // Mock signal generation
+  // Example signal generation for UI demonstration
+  // Real signals come from the bot's AI analysis system
   useEffect(() => {
-    const generateMockSignals = () => {
+    const generateExampleSignals = () => {
       const pairs = ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CHF", "NZD/USD"];
       const strengths: Signal["strength"][] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
       const statuses: Signal["status"][] = ["ACTIVE", "TRIGGERED", "STOPPED", "EXPIRED"];
       const sources = ["Technical Analysis", "News Sentiment", "Economic Data", "Pattern Recognition"];
       
-      const mockSignals: Signal[] = [];
+      const exampleSignals: Signal[] = [];
       
       // Generate signals for the last 7 days
       for (let i = 0; i < 50; i++) {
@@ -91,7 +92,7 @@ export const EnhancedSignalsSystem = () => {
           pnlPips = -(Math.random() * 30 + 5);
         }
         
-        mockSignals.push({
+        exampleSignals.push({
           id: `signal-${i}`,
           timestamp,
           pair,
@@ -110,10 +111,10 @@ export const EnhancedSignalsSystem = () => {
         });
       }
       
-      return mockSignals.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      return exampleSignals.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
     };
 
-    setSignals(generateMockSignals());
+    setSignals(generateExampleSignals());
   }, []);
 
   // Apply filters
