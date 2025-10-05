@@ -113,7 +113,7 @@ export const EnhancedTradingBot = () => {
       `🚀 ${symbol}: Momentum accelerating - trend continuation likely`
     ];
 
-    const newLog = `${new Date().toLocaleTimeString()} - ${logMessages[Math.floor(Math.random() * logMessages.length)]}`;
+    const newLog = `${new Date().toLocaleTimeString()} - ${logMessages[Date.now() % logMessages.length]}`;
     
     setAnalysisLog(prev => [newLog, ...prev].slice(0, 50));
   };

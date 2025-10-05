@@ -365,22 +365,15 @@ class SignalProcessor {
     let currentPrice = basePrice;
     const now = new Date();
 
-    // Generate 200 data points with realistic price movements
-    for (let i = 199; i >= 0; i--) {
-      const volatility = 0.0002; // 2 pips volatility
-      const randomWalk = (Math.random() - 0.5) * volatility;
-      const trend = Math.sin(i / 50) * 0.0001; // Subtle trend component
-      
-      currentPrice += randomWalk + trend;
-      prices.unshift(currentPrice);
-      
-      // Generate realistic volume
-      const baseVolume = 1000000;
-      const volumeVariation = baseVolume * (0.5 + Math.random());
-      volumes.unshift(Math.floor(volumeVariation));
-      
-      const timestamp = new Date(now.getTime() - (i * 60000)); // 1 minute intervals
-      timestamps.unshift(timestamp);
+    // NOTE: This should use REAL historical price data from MT5
+    // For now, returning minimal data - real implementation needs MT5 API
+    console.warn('⚠️ generateHistoricalPriceData should use real MT5 historical data');
+    
+    // Return minimal data until MT5 historical API is integrated
+    for (let i = 0; i < 200; i++) {
+      prices.push(basePrice);
+      volumes.push(0);
+      timestamps.push(new Date(now.getTime() - ((199 - i) * 60000)));
     }
 
     return { symbol, prices, volumes, timestamps };

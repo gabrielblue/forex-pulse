@@ -175,10 +175,11 @@ export const WorldClassStrategies = () => {
   };
 
   const deployStrategies = async () => {
+    // ⚠️ UI DISPLAY ONLY - Real strategy deployment happens automatically in the bot
     setDeploymentStatus("DEPLOYING");
     
-    // Simulate deployment process
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Show deployment animation
+    await new Promise(resolve => setTimeout(resolve, 2000));
     
     setDeploymentStatus("ACTIVE");
     

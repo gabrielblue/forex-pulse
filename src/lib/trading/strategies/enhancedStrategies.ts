@@ -342,7 +342,8 @@ export class EnhancedTradingSystem {
   
   private calculateADX(prices: number[], period: number): number {
     // Simplified ADX calculation
-    return 20 + Math.random() * 60;
+    // NOTE: Real ADX calculation requires historical price data from MT5
+    return 50; // Neutral value until MT5 integration
   }
   
   private calculateRangeCompression(prices: number[], bollinger: any): number {
@@ -391,7 +392,10 @@ export class EnhancedTradingSystem {
   }
   
   private getTrendDirection(): 'BUY' | 'SELL' {
-    return Math.random() > 0.5 ? 'BUY' : 'SELL';
+    // This fallback should never be used in production
+    // Real trend direction comes from AI analysis
+    console.warn('⚠️ getTrendDirection fallback should not be used - use AI analysis');
+    return 'BUY'; // Conservative default
   }
 }
 

@@ -256,43 +256,8 @@ export const ChartAnalysisEngine = () => {
   };
 
   const generateKeyLevels = (basePrice: number, pipValue: number): TechnicalLevel[] => {
-    const levels: TechnicalLevel[] = [];
-    
-    // Generate support levels
-    for (let i = 1; i <= 3; i++) {
-      levels.push({
-        price: basePrice - (i * 20 * pipValue),
-        type: "SUPPORT",
-        strength: 60 + Math.random() * 30,
-        touches: Math.floor(Math.random() * 5) + 1,
-        timeframe: "1H",
-        age: Math.floor(Math.random() * 48)
-      });
-    }
-    
-    // Generate resistance levels
-    for (let i = 1; i <= 3; i++) {
-      levels.push({
-        price: basePrice + (i * 20 * pipValue),
-        type: "RESISTANCE",
-        strength: 60 + Math.random() * 30,
-        touches: Math.floor(Math.random() * 5) + 1,
-        timeframe: "1H",
-        age: Math.floor(Math.random() * 48)
-      });
-    }
-    
-    // Generate pivot points
-    levels.push({
-      price: basePrice,
-      type: "PIVOT",
-      strength: 80 + Math.random() * 15,
-      touches: Math.floor(Math.random() * 3) + 2,
-      timeframe: "1D",
-      age: Math.floor(Math.random() * 24)
-    });
-
-    return levels;
+    // ⚠️ UI DISPLAY ONLY - Real levels come from AI analysis
+    return [];
   };
 
   const generateFibonacciLevels = (basePrice: number) => {

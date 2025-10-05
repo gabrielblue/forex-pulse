@@ -648,7 +648,7 @@ export class WorldClassTradingStrategies {
   }
 
   private generateSignalId(): string {
-    return `elite_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `elite_${Date.now()}_${crypto.randomUUID().substring(0, 9)}`;
   }
 
   // Master Strategy Combiner

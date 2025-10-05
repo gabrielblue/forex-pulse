@@ -265,7 +265,7 @@ export class ProfessionalTradingStrategies {
 
   // Utility Functions
   private generateSignalId(): string {
-    return `signal_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `signal_${Date.now()}_${crypto.randomUUID().substring(0, 9)}`;
   }
 
   private getPipValue(symbol: string): number {

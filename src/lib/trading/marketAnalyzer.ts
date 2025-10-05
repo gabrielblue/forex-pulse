@@ -164,7 +164,7 @@ class MarketAnalyzer {
         type: "TREND",
         message: `Strong bullish alignment: EMA 20 > EMA 50 > EMA 200. Trend strength: ${analysis.momentum.toFixed(1)}%`,
         importance: analysis.momentum > 70 ? "HIGH" : "MEDIUM",
-        confidence: 85 + Math.random() * 10,
+        confidence: 90, // Fixed confidence, real analysis comes from AI
         priceLevel: analysis.price
       });
     }
@@ -301,7 +301,7 @@ class MarketAnalyzer {
         currentPrice,
         startPrice: currentPrice,
         percentChange: 0,
-        volume: Math.random() * 1000000,
+        volume: 0, // Real volume should come from MT5
         analysis: "Starting to track price movement..."
       };
       
