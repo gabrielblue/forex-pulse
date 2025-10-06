@@ -38,23 +38,19 @@ export const CurrencyPairsTable = () => {
         const priceData = await exnessAPI.getCurrentPrice(symbol);
         
         if (priceData) {
-          // Format symbol for display
           const formattedPair = symbol.slice(0, 3) + '/' + symbol.slice(3);
-          
-          // Calculate change (would need historical data for real calculation)
-          const spread = priceData.ask - priceData.bid;
-          const changePercent = (spread / priceData.bid) * 100;
+          const spread = priceData.spread;
           
           realPairs.push({
             pair: formattedPair,
             price: priceData.bid,
             change: spread,
-            changePercent: changePercent,
-            signal: spread > (priceData.bid * 0.0002) ? "SELL" : "BUY",
-            confidence: 75, // Would be calculated from actual analysis
-            volume: "N/A", // Requires MT5 volume data
-            high24h: priceData.bid * 1.01, // Placeholder - needs real 24h data
-            low24h: priceData.bid * 0.99   // Placeholder - needs real 24h data
+            changePercent: (spread / priceData.bid) * 100,
+            signal: "HOLD",
+            confidence: 0,
+            volume: "—",
+            high24h: priceData.bid,
+            low24h: priceData.bid
           });
         }
       }
@@ -106,7 +102,7 @@ export const CurrencyPairsTable = () => {
         <div>
           <h2 className="text-2xl font-bold text-foreground">Major Currency Pairs</h2>
           <p className="text-muted-foreground text-sm">
-            {isConnected ? 'REAL Exness prices' : 'Awaiting Exness connection'} • Last updated: {lastUpdate.toLocaleTimeString()}
+            {isConnected ? 'Real-time Exness MT5 prices' : 'Connect to Exness to view live prices'} • Last updated: {lastUpdate.toLocaleTimeString()}
           </p>
         </div>
         <div className="flex items-center space-x-2">

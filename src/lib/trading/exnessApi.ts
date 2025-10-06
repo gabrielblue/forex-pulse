@@ -349,18 +349,19 @@ class ExnessAPI {
 
   async getCurrentPrice(symbol: string): Promise<MarketPrice | null> {
     if (!this.isConnected || !this.sessionId) {
-      return null; // Silently return null when not connected
+      return null;
     }
 
     try {
-      // Get REAL price from MT5 Bridge
-      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/account_info`, {
+      // Get REAL market price from MT5 Bridge
+      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/symbol_price`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          session_id: this.sessionId
+          session_id: this.sessionId,
+          symbol: symbol
         })
       });
 
@@ -370,30 +371,19 @@ class ExnessAPI {
 
       const result = await response.json();
       
-      if (!result.success || !result.account_info) {
-        return null;
-      }
-
-      // Extract real market prices from positions or use symbol-specific endpoint
-      // For now, get from account but in production you'd have a dedicated symbol price endpoint
-      const positions = result.account_info.positions || [];
-      const position = positions.find((p: any) => p.symbol === symbol);
-      
-      if (position) {
+      if (result.success && result.data) {
         return {
           symbol,
-          bid: position.price_current,
-          ask: position.price_current + (position.price_current * 0.0001), // Approximate spread
-          spread: position.price_current * 0.0001,
+          bid: parseFloat(result.data.bid),
+          ask: parseFloat(result.data.ask),
+          spread: parseFloat(result.data.ask) - parseFloat(result.data.bid),
           timestamp: new Date()
         };
       }
 
-      // If no position exists, we still need real price - this should use MT5 symbol info endpoint
       return null;
-      
     } catch (error) {
-      return null; // Silently handle errors
+      return null;
     }
   }
 
