@@ -26,6 +26,7 @@ export const CurrencyPairsTable = () => {
     try {
       if (!exnessAPI.isConnectedToExness()) {
         setIsConnected(false);
+        setPairs([]); // Clear pairs when disconnected
         return;
       }
 
@@ -64,6 +65,8 @@ export const CurrencyPairsTable = () => {
       }
     } catch (error) {
       console.error('Failed to fetch real prices:', error);
+      setIsConnected(false);
+      setPairs([]); // Clear pairs on error
     }
   };
 

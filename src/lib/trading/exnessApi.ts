@@ -349,8 +349,7 @@ class ExnessAPI {
 
   async getCurrentPrice(symbol: string): Promise<MarketPrice | null> {
     if (!this.isConnected || !this.sessionId) {
-      console.warn('Not connected to Exness - cannot get current price');
-      return null;
+      return null; // Silently return null when not connected
     }
 
     try {
@@ -366,13 +365,13 @@ class ExnessAPI {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to get price: ${response.status}`);
+        return null;
       }
 
       const result = await response.json();
       
       if (!result.success || !result.account_info) {
-        throw new Error('Failed to retrieve account info');
+        return null;
       }
 
       // Extract real market prices from positions or use symbol-specific endpoint
@@ -391,12 +390,10 @@ class ExnessAPI {
       }
 
       // If no position exists, we still need real price - this should use MT5 symbol info endpoint
-      console.warn(`No active position for ${symbol}, returning approximate price`);
       return null;
       
     } catch (error) {
-      console.error('Failed to get REAL current price:', error);
-      return null;
+      return null; // Silently handle errors
     }
   }
 
