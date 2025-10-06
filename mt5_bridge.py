@@ -48,6 +48,14 @@ class OrderRequest(BaseModel):
 class SessionRequest(BaseModel):
     session_id: str
 
+class SymbolPriceRequest(BaseModel):
+    session_id: str
+    symbol: str
+
+class ClosePositionRequest(BaseModel):
+    session_id: str
+    ticket: int
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize MT5 connection on startup"""
@@ -212,6 +220,116 @@ async def get_account_info(request: SessionRequest):
         return {
             "success": False,
             "error": f"Failed to get account info: {str(e)}"
+        }
+
+@app.post("/mt5/symbol_price")
+async def get_symbol_price(request: SymbolPriceRequest):
+    try:
+        if request.session_id not in sessions:
+            return {
+                "success": False,
+                "error": "Invalid session ID"
+            }
+        sessions[request.session_id]["last_activity"] = datetime.now().isoformat()
+        symbol_info = mt5.symbol_info(request.symbol)
+        if symbol_info is None:
+            return {
+                "success": False,
+                "error": f"Symbol {request.symbol} not found"
+            }
+        if not symbol_info.visible:
+            mt5.symbol_select(request.symbol, True)
+        tick = mt5.symbol_info_tick(request.symbol)
+        if tick is None:
+            return {
+                "success": False,
+                "error": f"Failed to get current price for {request.symbol}"
+            }
+        return {
+            "success": True,
+            "data": {
+                "symbol": request.symbol,
+                "bid": float(tick.bid),
+                "ask": float(tick.ask),
+                "time": datetime.now().isoformat()
+            }
+        }
+    except Exception as e:
+        print(f"❌ Exception getting symbol price: {e}")
+        return {
+            "success": False,
+            "error": f"Failed to get symbol price: {str(e)}"
+        }
+
+@app.post("/mt5/close_position")
+async def close_position(request: ClosePositionRequest):
+    try:
+        if request.session_id not in sessions:
+            return {
+                "success": False,
+                "error": "Invalid session ID"
+            }
+        sessions[request.session_id]["last_activity"] = datetime.now().isoformat()
+        positions = mt5.positions_get(ticket=request.ticket)
+        if positions is None or len(positions) == 0:
+            return {
+                "success": False,
+                "error": f"Position {request.ticket} not found"
+            }
+        pos = positions[0]
+        symbol = pos.symbol
+        volume = float(pos.volume)
+        pos_type = pos.type
+        tick = mt5.symbol_info_tick(symbol)
+        if tick is None:
+            return {
+                "success": False,
+                "error": f"Failed to get current price for {symbol}"
+            }
+        if pos_type == mt5.POSITION_TYPE_BUY:
+            order_type = mt5.ORDER_TYPE_SELL
+            price = tick.bid
+        else:
+            order_type = mt5.ORDER_TYPE_BUY
+            price = tick.ask
+        request_dict = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": symbol,
+            "volume": volume,
+            "type": order_type,
+            "position": pos.ticket,
+            "price": price,
+            "deviation": 20,
+            "magic": 12345,
+            "comment": "Close by API",
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+        result = mt5.order_send(request_dict)
+        if result is None:
+            return {
+                "success": False,
+                "error": "Order send failed"
+            }
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            return {
+                "success": False,
+                "error": f"Close failed: {result.comment}"
+            }
+        return {
+            "success": True,
+            "data": {
+                "ticket": int(pos.ticket),
+                "closed": True,
+                "price": float(result.price),
+                "time": datetime.now().isoformat()
+            }
+        }
+    except Exception as e:
+        print(f"❌ Exception closing position: {e}")
+        return {
+            "success": False,
+            "error": f"Failed to close position: {str(e)}"
         }
 
 @app.post("/mt5/place_order")
