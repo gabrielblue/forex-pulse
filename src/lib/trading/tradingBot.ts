@@ -110,6 +110,10 @@ class TradingBot {
     this.status.autoTradingEnabled = enabled;
     this.status.lastUpdate = new Date();
     
+    // Sync auto-trading state with order manager
+    const { orderManager } = await import('./orderManager');
+    orderManager.setAutoTrading(enabled);
+    
     // Enable/disable auto-execution in signal manager
     await botSignalManager.enableAutoExecution(enabled);
     
@@ -159,9 +163,22 @@ class TradingBot {
     console.log('✅ All positions closed');
   }
 
+  async connectToExness(credentials: any): Promise<boolean> {
+    try {
+      const connected = await exnessAPI.connect(credentials);
+      this.updateConnectionStatus(connected);
+      return connected;
+    } catch (error) {
+      console.error('Failed to connect to Exness:', error);
+      this.updateConnectionStatus(false);
+      throw error;
+    }
+  }
+
   updateConnectionStatus(connected: boolean): void {
     this.status.isConnected = connected;
     this.status.lastUpdate = new Date();
+    console.log(`🔌 Bot connection status updated: ${connected ? 'CONNECTED' : 'DISCONNECTED'}`);
   }
 }
 
