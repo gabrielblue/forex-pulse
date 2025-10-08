@@ -58,63 +58,10 @@ export const EnhancedSignalsSystem = () => {
   });
   const [selectedTab, setSelectedTab] = useState("live");
   
-  // Example signal generation for UI demonstration
-  // Real signals come from the bot's AI analysis system
+  // Real signals will be loaded from database
   useEffect(() => {
-    const generateExampleSignals = () => {
-      const pairs = ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CHF", "NZD/USD"];
-      const strengths: Signal["strength"][] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
-      const statuses: Signal["status"][] = ["ACTIVE", "TRIGGERED", "STOPPED", "EXPIRED"];
-      const sources = ["Technical Analysis", "News Sentiment", "Economic Data", "Pattern Recognition"];
-      
-      const exampleSignals: Signal[] = [];
-      
-      // Generate signals for the last 7 days
-      for (let i = 0; i < 50; i++) {
-        const timestamp = new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000);
-        const pair = pairs[Math.floor(Math.random() * pairs.length)];
-        const type = Math.random() > 0.5 ? "BUY" : "SELL";
-        const strength = strengths[Math.floor(Math.random() * strengths.length)];
-        const entryPrice = 1.0000 + Math.random() * 0.5;
-        const currentPrice = entryPrice + (Math.random() - 0.5) * 0.02;
-        const targetPrice = type === "BUY" ? entryPrice + 0.01 : entryPrice - 0.01;
-        const stopLoss = type === "BUY" ? entryPrice - 0.005 : entryPrice + 0.005;
-        
-        let status = statuses[Math.floor(Math.random() * statuses.length)];
-        let outcome: Signal["outcome"] = "PENDING";
-        let pnlPips: number | undefined;
-        
-        if (status === "TRIGGERED") {
-          outcome = "WIN";
-          pnlPips = Math.random() * 50 + 10;
-        } else if (status === "STOPPED") {
-          outcome = "LOSS";
-          pnlPips = -(Math.random() * 30 + 5);
-        }
-        
-        exampleSignals.push({
-          id: `signal-${i}`,
-          timestamp,
-          pair,
-          type,
-          strength,
-          entryPrice,
-          currentPrice,
-          targetPrice,
-          stopLoss,
-          confidence: Math.floor(Math.random() * 30) + 70,
-          source: sources[Math.floor(Math.random() * sources.length)],
-          reasoning: `Strong ${type.toLowerCase()} signal detected based on multiple confluence factors including trend analysis and momentum indicators.`,
-          status,
-          pnlPips,
-          outcome
-        });
-      }
-      
-      return exampleSignals.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-    };
-
-    setSignals(generateExampleSignals());
+    // For now, show empty state - signals will appear when bot generates them
+    setSignals([]);
   }, []);
 
   // Apply filters

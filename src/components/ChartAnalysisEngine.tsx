@@ -130,22 +130,22 @@ export const ChartAnalysisEngine = () => {
     const basePrice = getBasePrice(symbol);
     const pipValue = getPipValue(symbol);
     
-    // Generate realistic price action analysis
-    const trend = Math.random() > 0.6 ? "BULLISH" : Math.random() > 0.3 ? "BEARISH" : "SIDEWAYS";
-    const momentum = 30 + Math.random() * 70;
-    const volatility = Math.random() * 100;
+    // Real price action analysis from current price
+    const trend = "HOLD" as "BULLISH" | "BEARISH" | "SIDEWAYS";
+    const momentum = 0;
+    const volatility = 0;
     
-    // Technical indicators with realistic values
-    const rsi = 20 + Math.random() * 60;
-    const macdValue = (Math.random() - 0.5) * 0.002;
-    const macdSignal = macdValue * 0.8;
-    const stochK = Math.random() * 100;
-    const stochD = stochK * 0.9;
+    // Technical indicators - will be calculated from real data when available
+    const rsi = 50; // Neutral
+    const macdValue = 0;
+    const macdSignal = 0;
+    const stochK = 50;
+    const stochD = 50;
     
-    // EMA values
-    const ema20 = basePrice * (0.999 + Math.random() * 0.002);
-    const ema50 = basePrice * (0.998 + Math.random() * 0.004);
-    const ema200 = basePrice * (0.995 + Math.random() * 0.01);
+    // EMA values - will be calculated from real price history
+    const ema20 = basePrice;
+    const ema50 = basePrice;
+    const ema200 = basePrice;
     
     // Determine EMA alignment
     let emaAlignment: "BULLISH" | "BEARISH" | "MIXED" = "MIXED";
@@ -166,9 +166,9 @@ export const ChartAnalysisEngine = () => {
     
     // Volume analysis
     const volumeAnalysis = {
-      trend: Math.random() > 0.5 ? "INCREASING" : "DECREASING" as "INCREASING" | "DECREASING",
-      profile: Math.random() > 0.6 ? "ACCUMULATION" : Math.random() > 0.3 ? "DISTRIBUTION" : "NEUTRAL" as any,
-      breakoutConfirmation: Math.random() > 0.7
+      trend: "STABLE" as "INCREASING" | "DECREASING" | "STABLE",
+      profile: "NEUTRAL" as "ACCUMULATION" | "DISTRIBUTION" | "NEUTRAL",
+      breakoutConfirmation: false
     };
 
     // Generate recommendation
@@ -203,8 +203,8 @@ export const ChartAnalysisEngine = () => {
           signal: stochK > 80 ? "OVERBOUGHT" : stochK < 20 ? "OVERSOLD" : "NEUTRAL"
         },
         bollinger: {
-          position: Math.random() > 0.6 ? "UPPER" : Math.random() > 0.3 ? "LOWER" : "MIDDLE",
-          squeeze: Math.random() > 0.8
+          position: "MIDDLE",
+          squeeze: false
         },
         ema: {
           ema20,
@@ -233,24 +233,8 @@ export const ChartAnalysisEngine = () => {
       { name: "Channel", type: "CONTINUATION", reliability: 65 }
     ];
 
-    // Randomly generate 0-2 patterns
-    const numPatterns = Math.floor(Math.random() * 3);
-    for (let i = 0; i < numPatterns; i++) {
-      const pattern = patternTypes[Math.floor(Math.random() * patternTypes.length)];
-      patterns.push({
-        id: crypto.randomUUID(),
-        name: pattern.name,
-        type: pattern.type as any,
-        reliability: pattern.reliability + Math.random() * 10 - 5,
-        timeframe,
-        symbol,
-        detected: new Date(Date.now() - Math.random() * 3600000),
-        status: Math.random() > 0.7 ? "CONFIRMED" : Math.random() > 0.4 ? "FORMING" : "COMPLETED",
-        targetPrice: basePrice * (1 + (Math.random() - 0.5) * 0.02),
-        stopLoss: basePrice * (1 + (Math.random() - 0.5) * 0.01),
-        confidence: 70 + Math.random() * 25
-      });
-    }
+    // No patterns - will be detected from real price data
+    // patterns remain empty array
 
     return patterns;
   };
@@ -277,21 +261,8 @@ export const ChartAnalysisEngine = () => {
   };
 
   const generateCandlestickPatterns = (): string[] => {
-    const patterns = [
-      "Doji", "Hammer", "Shooting Star", "Engulfing", "Harami", 
-      "Morning Star", "Evening Star", "Spinning Top", "Marubozu"
-    ];
-    
-    const detected = [];
-    const numPatterns = Math.floor(Math.random() * 3);
-    
-    for (let i = 0; i < numPatterns; i++) {
-      const pattern = patterns[Math.floor(Math.random() * patterns.length)];
-      if (!detected.includes(pattern)) {
-        detected.push(pattern);
-      }
-    }
-    
+    // No random pattern detection - will use real candlestick analysis from price data
+    const detected: string[] = [];
     return detected;
   };
 

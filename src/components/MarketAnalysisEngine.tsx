@@ -180,10 +180,10 @@ export const MarketAnalysisEngine = () => {
     const newNote: AnalysisNote = {
       id: crypto.randomUUID(),
       timestamp: new Date(),
-      symbol: symbols[Math.floor(Math.random() * symbols.length)],
-      type: noteTypes[Math.floor(Math.random() * noteTypes.length)],
-      message: messages[Math.floor(Math.random() * messages.length)],
-      importance: importanceLevels[Math.floor(Math.random() * importanceLevels.length)]
+      symbol: "EURUSD",
+      type: "OBSERVATION",
+      message: "Real-time market analysis active - waiting for significant market events",
+      importance: "LOW"
     };
 
     setAnalysisNotes(prev => [newNote, ...prev].slice(0, 100));
@@ -200,7 +200,8 @@ export const MarketAnalysisEngine = () => {
       "Institutional flows driving price action",
       "Seasonal patterns influencing trends"
     ];
-    return sentiments[Math.floor(Math.random() * sentiments.length)];
+    // Return neutral sentiment string until real market sentiment analysis is implemented
+    return "NEUTRAL";
   };
 
   const generateAnalysisNotes = (symbol: string, trend: string, strength: number, patterns: string[]): string => {

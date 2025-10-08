@@ -129,11 +129,19 @@ export const ExnessIntegration = () => {
 
     try {
       console.log('Connecting to Exness MT5 account...');
+      
+      // Connect via useTradingBot hook which properly syncs with tradingBot
       const connected = await connectToExness(credentials);
       
       if (connected) {
         setConnectionStatus("connected");
-        toast.success(`Successfully connected to Exness ${credentials.isDemo ? 'DEMO' : 'LIVE'} account!`);
+        
+        // Notify the tradingBot to update its connection status
+        const { tradingBot } = await import('@/lib/trading/tradingBot');
+        tradingBot.updateConnectionStatus(true);
+        
+        toast.success(`✅ Successfully connected to Exness ${credentials.isDemo ? 'DEMO' : 'LIVE'} account!`);
+        console.log('✅ Exness connected - tradingBot status updated');
         await loadAccountInfo();
       } else {
         setConnectionStatus("error");
@@ -148,13 +156,19 @@ export const ExnessIntegration = () => {
     }
   };
 
-  const handleDisconnect = () => {
+  const handleDisconnect = async () => {
     exnessAPI.disconnect();
+    
+    // Notify the tradingBot to update its connection status
+    const { tradingBot } = await import('@/lib/trading/tradingBot');
+    tradingBot.updateConnectionStatus(false);
+    
     setConnectionStatus("disconnected");
     setAccountInfo(null);
     setTestResult(null);
     setError(null);
     toast.success("Disconnected from Exness");
+    console.log('🔌 Disconnected - tradingBot status updated');
   };
 
   const handleServerChange = (serverName: string) => {

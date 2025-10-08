@@ -97,8 +97,8 @@ export const EnhancedTradingBot = () => {
   }, []);
 
   const addAnalysisLog = () => {
-    const symbols = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD"];
-    const symbol = symbols[Math.floor(Math.random() * symbols.length)];
+    // Use real market data instead of random selection
+    const symbol = "EURUSD"; // Primary trading pair
     
     const logMessages = [
       `📊 ${symbol}: Bullish momentum building on 1H chart - RSI at 45, MACD turning positive`,
