@@ -68,18 +68,19 @@ class TradingBot {
   }
 
   async startBot(): Promise<void> {
-    if (!this.status.isConnected) {
-      throw new Error('Please connect to Exness first');
+    // Check actual Exness API connection status first
+    const exnessConnected = exnessAPI.isConnectedToExness();
+
+    if (!exnessConnected) {
+      throw new Error('Connect to Exness first');
     }
-    
-    // Verify Exness connection
-    if (!exnessAPI.isConnectedToExness()) {
-      throw new Error('Exness API not connected. Please ensure MT5 Bridge is running.');
-    }
+
+    // Update internal status to match reality
+    this.status.isConnected = exnessConnected;
 
     this.status.isActive = true;
     this.status.lastUpdate = new Date();
-    
+
     // Start signal generation
     console.log('✅ Trading bot started - activating signal generation...');
     botSignalManager.setConfiguration({ enabled: true });
