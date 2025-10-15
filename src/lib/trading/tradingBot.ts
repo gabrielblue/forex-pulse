@@ -71,7 +71,14 @@ class TradingBot {
     // Check actual Exness API connection status first
     const exnessConnected = exnessAPI.isConnectedToExness();
 
+    console.log('🔍 Starting bot - Exness connection status:', {
+      isConnected: exnessConnected,
+      internalStatus: this.status.isConnected,
+      connectionInfo: exnessAPI.getConnectionInfo()
+    });
+
     if (!exnessConnected) {
+      console.error('❌ Cannot start bot: Exness not connected');
       throw new Error('Connect to Exness first');
     }
 
@@ -180,6 +187,12 @@ class TradingBot {
     this.status.isConnected = connected;
     this.status.lastUpdate = new Date();
     console.log(`🔌 Bot connection status updated: ${connected ? 'CONNECTED' : 'DISCONNECTED'}`);
+    console.log('📊 Current bot status:', {
+      isConnected: this.status.isConnected,
+      isActive: this.status.isActive,
+      autoTradingEnabled: this.status.autoTradingEnabled,
+      exnessAPIConnected: exnessAPI.isConnectedToExness()
+    });
   }
 }
 

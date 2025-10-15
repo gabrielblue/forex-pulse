@@ -128,31 +128,39 @@ export const ExnessIntegration = () => {
     setError(null);
 
     try {
-      console.log('Connecting to Exness MT5 account...');
-      
+      console.log('🔗 ExnessIntegration: Connecting to Exness MT5 account...');
+
       // Connect via useTradingBot hook which properly syncs with tradingBot
       const connected = await connectToExness(credentials);
-      
+
+      console.log('📊 ExnessIntegration: Connection result:', connected);
+
       if (connected) {
         setConnectionStatus("connected");
-        
-        // Notify the tradingBot to update its connection status
+
+        // The tradingBot.connectToExness already updates the connection status
+        // But let's verify it one more time
         const { tradingBot } = await import('@/lib/trading/tradingBot');
-        tradingBot.updateConnectionStatus(true);
-        
+        const botStatus = tradingBot.getStatus();
+
+        console.log('✅ ExnessIntegration: Connection successful! Bot status:', {
+          isConnected: botStatus.isConnected,
+          exnessAPIConnected: exnessAPI.isConnectedToExness()
+        });
+
         toast.success(`✅ Successfully connected to Exness ${credentials.isDemo ? 'DEMO' : 'LIVE'} account!`);
-        console.log('✅ Exness connected - tradingBot status updated');
         await loadAccountInfo();
       } else {
         setConnectionStatus("error");
         toast.error("Failed to connect to Exness account");
+        console.error('❌ ExnessIntegration: Connection failed');
       }
     } catch (error) {
       setConnectionStatus("error");
       const errorMessage = error instanceof Error ? error.message : 'Connection failed';
       setError(errorMessage);
       toast.error(errorMessage);
-      console.error('Connection error:', error);
+      console.error('❌ ExnessIntegration: Connection error:', error);
     }
   };
 

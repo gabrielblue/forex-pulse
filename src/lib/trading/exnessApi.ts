@@ -69,7 +69,7 @@ class ExnessAPI {
 
   async connect(credentials: ExnessCredentials): Promise<boolean> {
     try {
-      console.log('🔗 Connecting to real Exness MT5 account...', {
+      console.log('🔗 ExnessAPI: Connecting to real Exness MT5 account...', {
         accountNumber: credentials.accountNumber.substring(0, 4) + '****',
         server: credentials.server,
         isDemo: credentials.isDemo
@@ -78,8 +78,11 @@ class ExnessAPI {
       // First, test if MT5 Bridge is available
       const bridgeAvailable = await this.checkMT5BridgeAvailability();
       if (!bridgeAvailable) {
+        console.error('❌ ExnessAPI: MT5 Bridge not available');
         throw new Error('MT5 Bridge service is not running. Please start the Python bridge service first.');
       }
+
+      console.log('✅ ExnessAPI: MT5 Bridge is available, attempting connection...');
 
       // Connect to MT5 through the bridge
       const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/connect`, {
@@ -94,18 +97,21 @@ class ExnessAPI {
         })
       });
 
+      console.log('📡 ExnessAPI: MT5 Bridge response status:', response.status);
+
       if (!response.ok) {
         throw new Error(`MT5 Bridge connection failed: ${response.status} ${response.statusText}`);
       }
 
       const result = await response.json();
-      
+      console.log('📊 ExnessAPI: MT5 Bridge response:', { success: result.success, hasAccountInfo: !!result.account_info });
+
       if (result.success && result.account_info) {
         this.sessionId = result.session_id;
         this.accountInfo = this.mapMT5AccountInfo(result.account_info);
         this.isConnected = true;
         this.lastUpdate = new Date();
-        
+
         this.connectionInfo = {
           connectionStatus: 'Connected',
           webSocketStatus: 'Connected',
@@ -115,21 +121,31 @@ class ExnessAPI {
           server: this.accountInfo.server
         };
 
-        console.log('✅ Successfully connected to real Exness account:', {
+        console.log('✅ ExnessAPI: Successfully connected to real Exness account:', {
           login: this.accountInfo.accountNumber,
           balance: this.accountInfo.balance,
           equity: this.accountInfo.equity,
           currency: this.accountInfo.currency,
           server: this.accountInfo.server,
-          isDemo: this.accountInfo.isDemo
+          isDemo: this.accountInfo.isDemo,
+          sessionId: this.sessionId ? 'SET' : 'NOT SET',
+          isConnected: this.isConnected
+        });
+
+        console.log('🔍 ExnessAPI: Current connection state:', {
+          isConnected: this.isConnected,
+          hasSessionId: !!this.sessionId,
+          hasAccountInfo: !!this.accountInfo,
+          isConnectedToExness: this.isConnectedToExness()
         });
 
         return true;
       } else {
+        console.error('❌ ExnessAPI: Connection failed -', result.error || 'Unknown error');
         throw new Error(result.error || 'Connection failed');
       }
     } catch (error) {
-      console.error('❌ Failed to connect to Exness:', error);
+      console.error('❌ ExnessAPI: Failed to connect to Exness:', error);
       this.isConnected = false;
       this.sessionId = null;
       this.accountInfo = null;

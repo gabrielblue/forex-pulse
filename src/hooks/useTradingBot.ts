@@ -74,20 +74,33 @@ export const useTradingBot = () => {
     try {
       setIsLoading(true);
       setError(null);
-      
+
+      console.log('🔗 useTradingBot: Connecting to Exness...');
+
       // Connect through tradingBot which updates connection status
       const connected = await tradingBot.connectToExness(credentials);
-      
-      // Update UI status
+
+      console.log('📊 Connection result:', connected);
+
+      // Force update UI status to reflect the connection
       updateStatus();
-      
+
+      // Verify the connection status is synced
+      const currentStatus = tradingBot.getStatus();
+      console.log('🔍 Post-connection status check:', {
+        connected,
+        statusIsConnected: currentStatus.isConnected,
+        exnessAPIConnected: exnessAPI.isConnectedToExness()
+      });
+
       if (!connected) {
         setError('Failed to connect to Exness. Please check your credentials.');
       }
-      
+
       return connected;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Connection failed';
+      console.error('❌ useTradingBot: Connection failed:', errorMessage);
       setError(errorMessage);
       return false;
     } finally {
@@ -99,11 +112,22 @@ export const useTradingBot = () => {
     try {
       setIsLoading(true);
       setError(null);
-      
+
+      console.log('🚀 useTradingBot: Starting bot...');
+
+      // Verify connection before starting
+      if (!exnessAPI.isConnectedToExness()) {
+        console.error('❌ Cannot start bot: Not connected to Exness API');
+        throw new Error('Connect to Exness first');
+      }
+
       await tradingBot.startBot();
       updateStatus();
+
+      console.log('✅ useTradingBot: Bot started successfully');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to start bot';
+      console.error('❌ useTradingBot: Failed to start bot:', errorMessage);
       setError(errorMessage);
       throw err;
     } finally {
