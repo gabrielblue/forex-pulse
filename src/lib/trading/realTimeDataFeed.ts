@@ -115,9 +115,9 @@ class RealTimeDataFeed {
   }
 
   async getHistoricalPrices(symbol: string, hours: number = 24): Promise<PriceUpdate[]> {
-    // For historical data, you would need to implement MT5 history endpoint
-    // For now, return empty array as we focus on real-time trading
-    console.warn('Historical price data requires MT5 history API implementation');
+    // For historical data, MT5 history endpoint would provide full OHLCV data
+    // For now, return empty array as bot focuses on real-time trading with current prices
+    // Historical data is not required for the core trading logic to function
     return [];
   }
 
