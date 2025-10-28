@@ -458,32 +458,60 @@ class ExnessAPI {
 
   async verifyTradingCapabilities(): Promise<{canTrade: boolean, issues: string[]}> {
     const issues: string[] = [];
-    
-    if (!this.isConnected) {
-      issues.push('Not connected to Exness');
-    }
-    
-    if (!this.accountInfo) {
-      issues.push('No account information available');
-    } else {
+
+    try {
+      if (!this.isConnected) {
+        issues.push('Not connected to Exness');
+        return { canTrade: false, issues };
+      }
+
+      if (!this.sessionId) {
+        issues.push('No active session');
+        return { canTrade: false, issues };
+      }
+
+      // Refresh account info to get latest state
+      try {
+        const latestAccountInfo = await this.getAccountInfo();
+        if (!latestAccountInfo) {
+          issues.push('Failed to retrieve account information');
+          return { canTrade: false, issues };
+        }
+      } catch (error) {
+        console.error('Failed to refresh account info during verification:', error);
+        issues.push('Cannot verify account status');
+        return { canTrade: false, issues };
+      }
+
+      if (!this.accountInfo) {
+        issues.push('No account information available');
+        return { canTrade: false, issues };
+      }
+
       if (!this.accountInfo.tradeAllowed) {
         issues.push('Trading not allowed on this account');
       }
-      
+
       if (this.accountInfo.balance < 100) {
-        issues.push('Account balance too low');
+        issues.push('Account balance too low (minimum $100 required)');
       }
-      
+
       const minMarginLevel = this.accountInfo.isDemo ? 50 : 200;
       if (this.accountInfo.marginLevel > 0 && this.accountInfo.marginLevel < minMarginLevel) {
         issues.push(`Margin level too low (${this.accountInfo.marginLevel.toFixed(1)}% < ${minMarginLevel}%)`);
       }
-    }
 
-    return {
-      canTrade: issues.length === 0,
-      issues
-    };
+      return {
+        canTrade: issues.length === 0,
+        issues
+      };
+    } catch (error) {
+      console.error('Error verifying trading capabilities:', error);
+      return {
+        canTrade: false,
+        issues: ['Verification error: ' + (error instanceof Error ? error.message : 'Unknown error')]
+      };
+    }
   }
 
   async getServerTime(): Promise<Date | null> {
@@ -519,6 +547,55 @@ class ExnessAPI {
     this.accountInfo = null;
     this.connectionInfo = null;
     console.log('🔌 Disconnected from Exness');
+  }
+
+  /**
+   * Health check to verify connection is still alive
+   * Returns true if connection is healthy, false otherwise
+   */
+  async healthCheck(): Promise<boolean> {
+    try {
+      if (!this.isConnected || !this.sessionId) {
+        console.warn('⚠️ Health check failed: Not connected');
+        return false;
+      }
+
+      // Try to get account info as a health check
+      const accountInfo = await this.getAccountInfo();
+      if (!accountInfo) {
+        console.warn('⚠️ Health check failed: Cannot retrieve account info');
+        this.isConnected = false;
+        return false;
+      }
+
+      console.log('✅ Health check passed');
+      return true;
+    } catch (error) {
+      console.error('❌ Health check failed:', error);
+      this.isConnected = false;
+      return false;
+    }
+  }
+
+  /**
+   * Get detailed connection diagnostics
+   */
+  getConnectionDiagnostics(): {
+    isConnected: boolean;
+    hasSessionId: boolean;
+    hasAccountInfo: boolean;
+    lastUpdate: Date;
+    accountType: string | null;
+    bridgeUrl: string;
+  } {
+    return {
+      isConnected: this.isConnected,
+      hasSessionId: !!this.sessionId,
+      hasAccountInfo: !!this.accountInfo,
+      lastUpdate: this.lastUpdate,
+      accountType: this.getAccountType(),
+      bridgeUrl: this.MT5_BRIDGE_URL
+    };
   }
 }
 
