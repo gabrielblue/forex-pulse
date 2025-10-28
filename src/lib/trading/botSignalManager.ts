@@ -147,10 +147,15 @@ class BotSignalManager {
 
       // Perform technical analysis
       const analysis = await this.performTechnicalAnalysis(symbol, marketPrice);
-      
+
       // Validate analysis result
-      if (!analysis || typeof analysis.confidence !== 'number') {
-        console.warn(`Invalid analysis result for ${symbol}:`, analysis);
+      if (!analysis) {
+        // Analysis returned null (low confidence or error) - skip signal generation
+        return;
+      }
+
+      if (typeof analysis.confidence !== 'number' || !analysis.direction) {
+        console.warn(`Invalid analysis result structure for ${symbol}:`, analysis);
         return;
       }
       
@@ -176,23 +181,43 @@ class BotSignalManager {
 
   private async performTechnicalAnalysis(symbol: string, price: any): Promise<any> {
     try {
-      // Get comprehensive market data
-      const marketData = {
-        symbol,
-        prices: this.generateRecentPrices(price.bid, 100),
-        volumes: this.generateRecentVolumes(100),
-        spread: price.spread
-      };
-      
+      // Get REAL historical data from MT5
+      const historicalData = await exnessAPI.getHistoricalData(symbol, '15m', 100);
+
+      let prices: number[];
+      let volumes: number[];
+      let high: number | undefined;
+      let low: number | undefined;
+
+      if (historicalData && historicalData.bars.length > 0) {
+        // Use REAL data from MT5
+        prices = historicalData.bars.map(bar => bar.close);
+        volumes = historicalData.bars.map(bar => bar.tick_volume);
+
+        // Get high and low from recent bars
+        const recentBars = historicalData.bars.slice(-20);
+        high = Math.max(...recentBars.map(bar => bar.high));
+        low = Math.min(...recentBars.map(bar => bar.low));
+
+        console.log(`✅ Using REAL MT5 historical data for ${symbol}: ${prices.length} price bars, ${volumes.length} volume bars`);
+      } else {
+        // Fallback to simple array with current price only
+        console.warn(`⚠️ Could not get historical data for ${symbol}, using current price only`);
+        prices = [price.bid];
+        volumes = [0];
+        high = price.bid;
+        low = price.bid;
+      }
+
       // Calculate technical indicators
-      const indicators = this.calculateTechnicalIndicators(marketData.prices);
-      
+      const indicators = this.calculateTechnicalIndicators(prices);
+
       // Get session information
       const sessionInfo = this.getCurrentSessions();
-      
+
       // Get recent news events
       const newsEvents = await this.getRecentNews(symbol);
-      
+
       // Use AI-powered analysis for intelligent trading decisions
       const aiAnalysis = await aiAnalyzer.analyzeMarket({
         symbol,
@@ -201,7 +226,9 @@ class BotSignalManager {
           currentPrice: price.bid,
           bid: price.bid,
           ask: price.ask,
-          spread: price.spread
+          spread: price.spread,
+          high,
+          low
         },
         technicalIndicators: indicators
       });
@@ -225,7 +252,7 @@ class BotSignalManager {
           aiAnalysis.confidence
         )
       };
-      
+
     } catch (error) {
       console.error('AI analysis failed:', error);
       return null; // Skip trading when AI is unavailable
@@ -503,24 +530,8 @@ class BotSignalManager {
   }
   
   // Helper methods for enhanced analysis
-  private generateRecentPrices(currentPrice: number, count: number): number[] {
-    // NOTE: This should fetch REAL historical prices from MT5
-    // For now, we cannot generate realistic price movements without real data
-    // TODO: Replace with MT5 historical price API call
-    console.warn('⚠️ generateRecentPrices should use real MT5 historical data');
-    
-    // Return minimal array with just current price until MT5 integration
-    return [currentPrice];
-  }
-  
-  private generateRecentVolumes(count: number): number[] {
-    // NOTE: This should fetch REAL volume data from MT5
-    // TODO: Replace with MT5 volume data API call
-    console.warn('⚠️ generateRecentVolumes should use real MT5 volume data');
-    
-    // Return minimal array until MT5 integration
-    return [0];
-  }
+  // NOTE: generateRecentPrices and generateRecentVolumes are now replaced with real MT5 data
+  // fetched via exnessAPI.getHistoricalData() in performTechnicalAnalysis()
   
   private calculateTechnicalIndicators(prices: number[]): any {
     if (prices.length < 20) return {};
