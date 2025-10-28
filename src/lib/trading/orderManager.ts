@@ -27,28 +27,28 @@ export interface RiskParameters {
 class OrderManager {
   private isAutoTradingEnabled = false;
   private riskParams: RiskParameters = {
-    maxRiskPerTrade: 15.0, // Ultra aggressive: 15% for maximum day trading
-    maxDailyLoss: 40.0, // Ultra aggressive: 40% for day trading
-    maxDrawdown: 15.0,
-    maxPositionSize: 100.0, // Ultra aggressive: 100 lots for larger positions
-    maxConcurrentPositions: 100, // Ultra aggressive: 100 positions for maximum opportunities
+    maxRiskPerTrade: 2.0, // IMPROVED: 2% per trade for sustainable profitability and account protection
+    maxDailyLoss: 6.0, // IMPROVED: 6% daily loss limit to protect account
+    maxDrawdown: 10.0, // IMPROVED: 10% maximum drawdown
+    maxPositionSize: 5.0, // IMPROVED: 5 lots maximum for safety
+    maxConcurrentPositions: 5, // IMPROVED: 5 positions max to manage risk properly
     useStopLoss: true,
     useTakeProfit: true,
-    minAccountBalance: 25, // Reduced: $25 minimum for accessibility
-    minMarginLevel: 5, // Ultra aggressive: 5% for maximum leverage usage
-    maxLeverage: 500, // Max 1:500 leverage
+    minAccountBalance: 100, // IMPROVED: $100 minimum for proper trading capital
+    minMarginLevel: 100, // IMPROVED: 100% margin level minimum for safety
+    maxLeverage: 100, // IMPROVED: Max 1:100 leverage (was 1:500 - too risky)
     emergencyStopEnabled: true
   };
 
   private lastOrderTime: number = 0;
-  private minOrderInterval: number = 100; // Ultra aggressive: 0.1 seconds between orders
+  private minOrderInterval: number = 30000; // IMPROVED: 30 seconds between orders to prevent over-trading
   private dailyTradeCount: number = 0;
-  private maxDailyTrades: number = 5000; // Ultra aggressive: 5000 trades per day
+  private maxDailyTrades: number = 50; // IMPROVED: 50 quality trades per day (was 5000)
 
   async initialize(): Promise<void> {
     await this.loadRiskParameters();
     await this.resetDailyCounters();
-    console.log('🚀 OrderManager initialized with ENHANCED ULTRA AGGRESSIVE parameters for maximum day trading opportunities');
+    console.log('🚀 OrderManager initialized with IMPROVED SAFE PARAMETERS for sustainable profitability');
     console.log('⚡ Risk settings:', {
       maxRiskPerTrade: this.riskParams.maxRiskPerTrade + '%',
       maxDailyLoss: this.riskParams.maxDailyLoss + '%',
@@ -70,25 +70,25 @@ class OrderManager {
         .single();
 
       if (botSettings) {
-        // Override with user settings but keep conservative limits for real trading
+        // IMPROVED: Override with user settings but enforce SAFE limits for profitability
         this.riskParams = {
-          maxRiskPerTrade: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '10'), 15.0), // Increased to max 15%
-          maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '30'), 40.0), // Increased to max 40%
-          maxDrawdown: 15.0,
-          maxPositionSize: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '10') * 10, 100.0), // Increased to max 100 lots
-          maxConcurrentPositions: Math.min(parseInt(botSettings.max_daily_trades?.toString() || '50'), 100), // Increased to max 100 positions
+          maxRiskPerTrade: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '2'), 3.0), // IMPROVED: Max 3% risk
+          maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '6'), 10.0), // IMPROVED: Max 10% daily loss
+          maxDrawdown: 10.0,
+          maxPositionSize: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '2') * 2, 5.0), // IMPROVED: Max 5 lots
+          maxConcurrentPositions: Math.min(parseInt(botSettings.max_daily_trades?.toString() || '5'), 10), // IMPROVED: Max 10 positions
           useStopLoss: true, // Always required for real trading
           useTakeProfit: true,
-          minAccountBalance: 10, // Ultra reduced minimum balance
-          minMarginLevel: 5, // Ultra reduced margin level requirement
-          maxLeverage: 500,
+          minAccountBalance: 100, // IMPROVED: $100 minimum for proper capital management
+          minMarginLevel: 100, // IMPROVED: 100% margin level for safety
+          maxLeverage: 100,
           emergencyStopEnabled: true
         };
-        
-        this.maxDailyTrades = Math.min(parseInt(botSettings.max_daily_trades?.toString() || '1000'), 5000); // Increased daily trade limit
+
+        this.maxDailyTrades = Math.min(parseInt(botSettings.max_daily_trades?.toString() || '50'), 100); // IMPROVED: Max 100 quality trades
       }
-      
-      console.log('Ultra enhanced risk parameters loaded for aggressive day trading:', this.riskParams);
+
+      console.log('IMPROVED: Safe risk parameters loaded for sustainable profitability:', this.riskParams);
     } catch (error) {
       console.error('Failed to load risk parameters:', error);
     }
@@ -381,17 +381,17 @@ class OrderManager {
         throw new Error('Unable to get current market price for position sizing');
       }
 
-      // Calculate stop loss distance in pips - tighter for day trading
-      let stopLossDistance = 8; // Ultra tight: 8 pips for day trading
+      // Calculate stop loss distance in pips - IMPROVED for profitability
+      let stopLossDistance = 20; // IMPROVED: 20 pips default (was 8)
       if (orderRequest.stopLoss) {
         const pipValue = this.getPipValue(orderRequest.symbol);
         const priceToUse = orderRequest.type === 'BUY' ? currentPrice.ask : currentPrice.bid;
         stopLossDistance = Math.abs(priceToUse - orderRequest.stopLoss) / pipValue;
       }
 
-      // Ensure minimum stop loss distance for safety - tighter for day trading
-      stopLossDistance = Math.max(stopLossDistance, 3); // Ultra aggressive: Minimum 3 pips
-      stopLossDistance = Math.min(stopLossDistance, 25); // Maximum 25 pips for day trading
+      // Ensure realistic stop loss distance for profitability
+      stopLossDistance = Math.max(stopLossDistance, 15); // IMPROVED: Minimum 15 pips (was 3)
+      stopLossDistance = Math.min(stopLossDistance, 50); // IMPROVED: Maximum 50 pips (was 25)
 
       // Calculate position size based on risk management
       const pipValue = this.getPipValue(orderRequest.symbol);
@@ -400,17 +400,17 @@ class OrderManager {
       // Position size = Risk Amount / (Stop Loss Distance * Dollar Per Pip)
       let positionSize = riskAmount / (stopLossDistance * dollarPerPip);
 
-      // Ultra aggressive multiplier for enhanced day trading
-      const aggressiveMultiplier = accountInfo.isDemo ? 20.0 : 10.0; // Ultra aggressive: 2000% for demo, 1000% for live
-      positionSize *= aggressiveMultiplier;
+      // IMPROVED: Conservative multiplier for sustainable profitability
+      const conservativeMultiplier = accountInfo.isDemo ? 2.0 : 1.0; // IMPROVED: 200% for demo, 100% for live (was 2000%/1000%)
+      positionSize *= conservativeMultiplier;
 
-      // Ultra aggressive position size limits for enhanced day trading
-      const minSize = 0.25; // Increased minimum to 0.25 lots for day trading
+      // IMPROVED: Safe position size limits for profitability
+      const minSize = 0.01; // IMPROVED: Standard minimum 0.01 lots
       const maxSize = Math.min(
-        this.riskParams.maxPositionSize, // Maximum from settings
-        (accountInfo.freeMargin / 10), // Ultra aggressive: use up to 1/10th of free margin
-        (availableCapital / 50), // Ultra aggressive: 1/50th of capital
-        accountInfo.isDemo ? 1000.0 : 200.0 // Demo: up to 1000 lots, Live: up to 200 lots
+        this.riskParams.maxPositionSize, // Maximum from settings (5 lots)
+        (accountInfo.freeMargin / 100), // IMPROVED: Use max 1% of free margin (was 10%)
+        (availableCapital / 500), // IMPROVED: 1/500th of capital (was 1/50)
+        accountInfo.isDemo ? 5.0 : 2.0 // IMPROVED: Demo: 5 lots, Live: 2 lots max (was 1000/200)
       );
       
       const adjustedSize = Math.max(minSize, Math.min(maxSize, positionSize));
@@ -436,19 +436,19 @@ class OrderManager {
   }
 
   private calculateOptimalStopLoss(price: number, type: 'BUY' | 'SELL', symbol: string): number {
-    // Ultra enhanced stop loss calculation for day trading
+    // IMPROVED: Realistic stop loss calculation for profitability
     const pipValue = this.getPipValue(symbol);
-    
-    // Tighter stop loss distances for aggressive day trading
+
+    // IMPROVED: Wider stop losses to avoid getting stopped out by normal market noise
     let stopLossPips: number;
     if (symbol.includes('JPY')) {
-      stopLossPips = 15; // Ultra tight: 15 pips for JPY pairs
+      stopLossPips = 30; // IMPROVED: 30 pips for JPY pairs (was 15)
     } else if (['GBPUSD', 'GBPJPY', 'EURGBP'].some(pair => symbol.includes(pair.replace('/', '')))) {
-      stopLossPips = 12; // Ultra tight: 12 pips for GBP pairs
+      stopLossPips = 25; // IMPROVED: 25 pips for GBP pairs (was 12)
     } else {
-      stopLossPips = 8; // Ultra tight: 8 pips for major pairs
+      stopLossPips = 20; // IMPROVED: 20 pips for major pairs (was 8)
     }
-    
+
     if (type === 'BUY') {
       return price - (stopLossPips * pipValue);
     } else {
@@ -457,19 +457,19 @@ class OrderManager {
   }
 
   private calculateOptimalTakeProfit(price: number, type: 'BUY' | 'SELL', symbol: string): number {
-    // Ultra enhanced take profit calculation with 1.2:1 risk-reward ratio for ultra fast profits
+    // IMPROVED: Better take profit calculation with 2:1 risk-reward ratio for profitability
     const pipValue = this.getPipValue(symbol);
-    
-    // Calculate take profit based on stop loss distance - tighter for day trading
+
+    // IMPROVED: Higher take profit targets with 2:1 reward-risk ratio for better profitability
     let takeProfitPips: number;
     if (symbol.includes('JPY')) {
-      takeProfitPips = 18; // Ultra fast profits (1.2:1 ratio)
+      takeProfitPips = 60; // IMPROVED: 60 pips (2:1 ratio with 30 pip SL)
     } else if (['GBPUSD', 'GBPJPY', 'EURGBP'].some(pair => symbol.includes(pair.replace('/', '')))) {
-      takeProfitPips = 15; // Ultra fast profits (1.25:1 ratio)
+      takeProfitPips = 50; // IMPROVED: 50 pips (2:1 ratio with 25 pip SL)
     } else {
-      takeProfitPips = 10; // Ultra fast profits (1.25:1 ratio)
+      takeProfitPips = 40; // IMPROVED: 40 pips (2:1 ratio with 20 pip SL)
     }
-    
+
     if (type === 'BUY') {
       return price + (takeProfitPips * pipValue);
     } else {
