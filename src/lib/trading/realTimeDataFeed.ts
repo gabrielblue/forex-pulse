@@ -51,18 +51,20 @@ class RealTimeDataFeed {
   }
 
   private startPolling(): void {
-    this.updateInterval = setInterval(async () => {
+    this.updateInterval = setInterval(() => {
       if (!this.isActive) return;
-      
+
+      // Process each symbol with proper error handling
       for (const symbol of this.config.symbols) {
-        try {
-          const priceUpdate = await this.fetchRealPrice(symbol);
-          if (priceUpdate) {
-            this.broadcastUpdate(priceUpdate);
-          }
-        } catch (error) {
-          console.error(`Error fetching price for ${symbol}:`, error);
-        }
+        this.fetchRealPrice(symbol)
+          .then(priceUpdate => {
+            if (priceUpdate) {
+              this.broadcastUpdate(priceUpdate);
+            }
+          })
+          .catch(error => {
+            console.error(`❌ Error in worker loop (price fetch for ${symbol}):`, error);
+          });
       }
     }, this.config.updateInterval);
   }

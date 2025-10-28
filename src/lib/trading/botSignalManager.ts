@@ -57,18 +57,24 @@ class BotSignalManager {
     }
 
     console.log(`🚀 Starting ULTRA AGGRESSIVE signal generation (interval: ${this.config.interval/1000}s, min confidence: ${this.config.minConfidence}%, max daily: ${this.config.maxDailySignals})`);
-    
-    // Start generation loop
-    this.generationInterval = setInterval(async () => {
+
+    // Start generation loop with proper error handling
+    this.generationInterval = setInterval(() => {
+      // Wrap async call in try-catch to prevent unhandled promise rejections
       if (this.config.enabled && !this.isGenerating && this.canGenerateMoreSignals()) {
-        await this.generateAndProcessSignals();
+        this.generateAndProcessSignals().catch(error => {
+          console.error('❌ Error in worker loop (signal generation):', error);
+          console.error('Stack trace:', error?.stack);
+        });
       }
     }, this.config.interval);
 
-    // Generate immediately
+    // Generate immediately with error handling
     setTimeout(() => {
       if (this.canGenerateMoreSignals()) {
-        this.generateAndProcessSignals();
+        this.generateAndProcessSignals().catch(error => {
+          console.error('❌ Error in initial signal generation:', error);
+        });
       }
     }, 1000); // Start after 1 second
   }
@@ -108,29 +114,51 @@ class BotSignalManager {
 
     try {
       console.log(`🔍 Analyzing market for trading opportunities... (${this.dailySignalCount}/${this.config.maxDailySignals} today)`);
-      
-      // Check if we're connected and can trade
+
+      // Check if we're connected and can trade with enhanced error handling
       if (!exnessAPI.isConnectedToExness()) {
+        console.warn('⚠️ Exness not connected - skipping signal generation cycle');
         return;
       }
 
-      const { canTrade, issues } = await exnessAPI.verifyTradingCapabilities();
+      // Verify trading capabilities with timeout protection
+      const tradingCapabilities = await Promise.race([
+        exnessAPI.verifyTradingCapabilities(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Trading capabilities check timeout')), 5000))
+      ]).catch(error => {
+        console.error('❌ Failed to verify trading capabilities:', error);
+        return { canTrade: false, issues: ['Verification failed'] };
+      });
+
+      const { canTrade, issues } = tradingCapabilities as { canTrade: boolean; issues: string[] };
       if (!canTrade) {
+        console.warn('⚠️ Cannot trade:', issues.join(', '));
         return;
       }
 
       // Generate signals for each symbol with enhanced processing
       for (const symbol of this.config.symbols) {
-        await this.analyzeAndGenerateSignal(symbol);
+        try {
+          await this.analyzeAndGenerateSignal(symbol);
+        } catch (symbolError) {
+          console.error(`❌ Error analyzing symbol ${symbol}:`, symbolError);
+          // Continue with next symbol instead of failing entire cycle
+        }
       }
 
       // Process any pending signals if auto-execution is enabled
       if (this.config.autoExecute && orderManager.isAutoTradingActive()) {
-        await this.executePendingSignals();
+        try {
+          await this.executePendingSignals();
+        } catch (executionError) {
+          console.error('❌ Error executing pending signals:', executionError);
+          // Don't let execution errors crash the worker loop
+        }
       }
 
     } catch (error) {
-      console.error('Error in signal generation cycle:', error);
+      console.error('❌ Critical error in signal generation cycle:', error);
+      console.error('Stack:', error instanceof Error ? error.stack : 'No stack trace');
     } finally {
       this.isGenerating = false;
     }
