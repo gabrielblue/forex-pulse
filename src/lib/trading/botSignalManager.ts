@@ -19,12 +19,12 @@ export interface SignalGenerationConfig {
 class BotSignalManager {
   private config: SignalGenerationConfig = {
     enabled: false,
-    interval: 1000, // Ultra aggressive: 1 second for maximum day trading
+    interval: 300000, // Professional: 5 minutes for quality signal analysis
     symbols: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'], // All major pairs
-    minConfidence: 10, // Ultra aggressive: lowered to 10% for maximum trades
+    minConfidence: 75, // Professional: 75% minimum for high-quality trades
     autoExecute: false,
-    maxDailySignals: 2000, // Ultra high limit for day trading
-    aggressiveMode: true
+    maxDailySignals: 30, // Professional: 30 high-quality signals per day
+    aggressiveMode: false
   };
 
   private generationInterval: NodeJS.Timeout | null = null;
@@ -56,8 +56,8 @@ class BotSignalManager {
       return;
     }
 
-    console.log(`🚀 Starting ULTRA AGGRESSIVE signal generation (interval: ${this.config.interval/1000}s, min confidence: ${this.config.minConfidence}%, max daily: ${this.config.maxDailySignals})`);
-    
+    console.log(`🚀 Starting PROFESSIONAL signal generation (interval: ${this.config.interval/1000}s, min confidence: ${this.config.minConfidence}%, max daily: ${this.config.maxDailySignals})`);
+
     // Start generation loop
     this.generationInterval = setInterval(async () => {
       if (this.config.enabled && !this.isGenerating && this.canGenerateMoreSignals()) {
@@ -65,12 +65,12 @@ class BotSignalManager {
       }
     }, this.config.interval);
 
-    // Generate immediately
+    // Generate first signal after 30 seconds to allow system to stabilize
     setTimeout(() => {
       if (this.canGenerateMoreSignals()) {
         this.generateAndProcessSignals();
       }
-    }, 1000); // Start after 1 second
+    }, 30000); // Start after 30 seconds
   }
 
   private canGenerateMoreSignals(): boolean {
@@ -91,9 +91,9 @@ class BotSignalManager {
       return;
     }
 
-    // Rate limiting
+    // Rate limiting for quality analysis
     const timeSinceLastGeneration = Date.now() - this.lastGenerationTime;
-    if (timeSinceLastGeneration < 1000) { // Ultra aggressive: 1 second minimum
+    if (timeSinceLastGeneration < 60000) { // Professional: 1 minute minimum between analysis
       return;
     }
 
@@ -206,9 +206,22 @@ class BotSignalManager {
         technicalIndicators: indicators
       });
 
-      // Only trade if AI gives HIGH confidence
-      if (aiAnalysis.signal === 'HOLD' || aiAnalysis.confidence < 70) {
-        return null; // Skip low-confidence signals
+      // Only trade with VERY HIGH confidence for profitability
+      if (aiAnalysis.signal === 'HOLD' || aiAnalysis.confidence < 80) {
+        return null; // Skip low and medium confidence signals
+      }
+
+      // Calculate expected value - only accept positive EV trades
+      const expectedValue = this.calculateExpectedValue(
+        aiAnalysis.entryPrice || price.bid,
+        aiAnalysis.takeProfit,
+        aiAnalysis.stopLoss,
+        aiAnalysis.confidence
+      );
+
+      if (expectedValue <= 0) {
+        console.log(`❌ Rejecting signal for ${symbol}: Negative expected value ${expectedValue.toFixed(4)}`);
+        return null; // Skip negative EV trades
       }
 
       return {
@@ -216,14 +229,9 @@ class BotSignalManager {
         confidence: aiAnalysis.confidence,
         stopLoss: aiAnalysis.stopLoss,
         takeProfit: aiAnalysis.takeProfit,
-        reasoning: `AI Analysis (${aiAnalysis.confidence}% confidence): ${aiAnalysis.reasoning}. Market Regime: ${aiAnalysis.regime}. Risk: ${aiAnalysis.riskLevel}.`,
+        reasoning: `AI Analysis (${aiAnalysis.confidence}% confidence): ${aiAnalysis.reasoning}. Market Regime: ${aiAnalysis.regime}. Risk: ${aiAnalysis.riskLevel}. Expected Value: ${expectedValue.toFixed(4)}`,
         volume: this.calculatePositionSizeFromAI(aiAnalysis.confidence, aiAnalysis.positionSizeRecommendation, symbol),
-        expectedValue: this.calculateExpectedValue(
-          aiAnalysis.entryPrice || price.bid,
-          aiAnalysis.takeProfit,
-          aiAnalysis.stopLoss,
-          aiAnalysis.confidence
-        )
+        expectedValue
       };
       
     } catch (error) {
@@ -237,15 +245,16 @@ class BotSignalManager {
     aiRecommendation: 'SMALL' | 'MEDIUM' | 'LARGE',
     symbol: string
   ): number {
+    // Conservative base volumes for professional trading
     let baseVolume = 0.01;
 
-    // AI-driven position sizing
+    // AI-driven position sizing - conservative approach
     switch (aiRecommendation) {
       case 'LARGE':
-        baseVolume = 0.10;
+        baseVolume = 0.05; // Reduced from 0.10 for safety
         break;
       case 'MEDIUM':
-        baseVolume = 0.05;
+        baseVolume = 0.03; // Reduced from 0.05 for safety
         break;
       case 'SMALL':
       default:
@@ -253,15 +262,15 @@ class BotSignalManager {
         break;
     }
 
-    // Confidence scaling (only increase for very high confidence)
-    if (confidence >= 90) {
-      baseVolume *= 1.5;
-    } else if (confidence >= 85) {
-      baseVolume *= 1.2;
+    // Minimal confidence scaling (only for extremely high confidence)
+    if (confidence >= 95) {
+      baseVolume *= 1.3;
+    } else if (confidence >= 90) {
+      baseVolume *= 1.15;
     }
 
-    // Cap maximum volume for safety
-    return Math.min(baseVolume, 0.20);
+    // Cap maximum volume for risk management
+    return Math.min(baseVolume, 0.10); // Reduced max from 0.20 to 0.10
   }
 
   private calculateExpectedValue(entry: number, tp: number, sl: number, confidence: number): number {
@@ -334,7 +343,7 @@ class BotSignalManager {
 
       console.log('🎯 Checking for pending signals to execute...');
 
-      // Get active signals that haven't been executed
+      // Get active signals that haven't been executed - only highest quality
       const { data: signals } = await supabase
         .from('trading_signals')
         .select('*, currency_pairs(symbol)')
@@ -342,7 +351,7 @@ class BotSignalManager {
         .eq('status', 'ACTIVE')
         .gte('confidence_score', this.config.minConfidence)
         .order('confidence_score', { ascending: false })
-        .limit(10); // Process top 10 signals for maximum opportunities
+        .limit(3); // Process top 3 highest quality signals only
 
       if (!signals || signals.length === 0) {
         console.log('📭 No pending signals found for execution');
@@ -411,29 +420,30 @@ class BotSignalManager {
   }
 
   private calculateEnhancedVolume(signal: any): number {
-    // Enhanced volume calculation for aggressive day trading
-    let baseVolume = 0.20; // Increased base volume
-    
-    // Confidence-based multiplier
-    const confidenceMultiplier = Math.max(1.5, signal.confidence_score / 60); // More aggressive multiplier
-    baseVolume *= confidenceMultiplier;
-    
-    // Session-based adjustments
+    // Professional volume calculation for sustainable trading
+    let baseVolume = 0.02; // Conservative base volume
+
+    // Confidence-based scaling - only for very high confidence
+    if (signal.confidence_score >= 90) {
+      baseVolume = 0.05;
+    } else if (signal.confidence_score >= 85) {
+      baseVolume = 0.03;
+    } else if (signal.confidence_score >= 80) {
+      baseVolume = 0.02;
+    } else {
+      baseVolume = 0.01; // Minimum for lower confidence
+    }
+
+    // Small session-based adjustment for optimal trading hours
     const currentHour = new Date().getUTCHours();
     const isOptimalSession = (currentHour >= 8 && currentHour <= 17) || (currentHour >= 13 && currentHour <= 22);
-    
+
     if (isOptimalSession) {
-      baseVolume *= 2.5; // Massive boost during optimal sessions
+      baseVolume *= 1.2; // Modest 20% boost during optimal sessions
     }
-    
-    // Symbol-specific adjustments for major pairs
-    const majorPairs = ['EURUSD', 'GBPUSD', 'USDJPY'];
-    if (majorPairs.includes(signal.currency_pairs?.symbol)) {
-      baseVolume *= 1.5; // Boost for major pairs
-    }
-    
-    // Apply aggressive limits
-    return Math.max(0.10, Math.min(2.0, baseVolume)); // Increased max to 2.0 lots
+
+    // Apply conservative limits for risk management
+    return Math.max(0.01, Math.min(0.10, baseVolume)); // Max 0.10 lots for safety
   }
 
   async enableAutoExecution(enabled: boolean): Promise<void> {
