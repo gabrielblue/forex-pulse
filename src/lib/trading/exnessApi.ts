@@ -458,30 +458,73 @@ class ExnessAPI {
 
   async verifyTradingCapabilities(): Promise<{canTrade: boolean, issues: string[]}> {
     const issues: string[] = [];
-    
+
     if (!this.isConnected) {
-      issues.push('Not connected to Exness');
+      issues.push('Not connected to Exness - please establish connection first');
     }
-    
+
+    if (!this.sessionId) {
+      issues.push('No active session - connection may have expired');
+    }
+
     if (!this.accountInfo) {
-      issues.push('No account information available');
+      issues.push('No account information available - cannot verify trading status');
     } else {
       if (!this.accountInfo.tradeAllowed) {
-        issues.push('Trading not allowed on this account');
+        issues.push('Trading not allowed on this account - check account permissions');
       }
-      
-      if (this.accountInfo.balance < 100) {
-        issues.push('Account balance too low');
+
+      // Strict balance requirements for real trading
+      const minBalance = this.accountInfo.isDemo ? 100 : 100;
+      if (this.accountInfo.balance < minBalance) {
+        issues.push(`Account balance too low: ${this.accountInfo.currency} ${this.accountInfo.balance.toFixed(2)} (minimum: ${minBalance})`);
       }
-      
-      const minMarginLevel = this.accountInfo.isDemo ? 50 : 200;
+
+      // Strict margin level requirements
+      const minMarginLevel = this.accountInfo.isDemo ? 50 : 100;
       if (this.accountInfo.marginLevel > 0 && this.accountInfo.marginLevel < minMarginLevel) {
-        issues.push(`Margin level too low (${this.accountInfo.marginLevel.toFixed(1)}% < ${minMarginLevel}%)`);
+        issues.push(`Margin level too low: ${this.accountInfo.marginLevel.toFixed(1)}% (minimum: ${minMarginLevel}%) - risk of margin call`);
+      }
+
+      // Additional safety checks for live accounts
+      if (!this.accountInfo.isDemo) {
+        if (this.accountInfo.equity < this.accountInfo.balance * 0.70) {
+          issues.push(`Equity too low: Current drawdown ${((1 - this.accountInfo.equity / this.accountInfo.balance) * 100).toFixed(1)}% - exceeds safe limit`);
+        }
+
+        if (this.accountInfo.freeMargin < 50) {
+          issues.push(`Free margin critically low: ${this.accountInfo.currency} ${this.accountInfo.freeMargin.toFixed(2)} - insufficient for new trades`);
+        }
+      }
+
+      // Verify account is actually connected to real Exness server
+      if (!this.accountInfo.server || !this.accountInfo.server.toLowerCase().includes('exness')) {
+        issues.push(`Invalid server connection: ${this.accountInfo.server} - must be connected to Exness servers`);
       }
     }
 
+    // Final verification: test actual connection is still alive
+    if (this.isConnected && this.sessionId) {
+      try {
+        const testInfo = await this.getAccountInfo();
+        if (!testInfo) {
+          issues.push('Connection test failed - session may be invalid or expired');
+        }
+      } catch (error) {
+        issues.push('Failed to verify active connection - please reconnect');
+      }
+    }
+
+    const canTrade = issues.length === 0;
+
+    if (!canTrade) {
+      console.error('❌ Trading capabilities verification failed:', issues);
+    } else {
+      console.log('✅ Trading capabilities verified - account ready for live trading');
+    }
+
     return {
-      canTrade: issues.length === 0,
+      canTrade,
       issues
     };
   }
