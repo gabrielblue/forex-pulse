@@ -19,12 +19,12 @@ export interface SignalGenerationConfig {
 class BotSignalManager {
   private config: SignalGenerationConfig = {
     enabled: false,
-    interval: 1000, // Ultra aggressive: 1 second for maximum day trading
+    interval: 60000, // IMPROVED: 60 seconds (1 minute) for quality signals - reduces over-trading and costs
     symbols: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'], // All major pairs
-    minConfidence: 10, // Ultra aggressive: lowered to 10% for maximum trades
+    minConfidence: 75, // IMPROVED: 75% minimum for PROFITABLE trades - only trade high-confidence signals
     autoExecute: false,
-    maxDailySignals: 2000, // Ultra high limit for day trading
-    aggressiveMode: true
+    maxDailySignals: 50, // IMPROVED: 50 quality trades instead of 2000 garbage trades - reduces costs
+    aggressiveMode: false // IMPROVED: Disabled aggressive mode for sustainable profitability
   };
 
   private generationInterval: NodeJS.Timeout | null = null;
@@ -91,9 +91,9 @@ class BotSignalManager {
       return;
     }
 
-    // Rate limiting
+    // Rate limiting - IMPROVED for profitability
     const timeSinceLastGeneration = Date.now() - this.lastGenerationTime;
-    if (timeSinceLastGeneration < 1000) { // Ultra aggressive: 1 second minimum
+    if (timeSinceLastGeneration < 60000) { // IMPROVED: 60 seconds minimum - prevents over-trading
       return;
     }
 
@@ -206,9 +206,9 @@ class BotSignalManager {
         technicalIndicators: indicators
       });
 
-      // Only trade if AI gives HIGH confidence
-      if (aiAnalysis.signal === 'HOLD' || aiAnalysis.confidence < 70) {
-        return null; // Skip low-confidence signals
+      // Only trade if AI gives HIGH confidence - IMPROVED for profitability
+      if (aiAnalysis.signal === 'HOLD' || aiAnalysis.confidence < 75) {
+        return null; // Skip low-confidence signals - IMPROVED: Raised to 75% for better win rate
       }
 
       return {
@@ -411,29 +411,29 @@ class BotSignalManager {
   }
 
   private calculateEnhancedVolume(signal: any): number {
-    // Enhanced volume calculation for aggressive day trading
-    let baseVolume = 0.20; // Increased base volume
-    
-    // Confidence-based multiplier
-    const confidenceMultiplier = Math.max(1.5, signal.confidence_score / 60); // More aggressive multiplier
+    // IMPROVED: Conservative volume calculation for sustainable profitability
+    let baseVolume = 0.05; // IMPROVED: Conservative base volume (0.05 lots)
+
+    // Confidence-based multiplier - IMPROVED: More conservative
+    const confidenceMultiplier = Math.max(1.0, signal.confidence_score / 80); // IMPROVED: Scale from 80% baseline
     baseVolume *= confidenceMultiplier;
-    
-    // Session-based adjustments
+
+    // Session-based adjustments - IMPROVED: More conservative
     const currentHour = new Date().getUTCHours();
     const isOptimalSession = (currentHour >= 8 && currentHour <= 17) || (currentHour >= 13 && currentHour <= 22);
-    
+
     if (isOptimalSession) {
-      baseVolume *= 2.5; // Massive boost during optimal sessions
+      baseVolume *= 1.5; // IMPROVED: Moderate boost during optimal sessions (was 2.5x)
     }
-    
+
     // Symbol-specific adjustments for major pairs
     const majorPairs = ['EURUSD', 'GBPUSD', 'USDJPY'];
     if (majorPairs.includes(signal.currency_pairs?.symbol)) {
-      baseVolume *= 1.5; // Boost for major pairs
+      baseVolume *= 1.2; // IMPROVED: Small boost for major pairs
     }
-    
-    // Apply aggressive limits
-    return Math.max(0.10, Math.min(2.0, baseVolume)); // Increased max to 2.0 lots
+
+    // Apply conservative limits for profitability
+    return Math.max(0.01, Math.min(0.50, baseVolume)); // IMPROVED: Max 0.50 lots (was 2.0) for safety
   }
 
   async enableAutoExecution(enabled: boolean): Promise<void> {
