@@ -57,6 +57,24 @@ export interface MarketPrice {
   timestamp: Date;
 }
 
+export interface HistoricalBar {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  tick_volume: number;
+  spread: number;
+  real_volume: number;
+}
+
+export interface HistoricalData {
+  symbol: string;
+  timeframe: string;
+  bars: HistoricalBar[];
+  count: number;
+}
+
 class ExnessAPI {
   private sessionId: string | null = null;
   private accountInfo: AccountInfo | null = null;
@@ -443,15 +461,54 @@ class ExnessAPI {
     }
   }
 
+  async getHistoricalData(symbol: string, timeframe: string = '15m', count: number = 100): Promise<HistoricalData | null> {
+    if (!this.isConnected || !this.sessionId) {
+      console.warn('Not connected to Exness - cannot get historical data');
+      return null;
+    }
+
+    try {
+      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/historical_data`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: this.sessionId,
+          symbol: symbol,
+          timeframe: timeframe,
+          count: count
+        })
+      });
+
+      if (!response.ok) {
+        console.error(`Failed to get historical data: ${response.status}`);
+        return null;
+      }
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        return result.data as HistoricalData;
+      } else {
+        console.error('Failed to get historical data:', result.error);
+        return null;
+      }
+    } catch (error) {
+      console.error('Failed to get historical data:', error);
+      return null;
+    }
+  }
+
   async isMarketOpen(symbol: string): Promise<boolean> {
     const now = new Date();
     const dayOfWeek = now.getDay();
-    
+
     // Forex market is closed on weekends
     if (dayOfWeek === 0 || dayOfWeek === 6) {
       return false;
     }
-    
+
     // Simplified market hours check
     return true;
   }
