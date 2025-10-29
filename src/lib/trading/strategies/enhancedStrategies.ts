@@ -341,9 +341,23 @@ export class EnhancedTradingSystem {
   }
   
   private calculateADX(prices: number[], period: number): number {
-    // Simplified ADX calculation
-    // NOTE: Real ADX calculation requires historical price data from MT5
-    return 50; // Neutral value until MT5 integration
+    // Simplified ADX calculation using available price data
+    // This provides a basic trend strength indicator
+    if (prices.length < period * 2) return 50;
+
+    // Calculate directional movement
+    let upMove = 0, downMove = 0;
+    for (let i = prices.length - period; i < prices.length; i++) {
+      const diff = prices[i] - prices[i - 1];
+      if (diff > 0) upMove += diff;
+      if (diff < 0) downMove += Math.abs(diff);
+    }
+
+    const totalMove = upMove + downMove;
+    if (totalMove === 0) return 50;
+
+    // Return ADX as percentage of directional strength
+    return Math.abs((upMove - downMove) / totalMove) * 100;
   }
   
   private calculateRangeCompression(prices: number[], bollinger: any): number {

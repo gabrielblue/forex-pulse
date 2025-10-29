@@ -114,41 +114,95 @@ class MarketAnalyzer {
 
   private async generateComprehensiveAnalysis(symbol: string, timeframe: string, priceData: any) {
     const currentPrice = (priceData.bid + priceData.ask) / 2;
-    
-    // NOTE: Full technical analysis requires historical price data from MT5
-    // For now, returning basic price-based analysis only
-    // TODO: Implement MT5 historical data fetching for RSI, MACD, EMA calculations
-    
-    const analysis = {
-      symbol,
-      timeframe,
-      timestamp: new Date(),
-      price: currentPrice,
-      spread: priceData.spread,
-      
-      // Basic price levels (real, not simulated)
-      supportLevels: this.calculateSupportLevels(currentPrice),
-      resistanceLevels: this.calculateResistanceLevels(currentPrice),
-      
-      // Session-based analysis (real)
-      trend: this.getCurrentTrend(),
-      
-      // Risk assessment based on real market hours
-      riskLevel: this.assessRiskLevel(symbol, timeframe),
-      
-      // Minimal data until full MT5 integration
-      patterns: [],
-      candlestickPatterns: [],
-      sentiment: "Awaiting full MT5 historical data integration",
-      institutionalFlow: "NEUTRAL" as const,
-      recommendation: {
-        action: "HOLD" as const,
-        confidence: 0,
-        reasoning: "Requires MT5 historical data for full analysis"
-      }
-    };
 
-    return analysis;
+    try {
+      // Fetch REAL historical data from MT5 for technical analysis
+      console.log(`📊 Fetching REAL historical data for ${symbol} analysis...`);
+
+      // Map timeframe to appropriate bar count
+      const barCount = timeframe === '1h' ? 200 : 100;
+      const historicalData = await exnessAPI.getHistoricalData(symbol, 'M15', barCount);
+
+      let technicalIndicators = {};
+      let patterns: any[] = [];
+      let sentiment = "NEUTRAL";
+      let trend = "SIDEWAYS";
+
+      if (historicalData && historicalData.bars && historicalData.bars.length > 0) {
+        console.log(`✅ Using ${historicalData.bars.length} REAL bars for ${symbol} analysis`);
+
+        // Extract prices for technical indicators
+        const prices = historicalData.bars.map(bar => bar.close);
+
+        // Calculate technical indicators with REAL data
+        technicalIndicators = this.calculateTechnicalIndicators(prices);
+
+        // Detect patterns with REAL data
+        patterns = this.detectPatterns(historicalData.bars);
+
+        // Determine trend from REAL data
+        trend = this.determineTrend(prices);
+
+        // Calculate sentiment from REAL data
+        sentiment = this.calculateSentiment(prices, technicalIndicators);
+      } else {
+        console.warn(`⚠️ No historical data available for ${symbol}, using basic analysis`);
+      }
+
+      const analysis = {
+        symbol,
+        timeframe,
+        timestamp: new Date(),
+        price: currentPrice,
+        spread: priceData.spread,
+
+        // Price levels based on REAL data
+        supportLevels: this.calculateSupportLevels(currentPrice),
+        resistanceLevels: this.calculateResistanceLevels(currentPrice),
+
+        // Technical indicators from REAL data
+        ...technicalIndicators,
+
+        // Trend from REAL data
+        trend,
+
+        // Risk assessment
+        riskLevel: this.assessRiskLevel(symbol, timeframe),
+
+        // Patterns from REAL data
+        patterns,
+        candlestickPatterns: patterns,
+        sentiment,
+        institutionalFlow: this.assessInstitutionalFlow(trend) as const,
+        recommendation: this.generateRecommendation(trend, sentiment, technicalIndicators)
+      };
+
+      return analysis;
+    } catch (error) {
+      console.error(`❌ Error generating analysis for ${symbol}:`, error);
+
+      // Fallback to basic analysis
+      return {
+        symbol,
+        timeframe,
+        timestamp: new Date(),
+        price: currentPrice,
+        spread: priceData.spread,
+        supportLevels: this.calculateSupportLevels(currentPrice),
+        resistanceLevels: this.calculateResistanceLevels(currentPrice),
+        trend: "SIDEWAYS",
+        riskLevel: this.assessRiskLevel(symbol, timeframe),
+        patterns: [],
+        candlestickPatterns: [],
+        sentiment: "NEUTRAL",
+        institutionalFlow: "NEUTRAL" as const,
+        recommendation: {
+          action: "HOLD" as const,
+          confidence: 0,
+          reasoning: "Analysis unavailable - historical data error"
+        }
+      };
+    }
   }
 
   private async createMarketNotes(analysis: any): Promise<void> {
@@ -422,6 +476,120 @@ class MarketAnalyzer {
   }
 
   // Helper methods for analysis
+  private calculateTechnicalIndicators(prices: number[]): any {
+    if (prices.length < 20) return {};
+
+    const sma20 = prices.slice(-20).reduce((a, b) => a + b, 0) / 20;
+    const sma50 = prices.length >= 50 ? prices.slice(-50).reduce((a, b) => a + b, 0) / 50 : sma20;
+    const sma200 = prices.length >= 200 ? prices.slice(-200).reduce((a, b) => a + b, 0) / 200 : sma20;
+
+    const currentPrice = prices[prices.length - 1];
+    const rsi = this.calculateRSI(prices, 14);
+
+    return {
+      sma20,
+      sma50,
+      sma200,
+      rsi,
+      currentPrice,
+      trend: currentPrice > sma20 ? 'BULLISH' : currentPrice < sma20 ? 'BEARISH' : 'SIDEWAYS'
+    };
+  }
+
+  private calculateRSI(prices: number[], period: number = 14): number {
+    if (prices.length < period + 1) return 50;
+
+    const changes = [];
+    for (let i = 1; i < prices.length; i++) {
+      changes.push(prices[i] - prices[i - 1]);
+    }
+
+    const gains = changes.map(c => c > 0 ? c : 0);
+    const losses = changes.map(c => c < 0 ? -c : 0);
+
+    const avgGain = gains.slice(-period).reduce((a, b) => a + b, 0) / period;
+    const avgLoss = losses.slice(-period).reduce((a, b) => a + b, 0) / period;
+
+    if (avgLoss === 0) return 100;
+    const rs = avgGain / avgLoss;
+    return 100 - (100 / (1 + rs));
+  }
+
+  private detectPatterns(bars: any[]): any[] {
+    // Detect simple patterns from OHLC data
+    const patterns = [];
+    if (bars.length < 3) return patterns;
+
+    const lastBar = bars[bars.length - 1];
+    const prevBar = bars[bars.length - 2];
+
+    // Bullish engulfing
+    if (prevBar.close < prevBar.open && lastBar.close > lastBar.open &&
+        lastBar.open < prevBar.close && lastBar.close > prevBar.open) {
+      patterns.push({ name: 'Bullish Engulfing', type: 'BULLISH' });
+    }
+
+    // Bearish engulfing
+    if (prevBar.close > prevBar.open && lastBar.close < lastBar.open &&
+        lastBar.open > prevBar.close && lastBar.close < prevBar.open) {
+      patterns.push({ name: 'Bearish Engulfing', type: 'BEARISH' });
+    }
+
+    return patterns;
+  }
+
+  private determineTrend(prices: number[]): string {
+    if (prices.length < 20) return "SIDEWAYS";
+
+    const sma20 = prices.slice(-20).reduce((a, b) => a + b, 0) / 20;
+    const currentPrice = prices[prices.length - 1];
+
+    if (currentPrice > sma20 * 1.01) return "BULLISH";
+    if (currentPrice < sma20 * 0.99) return "BEARISH";
+    return "SIDEWAYS";
+  }
+
+  private calculateSentiment(prices: number[], indicators: any): string {
+    const trend = this.determineTrend(prices);
+    const rsi = indicators.rsi || 50;
+
+    if (trend === "BULLISH" && rsi > 50) return "BULLISH";
+    if (trend === "BEARISH" && rsi < 50) return "BEARISH";
+    return "NEUTRAL";
+  }
+
+  private assessInstitutionalFlow(trend: string): "ACCUMULATION" | "DISTRIBUTION" | "NEUTRAL" {
+    if (trend === "BULLISH") return "ACCUMULATION";
+    if (trend === "BEARISH") return "DISTRIBUTION";
+    return "NEUTRAL";
+  }
+
+  private generateRecommendation(trend: string, sentiment: string, indicators: any): any {
+    const rsi = indicators.rsi || 50;
+
+    if (trend === "BULLISH" && sentiment === "BULLISH" && rsi < 70) {
+      return {
+        action: "BUY" as const,
+        confidence: 75,
+        reasoning: "Strong bullish trend with healthy RSI"
+      };
+    }
+
+    if (trend === "BEARISH" && sentiment === "BEARISH" && rsi > 30) {
+      return {
+        action: "SELL" as const,
+        confidence: 75,
+        reasoning: "Strong bearish trend with healthy RSI"
+      };
+    }
+
+    return {
+      action: "HOLD" as const,
+      confidence: 50,
+      reasoning: "Mixed signals, waiting for clearer trend"
+    };
+  }
+
   private getCurrentTrend(): "BULLISH" | "BEARISH" | "SIDEWAYS" {
     // Real trend would be calculated from MT5 historical prices
     // For now, return neutral until proper implementation

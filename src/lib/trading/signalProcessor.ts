@@ -352,24 +352,37 @@ class SignalProcessor {
       };
     } catch (error) {
       console.error('Failed to get market data:', error);
-      return this.generateRealisticMarketData(symbol);
+      return await this.generateRealisticMarketData(symbol);
     }
   }
 
-  private generateRealisticMarketData(symbol: string): MarketData {
+  private async generateRealisticMarketData(symbol: string): Promise<MarketData> {
+    try {
+      // Fetch REAL historical data from MT5
+      console.log(`📊 Fetching REAL historical data for ${symbol}...`);
+      const historicalData = await exnessAPI.getHistoricalData(symbol, 'M1', 200);
+
+      if (historicalData && historicalData.bars && historicalData.bars.length > 0) {
+        console.log(`✅ Using ${historicalData.bars.length} REAL data points for ${symbol}`);
+        return {
+          symbol,
+          prices: historicalData.bars.map(bar => bar.close),
+          volumes: historicalData.bars.map(bar => bar.real_volume > 0 ? bar.real_volume : bar.tick_volume),
+          timestamps: historicalData.bars.map(bar => new Date(bar.time * 1000))
+        };
+      }
+    } catch (error) {
+      console.error(`❌ Error fetching historical data for ${symbol}:`, error);
+    }
+
+    // Fallback to base price if historical data is unavailable
+    console.warn(`⚠️ Using fallback base price for ${symbol} - historical data unavailable`);
     const basePrice = this.getBasePrice(symbol);
+    const now = new Date();
     const prices: number[] = [];
     const volumes: number[] = [];
     const timestamps: Date[] = [];
 
-    let currentPrice = basePrice;
-    const now = new Date();
-
-    // NOTE: This should use REAL historical price data from MT5
-    // For now, returning minimal data - real implementation needs MT5 API
-    console.warn('⚠️ generateHistoricalPriceData should use real MT5 historical data');
-    
-    // Return minimal data until MT5 historical API is integrated
     for (let i = 0; i < 200; i++) {
       prices.push(basePrice);
       volumes.push(0);

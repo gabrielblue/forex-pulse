@@ -57,6 +57,24 @@ export interface MarketPrice {
   timestamp: Date;
 }
 
+export interface HistoricalBar {
+  time: number; // Unix timestamp
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  tick_volume: number;
+  spread: number;
+  real_volume: number;
+}
+
+export interface HistoricalDataResponse {
+  symbol: string;
+  timeframe: string;
+  bars: HistoricalBar[];
+  count: number;
+}
+
 class ExnessAPI {
   private sessionId: string | null = null;
   private accountInfo: AccountInfo | null = null;
@@ -443,15 +461,60 @@ class ExnessAPI {
     }
   }
 
+  async getHistoricalData(
+    symbol: string,
+    timeframe: string = 'M1',
+    count: number = 100
+  ): Promise<HistoricalDataResponse | null> {
+    if (!this.isConnected || !this.sessionId) {
+      console.error('Cannot fetch historical data - not connected to Exness');
+      return null;
+    }
+
+    try {
+      console.log(`📊 Fetching REAL historical data for ${symbol} (${timeframe}, ${count} bars)`);
+
+      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/historical_data`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: this.sessionId,
+          symbol: symbol,
+          timeframe: timeframe,
+          count: count
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch historical data: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        console.log(`✅ Fetched ${result.data.count} REAL bars for ${symbol}`);
+        return result.data as HistoricalDataResponse;
+      } else {
+        console.error('❌ Failed to fetch historical data:', result.error);
+        return null;
+      }
+    } catch (error) {
+      console.error('❌ Exception fetching historical data:', error);
+      return null;
+    }
+  }
+
   async isMarketOpen(symbol: string): Promise<boolean> {
     const now = new Date();
     const dayOfWeek = now.getDay();
-    
+
     // Forex market is closed on weekends
     if (dayOfWeek === 0 || dayOfWeek === 6) {
       return false;
     }
-    
+
     // Simplified market hours check
     return true;
   }

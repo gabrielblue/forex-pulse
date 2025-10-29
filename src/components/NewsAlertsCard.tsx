@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, TrendingUp, AlertCircle, Globe } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface NewsItem {
   id: string;
@@ -14,61 +15,54 @@ interface NewsItem {
   summary: string;
 }
 
-const mockNews: NewsItem[] = [
-  {
-    id: "1",
-    title: "Fed Officials Signal Potential Rate Pause in December",
-    impact: "HIGH",
-    sentiment: "BEARISH",
-    affectedPairs: ["EUR/USD", "GBP/USD", "AUD/USD"],
-    timestamp: new Date(Date.now() - 15 * 60 * 1000),
-    source: "Reuters",
-    summary: "Multiple Fed officials suggest inflation data may warrant a pause in rate hikes, weakening USD outlook."
-  },
-  {
-    id: "2",
-    title: "ECB's Lagarde Hints at Extended Tightening Cycle",
-    impact: "HIGH",
-    sentiment: "BULLISH",
-    affectedPairs: ["EUR/USD", "EUR/GBP"],
-    timestamp: new Date(Date.now() - 32 * 60 * 1000),
-    source: "Bloomberg",
-    summary: "ECB President suggests more aggressive stance on inflation, potentially strengthening EUR."
-  },
-  {
-    id: "3",
-    title: "UK GDP Data Shows Unexpected Growth",
-    impact: "MEDIUM",
-    sentiment: "BULLISH",
-    affectedPairs: ["GBP/USD", "EUR/GBP"],
-    timestamp: new Date(Date.now() - 45 * 60 * 1000),
-    source: "Financial Times",
-    summary: "Q3 GDP beats expectations at 0.6% vs forecast 0.4%, supporting GBP strength."
-  },
-  {
-    id: "4",
-    title: "China Manufacturing PMI Exceeds Forecasts",
-    impact: "MEDIUM",
-    sentiment: "BULLISH",
-    affectedPairs: ["AUD/USD", "NZD/USD"],
-    timestamp: new Date(Date.now() - 78 * 60 * 1000),
-    source: "Reuters",
-    summary: "Strong manufacturing data from China boosts commodity-linked currencies."
-  },
-  {
-    id: "5",
-    title: "Oil Prices Surge on Middle East Tensions",
-    impact: "MEDIUM",
-    sentiment: "BULLISH",
-    affectedPairs: ["USD/CAD", "USD/NOK"],
-    timestamp: new Date(Date.now() - 95 * 60 * 1000),
-    source: "Bloomberg",
-    summary: "Geopolitical tensions drive oil higher, affecting oil-producing nations' currencies."
-  }
-];
-
 export const NewsAlertsCard = () => {
-  const [news, setNews] = useState<NewsItem[]>(mockNews);
+  const [news, setNews] = useState<NewsItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchRealNewsData();
+
+    // Refresh news every 5 minutes
+    const interval = setInterval(fetchRealNewsData, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchRealNewsData = async () => {
+    try {
+      // Fetch REAL economic events from database
+      const { data: events, error } = await supabase
+        .from('economic_events')
+        .select('*')
+        .order('event_time', { ascending: false })
+        .limit(5);
+
+      if (error) {
+        console.error('Error fetching news:', error);
+        return;
+      }
+
+      if (events && events.length > 0) {
+        const newsItems: NewsItem[] = events.map(event => ({
+          id: event.id,
+          title: event.title,
+          impact: event.impact as "HIGH" | "MEDIUM" | "LOW",
+          sentiment: "NEUTRAL" as const, // Economic events don't have inherent sentiment
+          affectedPairs: Array.isArray(event.affected_pairs) ? event.affected_pairs : [],
+          timestamp: new Date(event.event_time),
+          source: "Economic Calendar",
+          summary: event.title
+        }));
+        setNews(newsItems);
+        console.log(`✅ Loaded ${newsItems.length} REAL economic events`);
+      } else {
+        console.log('ℹ️ No economic events found in database');
+      }
+    } catch (error) {
+      console.error('Error loading news:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const getImpactColor = (impact: string) => {
     switch (impact) {

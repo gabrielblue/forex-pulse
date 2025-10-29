@@ -6,7 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { TrendingUp, TrendingDown, Activity, BarChart3 } from "lucide-react";
 
+// NOTE: This component displays market charts and should fetch REAL data from MT5
+// Chart data should be fetched using exnessAPI.getHistoricalData() for accurate price history
+// For live updates, integrate with realTimeDataFeed for streaming prices
+
 const mockChartData = [
+  // Placeholder data - TODO: Replace with real MT5 historical data using exnessAPI.getHistoricalData()
   { time: "09:00", price: 1.0850, high: 1.0865, low: 1.0845, open: 1.0850, close: 1.0860, volume: 1250 },
   { time: "09:05", price: 1.0860, high: 1.0875, low: 1.0855, open: 1.0860, close: 1.0870, volume: 1380 },
   { time: "09:10", price: 1.0870, high: 1.0885, low: 1.0865, open: 1.0870, close: 1.0880, volume: 1420 },
@@ -16,6 +21,7 @@ const mockChartData = [
 ];
 
 const instruments = [
+  // Placeholder prices - TODO: Fetch live prices using exnessAPI.getCurrentPrice()
   { symbol: "EURUSD", name: "Euro/US Dollar", price: 1.0895, change: +0.0023, changePercent: +0.21 },
   { symbol: "GBPUSD", name: "British Pound/US Dollar", price: 1.2745, change: -0.0018, changePercent: -0.14 },
   { symbol: "USDJPY", name: "US Dollar/Japanese Yen", price: 149.82, change: +0.45, changePercent: +0.30 },
