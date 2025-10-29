@@ -115,10 +115,50 @@ class RealTimeDataFeed {
   }
 
   async getHistoricalPrices(symbol: string, hours: number = 24): Promise<PriceUpdate[]> {
-    // For historical data, you would need to implement MT5 history endpoint
-    // For now, return empty array as we focus on real-time trading
-    console.warn('Historical price data requires MT5 history API implementation');
-    return [];
+    try {
+      // Determine timeframe and count based on hours requested
+      let timeframe = 'M1';
+      let count = hours * 60; // M1 bars per hour
+
+      // Optimize for larger time periods
+      if (hours >= 168) { // 1 week
+        timeframe = 'H1';
+        count = hours;
+      } else if (hours >= 24) { // 1 day
+        timeframe = 'M15';
+        count = hours * 4;
+      }
+
+      // Cap at 1000 bars to avoid excessive data
+      if (count > 1000) {
+        count = 1000;
+      }
+
+      console.log(`📊 Fetching REAL historical data for ${symbol} (${hours} hours, ${timeframe}, ${count} bars)`);
+
+      // Fetch REAL historical data from MT5
+      const historicalData = await exnessAPI.getHistoricalData(symbol, timeframe, count);
+
+      if (!historicalData || !historicalData.bars || historicalData.bars.length === 0) {
+        console.error(`❌ No historical data available for ${symbol}`);
+        return [];
+      }
+
+      // Convert historical bars to PriceUpdate format (using close prices)
+      const priceUpdates: PriceUpdate[] = historicalData.bars.map(bar => ({
+        symbol: symbol,
+        bid: bar.close, // Use close price as bid
+        ask: bar.close, // Use close price as ask (spread info in bar.spread)
+        timestamp: new Date(bar.time * 1000) // Convert Unix timestamp to Date
+      }));
+
+      console.log(`✅ Fetched ${priceUpdates.length} REAL historical prices for ${symbol}`);
+      return priceUpdates;
+
+    } catch (error) {
+      console.error(`❌ Error fetching historical data for ${symbol}:`, error);
+      return [];
+    }
   }
 
   updateConfig(newConfig: Partial<DataFeedConfig>): void {

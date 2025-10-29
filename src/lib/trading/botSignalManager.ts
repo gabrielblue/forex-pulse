@@ -176,11 +176,15 @@ class BotSignalManager {
 
   private async performTechnicalAnalysis(symbol: string, price: any): Promise<any> {
     try {
+      // Fetch REAL historical data from MT5
+      const prices = await this.generateRecentPrices(symbol, price.bid, 100);
+      const volumes = await this.generateRecentVolumes(symbol, 100);
+
       // Get comprehensive market data
       const marketData = {
         symbol,
-        prices: this.generateRecentPrices(price.bid, 100),
-        volumes: this.generateRecentVolumes(100),
+        prices,
+        volumes,
         spread: price.spread
       };
       
@@ -503,23 +507,43 @@ class BotSignalManager {
   }
   
   // Helper methods for enhanced analysis
-  private generateRecentPrices(currentPrice: number, count: number): number[] {
-    // NOTE: This should fetch REAL historical prices from MT5
-    // For now, we cannot generate realistic price movements without real data
-    // TODO: Replace with MT5 historical price API call
-    console.warn('⚠️ generateRecentPrices should use real MT5 historical data');
-    
-    // Return minimal array with just current price until MT5 integration
-    return [currentPrice];
+  private async generateRecentPrices(symbol: string, currentPrice: number, count: number): Promise<number[]> {
+    try {
+      // Fetch REAL historical prices from MT5
+      const hours = Math.ceil(count / 60); // Approximate hours needed (assuming M1 bars)
+      const historicalData = await exnessAPI.getHistoricalData(symbol, 'M1', count);
+
+      if (historicalData && historicalData.bars && historicalData.bars.length > 0) {
+        console.log(`✅ Using ${historicalData.bars.length} REAL historical prices for ${symbol}`);
+        // Extract close prices from bars
+        return historicalData.bars.map(bar => bar.close);
+      } else {
+        console.warn(`⚠️ No historical data available for ${symbol}, using current price only`);
+        return [currentPrice];
+      }
+    } catch (error) {
+      console.error(`❌ Error fetching historical prices for ${symbol}:`, error);
+      return [currentPrice];
+    }
   }
   
-  private generateRecentVolumes(count: number): number[] {
-    // NOTE: This should fetch REAL volume data from MT5
-    // TODO: Replace with MT5 volume data API call
-    console.warn('⚠️ generateRecentVolumes should use real MT5 volume data');
-    
-    // Return minimal array until MT5 integration
-    return [0];
+  private async generateRecentVolumes(symbol: string, count: number): Promise<number[]> {
+    try {
+      // Fetch REAL volume data from MT5
+      const historicalData = await exnessAPI.getHistoricalData(symbol, 'M1', count);
+
+      if (historicalData && historicalData.bars && historicalData.bars.length > 0) {
+        console.log(`✅ Using ${historicalData.bars.length} REAL volume data for ${symbol}`);
+        // Extract tick volumes from bars (use real_volume if available, otherwise tick_volume)
+        return historicalData.bars.map(bar => bar.real_volume > 0 ? bar.real_volume : bar.tick_volume);
+      } else {
+        console.warn(`⚠️ No volume data available for ${symbol}, using default`);
+        return [0];
+      }
+    } catch (error) {
+      console.error(`❌ Error fetching volume data for ${symbol}:`, error);
+      return [0];
+    }
   }
   
   private calculateTechnicalIndicators(prices: number[]): any {

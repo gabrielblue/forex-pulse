@@ -56,6 +56,12 @@ class ClosePositionRequest(BaseModel):
     session_id: str
     ticket: int
 
+class HistoricalDataRequest(BaseModel):
+    session_id: str
+    symbol: str
+    timeframe: str  # e.g., "M1", "M5", "M15", "M30", "H1", "H4", "D1"
+    count: int = 100  # number of bars to fetch
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize MT5 connection on startup"""
@@ -423,6 +429,102 @@ async def place_order(order: OrderRequest):
         return {
             "success": False,
             "error": f"Failed to place order: {str(e)}"
+        }
+
+@app.post("/mt5/historical_data")
+async def get_historical_data(request: HistoricalDataRequest):
+    """Get historical price data (OHLCV bars) from MT5"""
+    try:
+        if request.session_id not in sessions:
+            return {
+                "success": False,
+                "error": "Invalid session ID"
+            }
+
+        # Update last activity
+        sessions[request.session_id]["last_activity"] = datetime.now().isoformat()
+
+        # Map timeframe string to MT5 constants
+        timeframe_map = {
+            "M1": mt5.TIMEFRAME_M1,
+            "M5": mt5.TIMEFRAME_M5,
+            "M15": mt5.TIMEFRAME_M15,
+            "M30": mt5.TIMEFRAME_M30,
+            "H1": mt5.TIMEFRAME_H1,
+            "H4": mt5.TIMEFRAME_H4,
+            "D1": mt5.TIMEFRAME_D1,
+            "W1": mt5.TIMEFRAME_W1,
+            "MN1": mt5.TIMEFRAME_MN1,
+        }
+
+        if request.timeframe not in timeframe_map:
+            return {
+                "success": False,
+                "error": f"Invalid timeframe: {request.timeframe}. Valid options: {list(timeframe_map.keys())}"
+            }
+
+        # Get symbol info to ensure it's available
+        symbol_info = mt5.symbol_info(request.symbol)
+        if symbol_info is None:
+            return {
+                "success": False,
+                "error": f"Symbol {request.symbol} not found"
+            }
+
+        # Make sure symbol is visible in Market Watch
+        if not symbol_info.visible:
+            if not mt5.symbol_select(request.symbol, True):
+                return {
+                    "success": False,
+                    "error": f"Failed to enable symbol {request.symbol}"
+                }
+
+        # Fetch historical data using copy_rates_from_pos
+        # This gets the most recent 'count' bars
+        rates = mt5.copy_rates_from_pos(
+            request.symbol,
+            timeframe_map[request.timeframe],
+            0,  # start position (0 = most recent)
+            request.count  # number of bars
+        )
+
+        if rates is None or len(rates) == 0:
+            return {
+                "success": False,
+                "error": f"No historical data available for {request.symbol} on {request.timeframe}"
+            }
+
+        # Convert numpy array to list of dicts
+        bars_data = []
+        for bar in rates:
+            bars_data.append({
+                "time": int(bar['time']),  # Unix timestamp
+                "open": float(bar['open']),
+                "high": float(bar['high']),
+                "low": float(bar['low']),
+                "close": float(bar['close']),
+                "tick_volume": int(bar['tick_volume']),
+                "spread": int(bar['spread']),
+                "real_volume": int(bar['real_volume'])
+            })
+
+        print(f"✅ Fetched {len(bars_data)} bars of {request.timeframe} data for {request.symbol}")
+
+        return {
+            "success": True,
+            "data": {
+                "symbol": request.symbol,
+                "timeframe": request.timeframe,
+                "bars": bars_data,
+                "count": len(bars_data)
+            }
+        }
+
+    except Exception as e:
+        print(f"❌ Exception getting historical data: {e}")
+        return {
+            "success": False,
+            "error": f"Failed to get historical data: {str(e)}"
         }
 
 @app.get("/mt5/sessions")

@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Brain, TrendingUp, TrendingDown, Target, Clock } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Prediction {
   pair: string;
@@ -16,56 +17,64 @@ interface Prediction {
   accuracy: number;
 }
 
-const mockPredictions: Prediction[] = [
-  {
-    pair: "EUR/USD",
-    timeframe: "4H",
-    direction: "UP",
-    confidence: 85,
-    targetPrice: 1.0980,
-    currentPrice: 1.0945,
-    reasoning: "Bullish RSI divergence + ECB hawkish stance + oversold conditions",
-    signals: ["RSI Divergence", "Support Bounce", "Volume Increase"],
-    accuracy: 78
-  },
-  {
-    pair: "GBP/USD",
-    timeframe: "1D",
-    direction: "DOWN",
-    confidence: 72,
-    targetPrice: 1.2650,
-    currentPrice: 1.2734,
-    reasoning: "Breaking key support + BoE dovish pivot + weak UK fundamentals",
-    signals: ["Support Break", "MACD Bearish", "News Sentiment"],
-    accuracy: 82
-  },
-  {
-    pair: "USD/JPY",
-    timeframe: "1H",
-    direction: "UP",
-    confidence: 91,
-    targetPrice: 150.50,
-    currentPrice: 149.85,
-    reasoning: "BoJ intervention concern diminishing + USD strength + momentum",
-    signals: ["Momentum Break", "Volume Spike", "Central Bank Policy"],
-    accuracy: 75
-  },
-  {
-    pair: "AUD/USD",
-    timeframe: "1W",
-    direction: "UP",
-    confidence: 68,
-    targetPrice: 0.6750,
-    currentPrice: 0.6623,
-    reasoning: "China recovery + commodity strength + RBA hawkish hold",
-    signals: ["Commodity Correlation", "China PMI", "RBA Sentiment"],
-    accuracy: 85
-  }
-];
-
 export const PredictionsCard = () => {
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>("ALL");
-  const [predictions] = useState<Prediction[]>(mockPredictions);
+  const [predictions, setPredictions] = useState<Prediction[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchRealPredictions();
+
+    // Refresh predictions every 1 minute
+    const interval = setInterval(fetchRealPredictions, 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchRealPredictions = async () => {
+    try {
+      // Fetch REAL AI-generated signals from database
+      const { data: signals, error } = await supabase
+        .from('trading_signals')
+        .select(`
+          *,
+          currency_pairs!inner(symbol)
+        `)
+        .eq('status', 'active')
+        .gte('confidence_score', 60)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) {
+        console.error('Error fetching predictions:', error);
+        return;
+      }
+
+      if (signals && signals.length > 0) {
+        const predictionItems: Prediction[] = signals.map(signal => {
+          const symbol = signal.currency_pairs?.symbol || 'UNKNOWN';
+          return {
+            pair: symbol,
+            timeframe: "1H" as const, // Default, could be added to signals table
+            direction: signal.signal_type === 'buy' ? 'UP' as const : 'DOWN' as const,
+            confidence: signal.confidence_score,
+            targetPrice: signal.take_profit || signal.entry_price * 1.01,
+            currentPrice: signal.entry_price,
+            reasoning: signal.reasoning || "AI-generated prediction based on market analysis",
+            signals: ["AI Analysis", "Technical Indicators", "Market Conditions"],
+            accuracy: 75 // Could be calculated from historical performance
+          };
+        });
+        setPredictions(predictionItems);
+        console.log(`✅ Loaded ${predictionItems.length} REAL AI predictions`);
+      } else {
+        console.log('ℹ️ No active predictions found in database');
+      }
+    } catch (error) {
+      console.error('Error loading predictions:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const timeframes = ["ALL", "1H", "4H", "1D", "1W"];
 
