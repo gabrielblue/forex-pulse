@@ -8,6 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Newspaper, Search, Filter, TrendingUp, Globe, Clock } from "lucide-react";
 
 const News = () => {
+  // NOTE: This data is for demonstration purposes only
+  // In production, integrate with real news APIs like:
+  // - NewsAPI.org
+  // - Forex Factory API
+  // - Bloomberg Terminal
+  // - Reuters Market News
+  // - Investing.com API
+
   const newsCategories = [
     { name: "All", count: 124, active: true },
     { name: "Central Banks", count: 23, active: false },
@@ -16,6 +24,7 @@ const News = () => {
     { name: "Crypto", count: 12, active: false },
   ];
 
+  // DEMO DATA - Replace with real-time news feed in production
   const topStories = [
     {
       id: 1,
@@ -26,7 +35,7 @@ const News = () => {
       sentiment: "BULLISH",
       excerpt: "Federal Reserve officials are discussing potential rate cuts following recent inflation data...",
       affectedPairs: ["USD/EUR", "USD/GBP", "USD/JPY"],
-      image: "/placeholder.svg"
+      image: null
     },
     {
       id: 2,
@@ -37,7 +46,7 @@ const News = () => {
       sentiment: "BEARISH",
       excerpt: "European Central Bank signals continued monetary tightening amid persistent inflation...",
       affectedPairs: ["EUR/USD", "EUR/GBP"],
-      image: "/placeholder.svg"
+      image: null
     },
     {
       id: 3,
@@ -48,7 +57,7 @@ const News = () => {
       sentiment: "BULLISH",
       excerpt: "British economy shows resilience with 0.6% quarterly growth beating forecasts...",
       affectedPairs: ["GBP/USD", "GBP/EUR"],
-      image: "/placeholder.svg"
+      image: null
     },
   ];
 

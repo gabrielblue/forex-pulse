@@ -652,7 +652,11 @@ export class WorldClassTradingStrategies {
   }
 
   private generateSignalId(): string {
-    return `elite_${Date.now()}_${crypto.randomUUID().substring(0, 9)}`;
+    // Generate a unique ID without relying on crypto.randomUUID() for better browser compatibility
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 11);
+    const random2 = Math.random().toString(36).substring(2, 11);
+    return `elite_${timestamp}_${random}_${random2}`;
   }
 
   // Master Strategy Combiner

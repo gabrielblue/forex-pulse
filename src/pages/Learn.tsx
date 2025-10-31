@@ -7,6 +7,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BookOpen, Play, FileText, Trophy, Clock, Star, ChevronRight } from "lucide-react";
 
 const Learn = () => {
+  // NOTE: This data is for demonstration purposes only
+  // In production, integrate with:
+  // - Learning Management System (LMS) API
+  // - Database (Supabase courses table)
+  // - User progress tracking
+  // - Real course content management system
+
+  // DEMO DATA - Replace with database queries in production
   const courses = [
     {
       id: 1,
@@ -18,7 +26,7 @@ const Learn = () => {
       lessons: 8,
       rating: 4.8,
       students: 1250,
-      image: "/placeholder.svg"
+      image: null
     },
     {
       id: 2,
@@ -30,7 +38,7 @@ const Learn = () => {
       lessons: 12,
       rating: 4.9,
       students: 890,
-      image: "/placeholder.svg"
+      image: null
     },
     {
       id: 3,
@@ -42,7 +50,7 @@ const Learn = () => {
       lessons: 10,
       rating: 4.7,
       students: 675,
-      image: "/placeholder.svg"
+      image: null
     },
     {
       id: 4,
@@ -54,10 +62,11 @@ const Learn = () => {
       lessons: 15,
       rating: 4.6,
       students: 432,
-      image: "/placeholder.svg"
+      image: null
     }
   ];
 
+  // DEMO DATA - Replace with user-specific achievements from database
   const achievements = [
     { title: "First Steps", description: "Complete your first lesson", earned: true },
     { title: "Knowledge Seeker", description: "Complete 5 courses", earned: true },
@@ -66,6 +75,7 @@ const Learn = () => {
     { title: "Trading Guru", description: "Complete all advanced courses", earned: false },
   ];
 
+  // DEMO DATA - Replace with user's recent lesson history from database
   const recentLessons = [
     { title: "Understanding Currency Pairs", course: "Forex Fundamentals", completed: true },
     { title: "Support and Resistance Levels", course: "Technical Analysis", completed: true },
