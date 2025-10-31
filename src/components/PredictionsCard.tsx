@@ -16,56 +16,59 @@ interface Prediction {
   accuracy: number;
 }
 
-const mockPredictions: Prediction[] = [
+// NOTE: This component displays AI-generated predictions for educational purposes
+// In production, predictions should come from real AI analysis via the aiAnalyzer service
+// Connected to Exness MT5 when trading bot is enabled
+const samplePredictions: Prediction[] = [
   {
     pair: "EUR/USD",
     timeframe: "4H",
     direction: "UP",
-    confidence: 85,
+    confidence: 0,
     targetPrice: 1.0980,
     currentPrice: 1.0945,
-    reasoning: "Bullish RSI divergence + ECB hawkish stance + oversold conditions",
-    signals: ["RSI Divergence", "Support Bounce", "Volume Increase"],
-    accuracy: 78
+    reasoning: "Enable Exness connection for live AI predictions based on real market data",
+    signals: ["AI Analysis Pending"],
+    accuracy: 0
   },
   {
     pair: "GBP/USD",
     timeframe: "1D",
-    direction: "DOWN",
-    confidence: 72,
+    direction: "HOLD" as any,
+    confidence: 0,
     targetPrice: 1.2650,
     currentPrice: 1.2734,
-    reasoning: "Breaking key support + BoE dovish pivot + weak UK fundamentals",
-    signals: ["Support Break", "MACD Bearish", "News Sentiment"],
-    accuracy: 82
+    reasoning: "Enable Exness connection for live AI predictions based on real market data",
+    signals: ["AI Analysis Pending"],
+    accuracy: 0
   },
   {
     pair: "USD/JPY",
     timeframe: "1H",
-    direction: "UP",
-    confidence: 91,
+    direction: "HOLD" as any,
+    confidence: 0,
     targetPrice: 150.50,
     currentPrice: 149.85,
-    reasoning: "BoJ intervention concern diminishing + USD strength + momentum",
-    signals: ["Momentum Break", "Volume Spike", "Central Bank Policy"],
-    accuracy: 75
+    reasoning: "Enable Exness connection for live AI predictions based on real market data",
+    signals: ["AI Analysis Pending"],
+    accuracy: 0
   },
   {
     pair: "AUD/USD",
     timeframe: "1W",
-    direction: "UP",
-    confidence: 68,
+    direction: "HOLD" as any,
+    confidence: 0,
     targetPrice: 0.6750,
     currentPrice: 0.6623,
-    reasoning: "China recovery + commodity strength + RBA hawkish hold",
-    signals: ["Commodity Correlation", "China PMI", "RBA Sentiment"],
-    accuracy: 85
+    reasoning: "Enable Exness connection for live AI predictions based on real market data",
+    signals: ["AI Analysis Pending"],
+    accuracy: 0
   }
 ];
 
 export const PredictionsCard = () => {
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>("ALL");
-  const [predictions] = useState<Prediction[]>(mockPredictions);
+  const [predictions] = useState<Prediction[]>(samplePredictions);
 
   const timeframes = ["ALL", "1H", "4H", "1D", "1W"];
 

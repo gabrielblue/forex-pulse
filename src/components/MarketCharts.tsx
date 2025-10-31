@@ -6,20 +6,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { TrendingUp, TrendingDown, Activity, BarChart3 } from "lucide-react";
 
-const mockChartData = [
-  { time: "09:00", price: 1.0850, high: 1.0865, low: 1.0845, open: 1.0850, close: 1.0860, volume: 1250 },
-  { time: "09:05", price: 1.0860, high: 1.0875, low: 1.0855, open: 1.0860, close: 1.0870, volume: 1380 },
-  { time: "09:10", price: 1.0870, high: 1.0885, low: 1.0865, open: 1.0870, close: 1.0880, volume: 1420 },
-  { time: "09:15", price: 1.0880, high: 1.0895, low: 1.0875, open: 1.0880, close: 1.0890, volume: 1560 },
-  { time: "09:20", price: 1.0890, high: 1.0905, low: 1.0885, open: 1.0890, close: 1.0895, volume: 1340 },
-  { time: "09:25", price: 1.0895, high: 1.0910, low: 1.0890, open: 1.0895, close: 1.0905, volume: 1480 },
+// NOTE: This displays sample chart data for UI demonstration
+// In production, this should fetch real-time OHLCV data from MT5 via exnessAPI.getHistoricalData()
+// The real implementation should use WebSocket or polling for live price updates
+const sampleChartData = [
+  { time: "Waiting", price: 0, high: 0, low: 0, open: 0, close: 0, volume: 0 },
 ];
 
-const instruments = [
-  { symbol: "EURUSD", name: "Euro/US Dollar", price: 1.0895, change: +0.0023, changePercent: +0.21 },
-  { symbol: "GBPUSD", name: "British Pound/US Dollar", price: 1.2745, change: -0.0018, changePercent: -0.14 },
-  { symbol: "USDJPY", name: "US Dollar/Japanese Yen", price: 149.82, change: +0.45, changePercent: +0.30 },
-  { symbol: "AUDUSD", name: "Australian Dollar/US Dollar", price: 0.6523, change: +0.0008, changePercent: +0.12 },
+// NOTE: These instruments should be populated from real MT5 price data
+// Connect to Exness MT5 to see live prices via exnessAPI.getCurrentPrice()
+const sampleInstruments = [
+  { symbol: "EURUSD", name: "Euro/US Dollar", price: 0, change: 0, changePercent: 0 },
+  { symbol: "GBPUSD", name: "British Pound/US Dollar", price: 0, change: 0, changePercent: 0 },
+  { symbol: "USDJPY", name: "US Dollar/Japanese Yen", price: 0, change: 0, changePercent: 0 },
+  { symbol: "AUDUSD", name: "Australian Dollar/US Dollar", price: 0, change: 0, changePercent: 0 },
 ];
 
 export const MarketCharts = () => {
@@ -27,13 +27,13 @@ export const MarketCharts = () => {
   const [timeframe, setTimeframe] = useState("5M");
   const [chartType, setChartType] = useState("line");
 
-  const selectedData = instruments.find(i => i.symbol === selectedInstrument);
+  const selectedData = sampleInstruments.find(i => i.symbol === selectedInstrument);
 
   return (
     <div className="space-y-6">
       {/* Market Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {instruments.map((instrument) => (
+        {sampleInstruments.map((instrument) => (
           <Card key={instrument.symbol} className="cursor-pointer hover:shadow-md transition-shadow"
                 onClick={() => setSelectedInstrument(instrument.symbol)}>
             <CardContent className="p-4">
@@ -90,7 +90,7 @@ export const MarketCharts = () => {
         <CardContent>
           <div className="h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={mockChartData}>
+              <LineChart data={sampleChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="time" stroke="hsl(var(--muted-foreground))" />
                 <YAxis domain={['dataMin - 0.001', 'dataMax + 0.001']} stroke="hsl(var(--muted-foreground))" />

@@ -14,61 +14,24 @@ interface NewsItem {
   summary: string;
 }
 
-const mockNews: NewsItem[] = [
+// NOTE: This displays sample news for UI demonstration
+// In production, integrate with real news APIs (e.g., Forex Factory, Trading Economics, Reuters)
+// Consider implementing a news feed service that fetches real-time market news
+const sampleNews: NewsItem[] = [
   {
     id: "1",
-    title: "Fed Officials Signal Potential Rate Pause in December",
+    title: "Connect to real news feed for live market updates",
     impact: "HIGH",
-    sentiment: "BEARISH",
+    sentiment: "NEUTRAL",
     affectedPairs: ["EUR/USD", "GBP/USD", "AUD/USD"],
-    timestamp: new Date(Date.now() - 15 * 60 * 1000),
-    source: "Reuters",
-    summary: "Multiple Fed officials suggest inflation data may warrant a pause in rate hikes, weakening USD outlook."
-  },
-  {
-    id: "2",
-    title: "ECB's Lagarde Hints at Extended Tightening Cycle",
-    impact: "HIGH",
-    sentiment: "BULLISH",
-    affectedPairs: ["EUR/USD", "EUR/GBP"],
-    timestamp: new Date(Date.now() - 32 * 60 * 1000),
-    source: "Bloomberg",
-    summary: "ECB President suggests more aggressive stance on inflation, potentially strengthening EUR."
-  },
-  {
-    id: "3",
-    title: "UK GDP Data Shows Unexpected Growth",
-    impact: "MEDIUM",
-    sentiment: "BULLISH",
-    affectedPairs: ["GBP/USD", "EUR/GBP"],
-    timestamp: new Date(Date.now() - 45 * 60 * 1000),
-    source: "Financial Times",
-    summary: "Q3 GDP beats expectations at 0.6% vs forecast 0.4%, supporting GBP strength."
-  },
-  {
-    id: "4",
-    title: "China Manufacturing PMI Exceeds Forecasts",
-    impact: "MEDIUM",
-    sentiment: "BULLISH",
-    affectedPairs: ["AUD/USD", "NZD/USD"],
-    timestamp: new Date(Date.now() - 78 * 60 * 1000),
-    source: "Reuters",
-    summary: "Strong manufacturing data from China boosts commodity-linked currencies."
-  },
-  {
-    id: "5",
-    title: "Oil Prices Surge on Middle East Tensions",
-    impact: "MEDIUM",
-    sentiment: "BULLISH",
-    affectedPairs: ["USD/CAD", "USD/NOK"],
-    timestamp: new Date(Date.now() - 95 * 60 * 1000),
-    source: "Bloomberg",
-    summary: "Geopolitical tensions drive oil higher, affecting oil-producing nations' currencies."
+    timestamp: new Date(),
+    source: "System",
+    summary: "Enable news feed integration to receive real-time market-moving events and economic data releases."
   }
 ];
 
 export const NewsAlertsCard = () => {
-  const [news, setNews] = useState<NewsItem[]>(mockNews);
+  const [news, setNews] = useState<NewsItem[]>(sampleNews);
 
   const getImpactColor = (impact: string) => {
     switch (impact) {
