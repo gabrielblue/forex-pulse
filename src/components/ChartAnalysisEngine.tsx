@@ -277,7 +277,7 @@ export const ChartAnalysisEngine = () => {
     basePrice: number
   ) => {
     let score = 0;
-    let reasoning = [];
+    const reasoning = [];
 
     // Trend analysis
     if (trend === "BULLISH") {
