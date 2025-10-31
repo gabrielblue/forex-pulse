@@ -64,8 +64,44 @@ class ExnessAPI {
   private connectionInfo: any = null;
   private lastUpdate: Date = new Date();
 
-  // MT5 Bridge URL - should point to your local Python service
-  private readonly MT5_BRIDGE_URL = 'http://localhost:8001';
+  // MT5 Bridge URL - configurable via environment variable
+  private readonly MT5_BRIDGE_URL = import.meta.env.VITE_MT5_BRIDGE_URL || 'http://localhost:8001';
+  private readonly REQUEST_TIMEOUT = 30000; // 30 seconds
+  private readonly MAX_RETRIES = 3;
+
+  /**
+   * Helper method to fetch with timeout and retry logic
+   */
+  private async fetchWithTimeout(
+    url: string,
+    options: RequestInit,
+    retries: number = this.MAX_RETRIES
+  ): Promise<Response> {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), this.REQUEST_TIMEOUT);
+
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+        return response;
+      } catch (error: any) {
+        console.warn(`Fetch attempt ${i + 1}/${retries} failed:`, error.message);
+
+        if (i === retries - 1) {
+          throw new Error(`Request failed after ${retries} attempts: ${error.message}`);
+        }
+
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+      }
+    }
+    throw new Error('Request failed');
+  }
 
   async connect(credentials: ExnessCredentials): Promise<boolean> {
     try {
@@ -84,8 +120,8 @@ class ExnessAPI {
 
       console.log('✅ ExnessAPI: MT5 Bridge is available, attempting connection...');
 
-      // Connect to MT5 through the bridge
-      const response = await fetch(`${this.MT5_BRIDGE_URL}/mt5/connect`, {
+      // Connect to MT5 through the bridge with timeout and retry
+      const response = await this.fetchWithTimeout(`${this.MT5_BRIDGE_URL}/mt5/connect`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

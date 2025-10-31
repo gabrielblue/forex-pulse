@@ -27,28 +27,28 @@ export interface RiskParameters {
 class OrderManager {
   private isAutoTradingEnabled = false;
   private riskParams: RiskParameters = {
-    maxRiskPerTrade: 15.0, // Ultra aggressive: 15% for maximum day trading
-    maxDailyLoss: 40.0, // Ultra aggressive: 40% for day trading
+    maxRiskPerTrade: 2.0, // Professional standard: 2% per trade maximum
+    maxDailyLoss: 10.0, // Professional standard: 10% daily loss limit
     maxDrawdown: 15.0,
-    maxPositionSize: 100.0, // Ultra aggressive: 100 lots for larger positions
-    maxConcurrentPositions: 100, // Ultra aggressive: 100 positions for maximum opportunities
+    maxPositionSize: 5.0, // Professional standard: 5 lots maximum
+    maxConcurrentPositions: 5, // Professional standard: 5 positions for proper risk management
     useStopLoss: true,
     useTakeProfit: true,
-    minAccountBalance: 25, // Reduced: $25 minimum for accessibility
-    minMarginLevel: 5, // Ultra aggressive: 5% for maximum leverage usage
-    maxLeverage: 500, // Max 1:500 leverage
+    minAccountBalance: 100, // Professional standard: $100 minimum for proper trading
+    minMarginLevel: 100, // Professional standard: 100% margin level requirement
+    maxLeverage: 50, // Professional standard: Max 1:50 leverage (reduced from 1:500)
     emergencyStopEnabled: true
   };
 
   private lastOrderTime: number = 0;
-  private minOrderInterval: number = 100; // Ultra aggressive: 0.1 seconds between orders
+  private minOrderInterval: number = 1000; // Professional standard: 1 second minimum between orders
   private dailyTradeCount: number = 0;
-  private maxDailyTrades: number = 5000; // Ultra aggressive: 5000 trades per day
+  private maxDailyTrades: number = 100; // Professional standard: 100 trades per day maximum
 
   async initialize(): Promise<void> {
     await this.loadRiskParameters();
     await this.resetDailyCounters();
-    console.log('🚀 OrderManager initialized with ENHANCED ULTRA AGGRESSIVE parameters for maximum day trading opportunities');
+    console.log('🚀 OrderManager initialized with PROFESSIONAL RISK MANAGEMENT parameters for safe trading');
     console.log('⚡ Risk settings:', {
       maxRiskPerTrade: this.riskParams.maxRiskPerTrade + '%',
       maxDailyLoss: this.riskParams.maxDailyLoss + '%',
@@ -70,25 +70,25 @@ class OrderManager {
         .single();
 
       if (botSettings) {
-        // Override with user settings but keep conservative limits for real trading
+        // Override with user settings but enforce professional risk limits
         this.riskParams = {
-          maxRiskPerTrade: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '10'), 15.0), // Increased to max 15%
-          maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '30'), 40.0), // Increased to max 40%
+          maxRiskPerTrade: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '2'), 5.0), // Max 5% per trade
+          maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '10'), 20.0), // Max 20% daily loss
           maxDrawdown: 15.0,
-          maxPositionSize: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '10') * 10, 100.0), // Increased to max 100 lots
-          maxConcurrentPositions: Math.min(parseInt(botSettings.max_daily_trades?.toString() || '50'), 100), // Increased to max 100 positions
+          maxPositionSize: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '2') * 2, 10.0), // Max 10 lots
+          maxConcurrentPositions: Math.min(parseInt(botSettings.max_daily_trades?.toString() || '5'), 10), // Max 10 positions
           useStopLoss: true, // Always required for real trading
           useTakeProfit: true,
-          minAccountBalance: 10, // Ultra reduced minimum balance
-          minMarginLevel: 5, // Ultra reduced margin level requirement
-          maxLeverage: 500,
+          minAccountBalance: 100, // Professional minimum balance
+          minMarginLevel: 100, // Professional margin level requirement (100%)
+          maxLeverage: 50, // Professional leverage limit (1:50)
           emergencyStopEnabled: true
         };
-        
-        this.maxDailyTrades = Math.min(parseInt(botSettings.max_daily_trades?.toString() || '1000'), 5000); // Increased daily trade limit
+
+        this.maxDailyTrades = Math.min(parseInt(botSettings.max_daily_trades?.toString() || '100'), 200); // Max 200 daily trades
       }
-      
-      console.log('Ultra enhanced risk parameters loaded for aggressive day trading:', this.riskParams);
+
+      console.log('Professional risk parameters loaded for safe trading:', this.riskParams);
     } catch (error) {
       console.error('Failed to load risk parameters:', error);
     }
@@ -749,31 +749,36 @@ class OrderManager {
 
   async emergencyStop(): Promise<void> {
     const accountType = exnessAPI.getAccountType();
-    console.log(`🚨 ENHANCED EMERGENCY STOP ACTIVATED for ${accountType?.toUpperCase()} account`);
-    
+    console.log(`🚨 EMERGENCY STOP ACTIVATED for ${accountType?.toUpperCase()} account`);
+
     try {
-      // Disable auto trading immediately
+      // COMPLETELY disable auto trading
       this.setAutoTrading(false);
-      
-      // Close all positions
+
+      // Close all open positions immediately
       await this.closeAllPositions();
-      
-      // Temporarily reduce trading limits instead of stopping completely
-      this.riskParams.maxRiskPerTrade = Math.max(1.0, this.riskParams.maxRiskPerTrade * 0.3);
-      this.riskParams.maxConcurrentPositions = Math.max(1, Math.floor(this.riskParams.maxConcurrentPositions * 0.3));
-      
-      console.log(`📉 Emergency risk reduction: Risk per trade reduced to ${this.riskParams.maxRiskPerTrade}%, max positions to ${this.riskParams.maxConcurrentPositions}`);
-      
+
+      // STOP all trading completely - set emergency flag
+      this.riskParams.emergencyStopEnabled = false;
+
+      // Set risk parameters to zero to prevent any new trades
+      this.riskParams.maxRiskPerTrade = 0;
+      this.riskParams.maxConcurrentPositions = 0;
+      this.maxDailyTrades = 0;
+
+      console.log('🛑 EMERGENCY STOP: All trading COMPLETELY HALTED');
+
       // Log emergency stop
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        console.log('🚨 Enhanced emergency stop executed for user:', user.id);
-        
-        // Update bot settings to reduce risk instead of disabling
+        console.log('🚨 Emergency stop executed for user:', user.id);
+
+        // Update bot settings to disable trading
         await supabase
           .from('bot_settings')
           .update({
-            max_risk_per_trade: this.riskParams.maxRiskPerTrade,
+            is_active: false,
+            max_risk_per_trade: 0,
             updated_at: new Date().toISOString()
           })
           .eq('user_id', user.id);

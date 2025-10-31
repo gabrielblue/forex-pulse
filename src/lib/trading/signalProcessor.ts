@@ -25,7 +25,7 @@ export interface SignalProcessorConfig {
 
 class SignalProcessor {
   private config: SignalProcessorConfig = {
-    minConfidence: 10, // Ultra low for maximum day trading opportunities
+    minConfidence: 70, // Professional standard: 70% minimum confidence for quality signals
     enabledTimeframes: ['5M', '15M', '30M', '1H'], // Short timeframes for day trading
     enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'], // All major pairs
     autoExecute: false
@@ -34,12 +34,12 @@ class SignalProcessor {
   private isProcessing = false;
   private lastProcessTime = 0;
   private processedSignalsToday = 0;
-  private maxDailyProcessing = 10000; // Ultra high processing limit
+  private maxDailyProcessing = 500; // Professional standard: 500 signal processing limit per day
 
   async initialize(): Promise<void> {
     await this.loadConfiguration();
     this.startSignalMonitoring();
-    console.log('🔧 Enhanced Signal Processor initialized with ultra aggressive parameters');
+    console.log('🔧 Signal Processor initialized with professional quality standards');
   }
 
   private async loadConfiguration(): Promise<void> {

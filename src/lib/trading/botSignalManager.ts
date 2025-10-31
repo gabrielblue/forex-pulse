@@ -19,12 +19,12 @@ export interface SignalGenerationConfig {
 class BotSignalManager {
   private config: SignalGenerationConfig = {
     enabled: false,
-    interval: 1000, // Ultra aggressive: 1 second for maximum day trading
+    interval: 60000, // Professional standard: 60 seconds (1 minute) for quality analysis
     symbols: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'], // All major pairs
-    minConfidence: 10, // Ultra aggressive: lowered to 10% for maximum trades
+    minConfidence: 70, // Professional standard: 70% minimum confidence for quality signals
     autoExecute: false,
-    maxDailySignals: 2000, // Ultra high limit for day trading
-    aggressiveMode: true
+    maxDailySignals: 200, // Professional standard: 200 signals maximum per day
+    aggressiveMode: false
   };
 
   private generationInterval: NodeJS.Timeout | null = null;

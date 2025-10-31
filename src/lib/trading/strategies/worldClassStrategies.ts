@@ -553,8 +553,12 @@ export class WorldClassTradingStrategies {
       sum1Sq += diff1 * diff1;
       sum2Sq += diff2 * diff2;
     }
-    
-    return numerator / Math.sqrt(sum1Sq * sum2Sq);
+
+    // Prevent division by zero
+    const denominator = Math.sqrt(sum1Sq * sum2Sq);
+    if (denominator === 0) return 0;
+
+    return numerator / denominator;
   }
 
   private calculateNormalizedSpread(prices1: number[], prices2: number[]): number {

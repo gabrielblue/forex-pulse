@@ -2,9 +2,17 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-// Use hardcoded values since Lovable doesn't support VITE_ env variables
-const SUPABASE_URL = "https://ljjepgxndqpdztpscrnt.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqamVwZ3huZHFwZHp0cHNjcm50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzNDcyMTAsImV4cCI6MjA2ODkyMzIxMH0.jrLAWr0QdYjqDVZai-riymFSpZQDTAxKPQ0i0m6AFwQ";
+// Use environment variables for security
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+  throw new Error(
+    'Missing Supabase environment variables. Please create a .env file with:\n' +
+    'VITE_SUPABASE_URL=your_project_url\n' +
+    'VITE_SUPABASE_ANON_KEY=your_anon_key'
+  );
+}
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";

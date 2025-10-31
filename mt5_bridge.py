@@ -18,13 +18,19 @@ import uvicorn
 
 app = FastAPI(title="MT5 Bridge Service", version="1.0.0")
 
-# Enable CORS for all origins
+# Enable CORS with restricted origins for security
+# Only allow localhost and development server
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000"
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # Store active sessions
@@ -437,10 +443,11 @@ if __name__ == "__main__":
     print("🚀 Starting MT5 Bridge Service...")
     print("📋 Make sure MetaTrader 5 terminal is running!")
     print("🔗 Service will be available at http://localhost:8001")
-    
+    print("🔒 Security: Binding to localhost only (127.0.0.1)")
+
     uvicorn.run(
         app,
-        host="0.0.0.0",
+        host="127.0.0.1",  # Bind to localhost only for security
         port=8001,
         log_level="info"
     )
