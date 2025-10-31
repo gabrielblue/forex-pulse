@@ -652,12 +652,15 @@ export class WorldClassTradingStrategies {
   }
 
   private generateSignalId(): string {
-    // Generate a unique ID without relying on crypto.randomUUID() for better browser compatibility
+    // Generate a unique ID using timestamp and performance metrics for uniqueness
     const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(2, 11);
-    const random2 = Math.random().toString(36).substring(2, 11);
-    return `elite_${timestamp}_${random}_${random2}`;
+    const perfNow = typeof performance !== 'undefined' ? performance.now().toString(36).replace('.', '') : '';
+    const counter = (++this.signalCounter).toString(36);
+    const processId = typeof process !== 'undefined' ? (process.pid || 0).toString(36) : '';
+    return `elite_${timestamp}_${perfNow}_${counter}_${processId}`;
   }
+
+  private signalCounter = 0;
 
   // Master Strategy Combiner
   async deployEliteStrategyCombination(marketData: any, indicators: any): Promise<AdvancedSignal[]> {
