@@ -352,31 +352,54 @@ class SignalProcessor {
       };
     } catch (error) {
       console.error('Failed to get market data:', error);
-      return this.generateRealisticMarketData(symbol);
+      return await this.generateRealisticMarketData(symbol);
     }
   }
 
-  private generateRealisticMarketData(symbol: string): MarketData {
-    const basePrice = this.getBasePrice(symbol);
-    const prices: number[] = [];
-    const volumes: number[] = [];
-    const timestamps: Date[] = [];
+  private async generateRealisticMarketData(symbol: string): Promise<MarketData> {
+    // Attempt to fetch REAL historical data from MT5
+    try {
+      if (exnessAPI.isConnectedToExness()) {
+        const historicalData = await exnessAPI.getHistoricalData(symbol, 60, 200); // H1 timeframe, 200 bars
 
-    let currentPrice = basePrice;
-    const now = new Date();
+        if (historicalData && historicalData.length > 0) {
+          console.log(`✅ Using real MT5 historical data for ${symbol} (${historicalData.length} bars)`);
 
-    // NOTE: This should use REAL historical price data from MT5
-    // For now, returning minimal data - real implementation needs MT5 API
-    console.warn('⚠️ generateHistoricalPriceData should use real MT5 historical data');
-    
-    // Return minimal data until MT5 historical API is integrated
-    for (let i = 0; i < 200; i++) {
-      prices.push(basePrice);
-      volumes.push(0);
-      timestamps.push(new Date(now.getTime() - ((199 - i) * 60000)));
+          return {
+            symbol,
+            prices: historicalData.map((bar: any) => bar.close),
+            volumes: historicalData.map((bar: any) => bar.tick_volume),
+            timestamps: historicalData.map((bar: any) => new Date(bar.time * 1000))
+          };
+        }
+      }
+
+      // Fallback: If MT5 not connected, use minimal data
+      console.warn('⚠️ MT5 not connected, using fallback minimal data for', symbol);
+      const basePrice = this.getBasePrice(symbol);
+      const now = new Date();
+      const prices: number[] = [];
+      const volumes: number[] = [];
+      const timestamps: Date[] = [];
+
+      for (let i = 0; i < 200; i++) {
+        prices.push(basePrice);
+        volumes.push(0);
+        timestamps.push(new Date(now.getTime() - ((199 - i) * 60000)));
+      }
+
+      return { symbol, prices, volumes, timestamps };
+    } catch (error) {
+      console.error('❌ Error fetching historical data, using fallback:', error);
+      const basePrice = this.getBasePrice(symbol);
+      const now = new Date();
+      return {
+        symbol,
+        prices: Array(200).fill(basePrice),
+        volumes: Array(200).fill(0),
+        timestamps: Array(200).fill(0).map((_, i) => new Date(now.getTime() - ((199 - i) * 60000)))
+      };
     }
-
-    return { symbol, prices, volumes, timestamps };
   }
 
   private async saveSignalToDatabase(signal: TradingSignal, symbol: string): Promise<void> {

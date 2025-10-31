@@ -62,6 +62,12 @@ class ClosePositionRequest(BaseModel):
     session_id: str
     ticket: int
 
+class HistoricalDataRequest(BaseModel):
+    session_id: str
+    symbol: str
+    timeframe: int  # MT5 timeframe constant (e.g., 1=M1, 5=M5, 15=M15, 60=H1, 240=H4, 1440=D1)
+    count: int  # Number of bars to fetch
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize MT5 connection on startup"""
@@ -429,6 +435,70 @@ async def place_order(order: OrderRequest):
         return {
             "success": False,
             "error": f"Failed to place order: {str(e)}"
+        }
+
+@app.post("/mt5/historical_data")
+async def get_historical_data(request: HistoricalDataRequest):
+    """Get historical price data for technical analysis"""
+    try:
+        if request.session_id not in sessions:
+            return {
+                "success": False,
+                "error": "Invalid session ID"
+            }
+
+        # Update last activity
+        sessions[request.session_id]["last_activity"] = datetime.now().isoformat()
+
+        # Get symbol info and ensure it's visible
+        symbol_info = mt5.symbol_info(request.symbol)
+        if symbol_info is None:
+            return {
+                "success": False,
+                "error": f"Symbol {request.symbol} not found"
+            }
+
+        if not symbol_info.visible:
+            mt5.symbol_select(request.symbol, True)
+
+        # Fetch historical data
+        rates = mt5.copy_rates_from_pos(request.symbol, request.timeframe, 0, request.count)
+
+        if rates is None or len(rates) == 0:
+            return {
+                "success": False,
+                "error": f"Failed to get historical data for {request.symbol}"
+            }
+
+        # Convert to JSON-serializable format
+        bars_data = []
+        for bar in rates:
+            bars_data.append({
+                "time": int(bar[0]),  # Unix timestamp
+                "open": float(bar[1]),
+                "high": float(bar[2]),
+                "low": float(bar[3]),
+                "close": float(bar[4]),
+                "tick_volume": int(bar[5]),
+                "spread": int(bar[6]),
+                "real_volume": int(bar[7])
+            })
+
+        return {
+            "success": True,
+            "data": {
+                "symbol": request.symbol,
+                "timeframe": request.timeframe,
+                "count": len(bars_data),
+                "bars": bars_data
+            }
+        }
+
+    except Exception as e:
+        print(f"❌ Exception getting historical data: {e}")
+        return {
+            "success": False,
+            "error": f"Failed to get historical data: {str(e)}"
         }
 
 @app.get("/mt5/sessions")

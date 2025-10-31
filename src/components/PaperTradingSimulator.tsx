@@ -63,7 +63,9 @@ export const PaperTradingSimulator = () => {
     takeProfit: ""
   });
 
-  // Mock current prices
+  // Static prices for paper trading simulator - educational/testing purposes only
+  // NOTE: This is intentionally a simplified simulator for learning
+  // For real trading, use the Exness Integration with live MT5 data
   const currentPrices: Record<string, number> = {
     "EUR/USD": 1.0845,
     "GBP/USD": 1.2734,

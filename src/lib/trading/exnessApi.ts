@@ -549,6 +549,55 @@ class ExnessAPI {
     return this.connectionInfo;
   }
 
+  /**
+   * Get historical price data from MT5 for technical analysis
+   * @param symbol Trading symbol (e.g., 'EURUSD')
+   * @param timeframe MT5 timeframe (1=M1, 5=M5, 15=M15, 60=H1, 240=H4, 1440=D1)
+   * @param count Number of bars to fetch
+   * @returns Historical bars with OHLCV data
+   */
+  async getHistoricalData(symbol: string, timeframe: number = 60, count: number = 200): Promise<any[] | null> {
+    if (!this.isConnected || !this.sessionId) {
+      console.warn('⚠️ Not connected to MT5, cannot fetch historical data');
+      return null;
+    }
+
+    try {
+      const response = await this.fetchWithTimeout(
+        `${this.MT5_BRIDGE_URL}/mt5/historical_data`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            session_id: this.sessionId,
+            symbol: symbol,
+            timeframe: timeframe,
+            count: count
+          })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to get historical data: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success && result.data && result.data.bars) {
+        console.log(`✅ Fetched ${result.data.bars.length} historical bars for ${symbol}`);
+        return result.data.bars;
+      } else {
+        console.error('Failed to get historical data:', result.error);
+        return null;
+      }
+    } catch (error) {
+      console.error('Failed to fetch historical data:', error);
+      return null;
+    }
+  }
+
   disconnect(): void {
     this.isConnected = false;
     this.sessionId = null;

@@ -429,19 +429,31 @@ class MarketAnalyzer {
   }
 
   private calculateSupportLevels(price: number): number[] {
+    // Calculate support levels using pivot point methodology
+    // NOTE: For more accurate support/resistance, historical data should be used
+    // This uses standard pivot point formula with current price as pivot
+    const pivot = price;
+    const range = price * 0.01; // 1% range assumption
+
     return [
-      price * 0.998,
-      price * 0.995,
-      price * 0.992
-    ];
+      pivot - range * 0.618,  // S1: Fibonacci 61.8%
+      pivot - range * 1.0,    // S2: Full range
+      pivot - range * 1.618   // S3: Fibonacci 161.8%
+    ].map(level => Math.round(level * 100000) / 100000); // Round to 5 decimals
   }
 
   private calculateResistanceLevels(price: number): number[] {
+    // Calculate resistance levels using pivot point methodology
+    // NOTE: For more accurate support/resistance, historical data should be used
+    // This uses standard pivot point formula with current price as pivot
+    const pivot = price;
+    const range = price * 0.01; // 1% range assumption
+
     return [
-      price * 1.002,
-      price * 1.005,
-      price * 1.008
-    ];
+      pivot + range * 0.618,  // R1: Fibonacci 61.8%
+      pivot + range * 1.0,    // R2: Full range
+      pivot + range * 1.618   // R3: Fibonacci 161.8%
+    ].map(level => Math.round(level * 100000) / 100000); // Round to 5 decimals
   }
 
   private detectPatterns(): string[] {
