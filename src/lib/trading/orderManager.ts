@@ -314,13 +314,19 @@ class OrderManager {
     try {
       // Get real-time price for accurate margin calculation
       const currentPrice = await exnessAPI.getCurrentPrice(orderRequest.symbol);
-      if (!currentPrice) {
+      if (!currentPrice || !currentPrice.ask || !currentPrice.bid) {
         throw new Error('Unable to get current price for margin calculation');
       }
 
       // Enhanced margin calculation for real trading
       const leverageString = accountInfo.leverage || '1:100';
-      const leverage = parseInt(leverageString.split(':')[1] || '100');
+      const leverageParts = leverageString.split(':');
+      const leverage = leverageParts[1] ? parseInt(leverageParts[1]) : 100;
+
+      if (!leverage || leverage <= 0) {
+        throw new Error('Invalid leverage value');
+      }
+
       const contractSize = 100000; // Standard lot
       const priceToUse = orderRequest.type === 'BUY' ? currentPrice.ask : currentPrice.bid;
       
@@ -377,14 +383,17 @@ class OrderManager {
 
       // Get real-time price for accurate calculations
       const currentPrice = await exnessAPI.getCurrentPrice(orderRequest.symbol);
-      if (!currentPrice) {
+      if (!currentPrice || !currentPrice.ask || !currentPrice.bid) {
         throw new Error('Unable to get current market price for position sizing');
       }
 
       // Calculate stop loss distance in pips - tighter for day trading
       let stopLossDistance = 8; // Ultra tight: 8 pips for day trading
-      if (orderRequest.stopLoss) {
+      if (orderRequest.stopLoss && orderRequest.stopLoss > 0) {
         const pipValue = this.getPipValue(orderRequest.symbol);
+        if (pipValue <= 0) {
+          throw new Error('Invalid pip value calculated');
+        }
         const priceToUse = orderRequest.type === 'BUY' ? currentPrice.ask : currentPrice.bid;
         stopLossDistance = Math.abs(priceToUse - orderRequest.stopLoss) / pipValue;
       }

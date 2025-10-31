@@ -32,6 +32,7 @@ class BotSignalManager {
   private lastGenerationTime = 0;
   private dailySignalCount = 0;
   private lastResetDate = new Date().toDateString();
+  private analysisLocks: Set<string> = new Set(); // Track symbols currently being analyzed
 
   async initialize(config?: Partial<SignalGenerationConfig>): Promise<void> {
     if (config) {
@@ -137,23 +138,32 @@ class BotSignalManager {
   }
 
   private async analyzeAndGenerateSignal(symbol: string): Promise<void> {
+    // Prevent race condition - skip if already analyzing this symbol
+    if (this.analysisLocks.has(symbol)) {
+      console.log(`⏭️  Skipping ${symbol} - already being analyzed`);
+      return;
+    }
+
+    // Acquire lock
+    this.analysisLocks.add(symbol);
+
     try {
       // Get current market price
       const marketPrice = await exnessAPI.getCurrentPrice(symbol);
-      if (!marketPrice) {
-        console.warn(`Cannot get price for ${symbol}`);
+      if (!marketPrice || !marketPrice.bid || !marketPrice.ask) {
+        console.warn(`Cannot get valid price for ${symbol}`);
         return;
       }
 
       // Perform technical analysis
       const analysis = await this.performTechnicalAnalysis(symbol, marketPrice);
-      
+
       // Validate analysis result
       if (!analysis || typeof analysis.confidence !== 'number') {
         console.warn(`Invalid analysis result for ${symbol}:`, analysis);
         return;
       }
-      
+
       // Generate signal if confidence is high enough
       if (analysis.confidence >= this.config.minConfidence) {
         await this.saveSignal({
@@ -161,9 +171,9 @@ class BotSignalManager {
           type: analysis.direction,
           confidence: analysis.confidence,
           entryPrice: marketPrice.bid,
-          stopLoss: analysis.stopLoss,
-          takeProfit: analysis.takeProfit,
-          reasoning: analysis.reasoning,
+          stopLoss: analysis.stopLoss || 0,
+          takeProfit: analysis.takeProfit || 0,
+          reasoning: analysis.reasoning || 'Technical analysis signal',
           volume: analysis.volume || 0.15 // Enhanced default volume
         });
 
@@ -171,6 +181,9 @@ class BotSignalManager {
       }
     } catch (error) {
       console.error(`Failed to analyze ${symbol}:`, error);
+    } finally {
+      // Always release lock
+      this.analysisLocks.delete(symbol);
     }
   }
 

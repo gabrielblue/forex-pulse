@@ -35,6 +35,7 @@ class SignalProcessor {
   private lastProcessTime = 0;
   private processedSignalsToday = 0;
   private maxDailyProcessing = 500; // Professional standard: 500 signal processing limit per day
+  private monitoringInterval: NodeJS.Timeout | null = null; // Track interval for cleanup
 
   async initialize(): Promise<void> {
     await this.loadConfiguration();
@@ -67,23 +68,29 @@ class SignalProcessor {
   }
 
   private startSignalMonitoring(): void {
+    // Clear existing interval if any
+    if (this.monitoringInterval) {
+      clearInterval(this.monitoringInterval);
+      this.monitoringInterval = null;
+    }
+
     // Monitor for new signals every 1 second for ultra aggressive day trading
-    setInterval(async () => {
+    this.monitoringInterval = setInterval(async () => {
       if (this.isProcessing) return;
-      
+
       // Enhanced rate limiting
       const timeSinceLastProcess = Date.now() - this.lastProcessTime;
       if (timeSinceLastProcess < 500) return; // 0.5 second minimum
-      
+
       if (this.processedSignalsToday >= this.maxDailyProcessing) {
         console.log(`📊 Daily signal processing limit reached: ${this.processedSignalsToday}/${this.maxDailyProcessing}`);
         return;
       }
-      
+
       this.isProcessing = true;
       this.lastProcessTime = Date.now();
       this.processedSignalsToday++;
-      
+
       try {
         await this.processNewSignals();
       } catch (error) {
@@ -92,6 +99,14 @@ class SignalProcessor {
         this.isProcessing = false;
       }
     }, 1000); // Ultra reduced interval for maximum processing frequency
+  }
+
+  stopSignalMonitoring(): void {
+    if (this.monitoringInterval) {
+      clearInterval(this.monitoringInterval);
+      this.monitoringInterval = null;
+      console.log('🛑 Signal monitoring stopped');
+    }
   }
 
   private async processNewSignals(): Promise<void> {
