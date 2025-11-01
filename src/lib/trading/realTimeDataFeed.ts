@@ -115,10 +115,38 @@ class RealTimeDataFeed {
   }
 
   async getHistoricalPrices(symbol: string, hours: number = 24): Promise<PriceUpdate[]> {
-    // For historical data, you would need to implement MT5 history endpoint
-    // For now, return empty array as we focus on real-time trading
-    console.warn('Historical price data requires MT5 history API implementation');
-    return [];
+    try {
+      if (!exnessAPI.isConnectedToExness()) {
+        console.warn('Cannot fetch historical prices - not connected to Exness');
+        return [];
+      }
+
+      // Calculate number of bars needed (60 = H1 timeframe, 1 bar per hour)
+      const barsNeeded = Math.ceil(hours);
+
+      // Fetch real historical data from MT5
+      const historicalData = await exnessAPI.getHistoricalData(symbol, 60, barsNeeded);
+
+      if (!historicalData || historicalData.length === 0) {
+        console.warn(`No historical data available for ${symbol}`);
+        return [];
+      }
+
+      // Convert to PriceUpdate format
+      const priceUpdates: PriceUpdate[] = historicalData.map((bar: any) => ({
+        symbol,
+        bid: bar.close,
+        ask: bar.close + 0.0001, // Approximate spread
+        timestamp: new Date(bar.time * 1000),
+        spread: bar.spread || 0
+      }));
+
+      console.log(`✅ Fetched ${priceUpdates.length} historical prices for ${symbol}`);
+      return priceUpdates;
+    } catch (error) {
+      console.error(`Failed to fetch historical prices for ${symbol}:`, error);
+      return [];
+    }
   }
 
   updateConfig(newConfig: Partial<DataFeedConfig>): void {

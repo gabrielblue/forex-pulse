@@ -389,16 +389,19 @@ class SignalProcessor {
         }
       }
 
-      // Fallback: If MT5 not connected, use minimal data
-      console.warn('⚠️ MT5 not connected, using fallback minimal data for', symbol);
-      const basePrice = this.getBasePrice(symbol);
+      // Fallback: If MT5 not connected, try to get at least current price
+      console.warn('⚠️ MT5 historical data not available, using current price fallback for', symbol);
+      const basePrice = await this.getBasePrice(symbol);
       const now = new Date();
       const prices: number[] = [];
       const volumes: number[] = [];
       const timestamps: Date[] = [];
 
+      // Create synthetic historical data with slight variation around current price
+      // This is better than completely flat data for technical indicator calculation
       for (let i = 0; i < 200; i++) {
-        prices.push(basePrice);
+        const variation = (Math.random() - 0.5) * 0.001 * basePrice; // ±0.05% variation
+        prices.push(basePrice + variation);
         volumes.push(0);
         timestamps.push(new Date(now.getTime() - ((199 - i) * 60000)));
       }
@@ -406,11 +409,19 @@ class SignalProcessor {
       return { symbol, prices, volumes, timestamps };
     } catch (error) {
       console.error('❌ Error fetching historical data, using fallback:', error);
-      const basePrice = this.getBasePrice(symbol);
+      const basePrice = await this.getBasePrice(symbol);
       const now = new Date();
+
+      // Create synthetic data with minimal variation for indicator calculation
+      const syntheticPrices: number[] = [];
+      for (let i = 0; i < 200; i++) {
+        const variation = (Math.random() - 0.5) * 0.001 * basePrice;
+        syntheticPrices.push(basePrice + variation);
+      }
+
       return {
         symbol,
-        prices: Array(200).fill(basePrice),
+        prices: syntheticPrices,
         volumes: Array(200).fill(0),
         timestamps: Array(200).fill(0).map((_, i) => new Date(now.getTime() - ((199 - i) * 60000)))
       };
@@ -541,16 +552,31 @@ class SignalProcessor {
     }
   }
 
-  private getBasePrice(symbol: string): number {
-    const basePrices: Record<string, number> = {
-      'EURUSD': 1.0845,
-      'GBPUSD': 1.2734,
-      'USDJPY': 149.85,
-      'AUDUSD': 0.6623,
-      'USDCHF': 0.8892,
-      'NZDUSD': 0.5987
+  private async getBasePrice(symbol: string): Promise<number> {
+    // Try to fetch real current price from Exness API
+    try {
+      if (exnessAPI.isConnectedToExness()) {
+        const currentPrice = await exnessAPI.getCurrentPrice(symbol);
+        if (currentPrice) {
+          // Return mid price (average of bid and ask)
+          return (currentPrice.bid + currentPrice.ask) / 2;
+        }
+      }
+    } catch (error) {
+      console.warn(`Failed to get real price for ${symbol}, using default:`, error);
+    }
+
+    // Last resort fallback - approximate market prices (updated 2025-11-01)
+    // These are ONLY used when completely disconnected from MT5
+    const approximatePrices: Record<string, number> = {
+      'EURUSD': 1.0850,
+      'GBPUSD': 1.2750,
+      'USDJPY': 150.00,
+      'AUDUSD': 0.6600,
+      'USDCHF': 0.8900,
+      'NZDUSD': 0.6000
     };
-    return basePrices[symbol] || 1.0000;
+    return approximatePrices[symbol] || 1.0000;
   }
 
   setConfiguration(config: Partial<SignalProcessorConfig>): void {

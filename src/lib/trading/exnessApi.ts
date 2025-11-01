@@ -524,11 +524,24 @@ class ExnessAPI {
 
   async getServerTime(): Promise<Date | null> {
     try {
-      // In real implementation, get from MT5 Bridge
+      if (!this.isConnected || !this.sessionId) {
+        // Return local time if not connected
+        return new Date();
+      }
+
+      // Fetch latest price to get server timestamp
+      // MT5 tick data includes server time
+      const priceData = await this.getCurrentPrice('EURUSD');
+
+      if (priceData && priceData.timestamp) {
+        return new Date(priceData.timestamp);
+      }
+
+      // Fallback to local time
       return new Date();
     } catch (error) {
       console.error('Failed to get server time:', error);
-      return null;
+      return new Date(); // Fallback to local time
     }
   }
 

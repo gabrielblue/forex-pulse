@@ -20,9 +20,16 @@ export const realTimeDataFeed = {
   },
   subscribe: (callback: Function) => {
     console.log('✅ Subscribed to real-time Exness data feed');
-    return () => console.log('Unsubscribed from data feed');
+    // Return a proper cleanup function
+    return () => {
+      console.log('Unsubscribed from data feed');
+      // Actual cleanup would happen in the real implementation
+      // For now, this is just a no-op cleanup function
+    };
   },
-  unsubscribe: () => console.log('Unsubscribed from data feed')
+  unsubscribe: () => {
+    console.log('Unsubscribed from data feed');
+  }
 };
 
 // Signal processor - integrated with bot signal manager
