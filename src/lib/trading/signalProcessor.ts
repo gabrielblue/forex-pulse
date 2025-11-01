@@ -25,7 +25,7 @@ export interface SignalProcessorConfig {
 
 class SignalProcessor {
   private config: SignalProcessorConfig = {
-    minConfidence: 70, // Professional standard: 70% minimum confidence for quality signals
+    minConfidence: 75, // Professional standard: 75% minimum confidence for quality signals (increased for safety)
     enabledTimeframes: ['5M', '15M', '30M', '1H'], // Short timeframes for day trading
     enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'], // All major pairs
     autoExecute: false
@@ -231,48 +231,46 @@ class SignalProcessor {
   }
 
   private calculateEnhancedVolumeFromSignal(signal: TradingSignal): number {
-    // Ultra aggressive volume calculation for enhanced day trading
-    let baseVolume = 0.50; // Start with ultra large base volume for day trading
-    
-    // Enhanced confidence-based sizing
-    const confidenceMultiplier = Math.max(1.5, signal.confidence / 50); // Ultra aggressive multiplier
+    // CONSERVATIVE volume calculation for safe trading - FIXED aggressive parameters
+    let baseVolume = 0.01; // Start with minimal base volume (was 0.50 - extremely dangerous!)
+
+    // Conservative confidence-based sizing
+    const confidenceMultiplier = Math.max(1.0, signal.confidence / 100); // Conservative multiplier (was /50)
     baseVolume *= confidenceMultiplier;
-    
-    // Enhanced time-based adjustments
+
+    // Moderate time-based adjustments
     const currentHour = new Date().getUTCHours();
     const isOptimalTime = (currentHour >= 8 && currentHour <= 17) || (currentHour >= 13 && currentHour <= 22);
-    
+
     if (isOptimalTime) {
-      baseVolume *= 4.0; // Massive boost during optimal trading hours
+      baseVolume *= 1.2; // Small boost during optimal trading hours (was 4.0x - extremely risky!)
     }
-    
-    // Enhanced symbol-specific adjustments
+
+    // Conservative symbol-specific adjustments
     if (signal.symbol === 'EURUSD' || signal.symbol === 'GBPUSD') {
-      baseVolume *= 2.5; // Much larger positions for major pairs
+      baseVolume *= 1.1; // Slight boost for major pairs (was 2.5x - too aggressive!)
     }
-    
-    // Gold trading boost
-    if (signal.symbol === 'XAUUSD') {
-      baseVolume *= 2.0; // Boost for gold trading
-    }
-    
-    // Enhanced risk-reward ratio bonus
+
+    // Gold trading - no special boost (was 2.0x - removed)
+    // Gold has different pip values and requires separate risk calculations
+
+    // Conservative risk-reward ratio bonus
     if (signal.takeProfit && signal.stopLoss) {
       const entryPrice = signal.entryPrice;
       const takeProfitDistance = Math.abs(signal.takeProfit - entryPrice);
       const stopLossDistance = Math.abs(entryPrice - signal.stopLoss);
       const riskReward = takeProfitDistance / stopLossDistance;
-      
-      if (riskReward >= 1.5) {
-        baseVolume *= 3.0; // Boost for decent risk-reward
-      }
+
       if (riskReward >= 2.0) {
-        baseVolume *= 5.0; // Massive boost for excellent risk-reward
+        baseVolume *= 1.3; // Modest boost for good risk-reward (was 3.0x and 5.0x - too dangerous!)
+      }
+      if (riskReward >= 3.0) {
+        baseVolume *= 1.5; // Slightly higher for excellent risk-reward
       }
     }
-    
-    // Apply enhanced safety limits
-    return Math.max(0.20, Math.min(10.0, baseVolume)); // Increased max volume to 10.0 lots
+
+    // Apply SAFE limits - max 0.5 lots instead of 10.0 lots!
+    return Math.max(0.01, Math.min(0.5, baseVolume)); // Much safer maximum volume
   }
 
   private async updateSignalStatus(
@@ -389,41 +387,30 @@ class SignalProcessor {
         }
       }
 
-      // Fallback: If MT5 not connected, try to get at least current price
-      console.warn('⚠️ MT5 historical data not available, using current price fallback for', symbol);
-      const basePrice = await this.getBasePrice(symbol);
-      const now = new Date();
-      const prices: number[] = [];
-      const volumes: number[] = [];
-      const timestamps: Date[] = [];
-
-      // Create synthetic historical data with slight variation around current price
-      // This is better than completely flat data for technical indicator calculation
-      for (let i = 0; i < 200; i++) {
-        const variation = (Math.random() - 0.5) * 0.001 * basePrice; // ±0.05% variation
-        prices.push(basePrice + variation);
-        volumes.push(0);
-        timestamps.push(new Date(now.getTime() - ((199 - i) * 60000)));
-      }
-
-      return { symbol, prices, volumes, timestamps };
-    } catch (error) {
-      console.error('❌ Error fetching historical data, using fallback:', error);
-      const basePrice = await this.getBasePrice(symbol);
+      // Fallback: If MT5 not connected, return empty data
+      // DO NOT use synthetic/fake data for trading decisions
+      console.error('❌ MT5 historical data not available for', symbol, '- Cannot generate reliable signals without real data');
       const now = new Date();
 
-      // Create synthetic data with minimal variation for indicator calculation
-      const syntheticPrices: number[] = [];
-      for (let i = 0; i < 200; i++) {
-        const variation = (Math.random() - 0.5) * 0.001 * basePrice;
-        syntheticPrices.push(basePrice + variation);
-      }
-
+      // Return empty arrays to indicate no data available
+      // This will cause the signal processor to return HOLD with 0 confidence
       return {
         symbol,
-        prices: syntheticPrices,
-        volumes: Array(200).fill(0),
-        timestamps: Array(200).fill(0).map((_, i) => new Date(now.getTime() - ((199 - i) * 60000)))
+        prices: [],
+        volumes: [],
+        timestamps: []
+      };
+    } catch (error) {
+      console.error('❌ Error fetching historical data:', error);
+      const now = new Date();
+
+      // Return empty data - DO NOT trade without real historical data
+      // Using synthetic/fake data could lead to catastrophic trading losses
+      return {
+        symbol,
+        prices: [],
+        volumes: [],
+        timestamps: []
       };
     }
   }

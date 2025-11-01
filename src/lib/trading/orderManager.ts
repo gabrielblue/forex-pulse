@@ -229,10 +229,8 @@ class OrderManager {
       console.log(`💰 Risk calculation: Required margin ${requiredMargin.toFixed(2)}, Risk ${riskPercentage.toFixed(2)}%`);
 
       if (riskPercentage > this.riskParams.maxRiskPerTrade) {
-        // For aggressive day trading, allow slightly higher risk
-        if (riskPercentage > this.riskParams.maxRiskPerTrade * 1.2) {
-          return { allowed: false, reason: `Risk per trade too high: ${riskPercentage.toFixed(2)}% (max: ${(this.riskParams.maxRiskPerTrade * 1.2).toFixed(1)}%)` };
-        }
+        // FIXED: Enforce strict risk limits - removed dangerous 20% overflow allowance
+        return { allowed: false, reason: `Risk per trade too high: ${riskPercentage.toFixed(2)}% (max: ${this.riskParams.maxRiskPerTrade.toFixed(1)}%)` };
       }
 
       // Ensure minimum account balance for trading
@@ -240,14 +238,13 @@ class OrderManager {
         return { allowed: false, reason: `Account balance too low: ${accountStatus.accountInfo.currency} ${accountStatus.accountInfo.balance} (min: $${this.riskParams.minAccountBalance})` };
       }
 
-      // Check margin level - ultra aggressive for day trading with more lenient limits
-      const minMarginForDemo = 2; // Ultra aggressive: 2% for demo
-      const minMarginForLive = 10; // Ultra aggressive: 10% for live
+      // FIXED: Check margin level with SAFE limits (was 2%/10% - extremely dangerous!)
+      const minMarginForDemo = 100; // Safe: 100% for demo (was 2% - catastrophic!)
+      const minMarginForLive = 200; // Safe: 200% for live (was 10% - would cause margin call!)
       const minMargin = accountStatus.accountInfo.isDemo ? minMarginForDemo : minMarginForLive;
-      
+
       if (accountStatus.accountInfo.marginLevel > 0 && accountStatus.accountInfo.marginLevel < minMargin) {
-        console.warn(`⚠️ Ultra low margin level: ${accountStatus.accountInfo.marginLevel.toFixed(1)}% (min: ${minMargin}%) - continuing with ultra aggressive day trading`);
-        // Don't block trades for day trading, just warn
+        return { allowed: false, reason: `Margin level too low: ${accountStatus.accountInfo.marginLevel.toFixed(1)}% (min: ${minMargin}%). Risk of margin call!` };
       }
 
       // Verify symbol is tradeable
@@ -255,18 +252,15 @@ class OrderManager {
         return { allowed: false, reason: `Symbol ${orderRequest.symbol} not tradeable or market closed` };
       }
 
-      // Enhanced margin check - use more of free margin for aggressive trading
-      const availableMargin = accountStatus.accountInfo.freeMargin * 0.99; // Use 99% of free margin for ultra aggressive trading
+      // FIXED: Conservative margin check - only use 50% of free margin for safety (was 99% - extremely risky!)
+      const availableMargin = accountStatus.accountInfo.freeMargin * 0.50; // Use only 50% of free margin for safe trading
       if (requiredMargin > availableMargin) {
         return { allowed: false, reason: `Insufficient free margin: Required ${requiredMargin.toFixed(2)}, Available ${availableMargin.toFixed(2)}` };
       }
 
-      // Position limit check
+      // FIXED: Strict position limit check - removed dangerous 10% overflow allowance
       if (accountStatus.openPositions >= this.riskParams.maxConcurrentPositions) {
-        // For day trading, allow slight overflow
-        if (accountStatus.openPositions >= this.riskParams.maxConcurrentPositions * 1.1) {
-          return { allowed: false, reason: `Maximum concurrent positions reached: ${accountStatus.openPositions}/${Math.floor(this.riskParams.maxConcurrentPositions * 1.1)}` };
-        }
+        return { allowed: false, reason: `Maximum concurrent positions reached: ${accountStatus.openPositions}/${this.riskParams.maxConcurrentPositions}` };
       }
 
       // Check minimum lot size
@@ -409,22 +403,22 @@ class OrderManager {
       // Position size = Risk Amount / (Stop Loss Distance * Dollar Per Pip)
       let positionSize = riskAmount / (stopLossDistance * dollarPerPip);
 
-      // Ultra aggressive multiplier for enhanced day trading
-      const aggressiveMultiplier = accountInfo.isDemo ? 20.0 : 10.0; // Ultra aggressive: 2000% for demo, 1000% for live
-      positionSize *= aggressiveMultiplier;
+      // FIXED: REMOVED CATASTROPHIC 20x/10x MULTIPLIER!
+      // The previous code multiplied position sizes by 2000%/1000% which would cause massive losses!
+      // Now using proper 1:1 risk-based position sizing
 
-      // Ultra aggressive position size limits for enhanced day trading
-      const minSize = 0.25; // Increased minimum to 0.25 lots for day trading
+      // FIXED: SAFE position size limits
+      const minSize = 0.01; // Standard minimum (was 0.25 - too high for beginners!)
       const maxSize = Math.min(
         this.riskParams.maxPositionSize, // Maximum from settings
-        (accountInfo.freeMargin / 10), // Ultra aggressive: use up to 1/10th of free margin
-        (availableCapital / 50), // Ultra aggressive: 1/50th of capital
-        accountInfo.isDemo ? 1000.0 : 200.0 // Demo: up to 1000 lots, Live: up to 200 lots
+        (accountInfo.freeMargin / 1000), // SAFE: use max 0.1% of free margin (was 10% - catastrophic!)
+        (availableCapital / 1000), // SAFE: max 0.1% of capital (was 2% - too risky!)
+        accountInfo.isDemo ? 2.0 : 1.0 // SAFE: Demo max 2 lots, Live max 1 lot (was 1000/200 - insane!)
       );
-      
+
       const adjustedSize = Math.max(minSize, Math.min(maxSize, positionSize));
-      
-      console.log('📈 Enhanced final position size calculation:', {
+
+      console.log('📈 SAFE position size calculation (FIXED):', {
         availableCapital,
         riskAmount,
         stopLossDistance,
@@ -432,7 +426,7 @@ class OrderManager {
         pipValue,
         calculatedSize: positionSize,
         adjustedSize,
-        aggressiveMultiplier,
+        multiplier: '1.0 (REMOVED dangerous 20x/10x multiplier!)',
         accountType: accountInfo.isDemo ? 'DEMO' : 'LIVE'
       });
 

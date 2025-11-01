@@ -427,29 +427,29 @@ class BotSignalManager {
   }
 
   private calculateEnhancedVolume(signal: any): number {
-    // Enhanced volume calculation for aggressive day trading
-    let baseVolume = 0.20; // Increased base volume
-    
-    // Confidence-based multiplier
-    const confidenceMultiplier = Math.max(1.5, signal.confidence_score / 60); // More aggressive multiplier
+    // FIXED: SAFE volume calculation (was extremely aggressive and dangerous!)
+    let baseVolume = 0.01; // Safe minimum base volume (was 0.20 - too high!)
+
+    // FIXED: Conservative confidence-based multiplier
+    const confidenceMultiplier = Math.max(1.0, signal.confidence_score / 100); // Conservative (was /60 - too aggressive!)
     baseVolume *= confidenceMultiplier;
-    
-    // Session-based adjustments
+
+    // FIXED: Modest session-based adjustments
     const currentHour = new Date().getUTCHours();
     const isOptimalSession = (currentHour >= 8 && currentHour <= 17) || (currentHour >= 13 && currentHour <= 22);
-    
+
     if (isOptimalSession) {
-      baseVolume *= 2.5; // Massive boost during optimal sessions
+      baseVolume *= 1.2; // Small boost during optimal sessions (was 2.5x - extremely risky!)
     }
-    
-    // Symbol-specific adjustments for major pairs
+
+    // FIXED: Conservative symbol-specific adjustments for major pairs
     const majorPairs = ['EURUSD', 'GBPUSD', 'USDJPY'];
     if (majorPairs.includes(signal.currency_pairs?.symbol)) {
-      baseVolume *= 1.5; // Boost for major pairs
+      baseVolume *= 1.1; // Slight boost for major pairs (was 1.5x - too much!)
     }
-    
-    // Apply aggressive limits
-    return Math.max(0.10, Math.min(2.0, baseVolume)); // Increased max to 2.0 lots
+
+    // FIXED: Apply SAFE limits
+    return Math.max(0.01, Math.min(0.5, baseVolume)); // Safe max 0.5 lots (was 2.0 - too risky!)
   }
 
   async enableAutoExecution(enabled: boolean): Promise<void> {
