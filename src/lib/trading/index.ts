@@ -1,6 +1,7 @@
 // Trading system exports
 export { exnessAPI } from './exnessApi';
 export { orderManager } from './orderManager';
+import { tradingBot } from './tradingBot';
 
 // Types
 export type { ExnessCredentials, TradeOrder, AccountInfo, Position } from './exnessApi';

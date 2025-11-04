@@ -32,7 +32,7 @@ enabled = false
 [auth]
 # Security settings for production
 # OTP expiry in seconds (3600 = 1 hour is recommended for email OTP)
-otp_expiry = 3600
+otp_expiry = 300
 # Minimum password length
 password_min_length = 12
 # Enable leaked password protection (checks against haveibeenpwned database)
