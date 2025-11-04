@@ -166,7 +166,7 @@ class BotSignalManager {
 
       // Generate signal if confidence is high enough
       if (analysis.confidence >= this.config.minConfidence) {
-        await this.saveSignal({
+        const signalPayload = {
           symbol,
           type: analysis.direction,
           confidence: analysis.confidence,
@@ -174,10 +174,30 @@ class BotSignalManager {
           stopLoss: analysis.stopLoss || 0,
           takeProfit: analysis.takeProfit || 0,
           reasoning: analysis.reasoning || 'Technical analysis signal',
-          volume: analysis.volume || 0.15 // Enhanced default volume
-        });
+          volume: analysis.volume || this.calculatePositionSizeFromAI(analysis.confidence, analysis.positionSizeRecommendation || 'SMALL', symbol)
+        };
 
-        console.log(`📊 Enhanced signal generated for ${symbol}: ${analysis.direction} with ${analysis.confidence.toFixed(1)}% confidence, volume: ${analysis.volume || 0.15}`);
+        // Execute immediately when auto-execution is enabled (bypass DB dependency)
+        if (this.config.autoExecute && orderManager.isAutoTradingActive()) {
+          try {
+            await orderManager.executeOrder({
+              symbol,
+              type: signalPayload.type,
+              volume: signalPayload.volume,
+              stopLoss: signalPayload.stopLoss,
+              takeProfit: signalPayload.takeProfit,
+              comment: `AutoAI-${signalPayload.confidence.toFixed(0)}%`
+            });
+            console.log(`✅ Auto-executed ${signalPayload.type} on ${symbol} (vol ${signalPayload.volume})`);
+          } catch (execErr) {
+            console.error(`❌ Auto-execution failed for ${symbol}:`, execErr);
+          }
+        }
+
+        // Best-effort save to DB (if user is authenticated and RLS allows)
+        await this.saveSignal(signalPayload);
+
+        console.log(`📊 Enhanced signal generated for ${symbol}: ${analysis.direction} with ${analysis.confidence.toFixed(1)}% confidence, volume: ${signalPayload.volume}`);
       }
     } catch (error) {
       console.error(`Failed to analyze ${symbol}:`, error);
