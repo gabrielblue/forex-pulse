@@ -2,6 +2,7 @@
 export { exnessAPI } from './exnessApi';
 export { orderManager } from './orderManager';
 import { tradingBot } from './tradingBot';
+import { realTimeDataFeed as coreRealTimeDataFeed } from './realTimeDataFeed';
 
 // Types
 export type { ExnessCredentials, TradeOrder, AccountInfo, Position } from './exnessApi';
@@ -11,20 +12,7 @@ export type { OrderRequest, RiskParameters } from './orderManager';
 export { tradingBot } from './tradingBot';
 
 // Real-time data feed - integrated with Exness API
-export const realTimeDataFeed = {
-  start: async () => {
-    console.log('✅ Real-time data feed started - using Exness MT5 API');
-    return true;
-  },
-  stop: () => {
-    console.log('⏸️ Real-time data feed stopped');
-  },
-  subscribe: (callback: Function) => {
-    console.log('✅ Subscribed to real-time Exness data feed');
-    return () => console.log('Unsubscribed from data feed');
-  },
-  unsubscribe: () => console.log('Unsubscribed from data feed')
-};
+export { realTimeDataFeed } from './realTimeDataFeed';
 
 // Signal processor - integrated with bot signal manager
 export const signalProcessor = {
@@ -72,7 +60,7 @@ export const initializeTradingSystem = async () => {
 export const cleanupTradingSystem = async () => {
   try {
     console.log('Cleaning up trading system...');
-    realTimeDataFeed.stop();
+    coreRealTimeDataFeed.stop();
     await tradingBot.stopBot();
     console.log('Trading system cleaned up');
   } catch (error) {

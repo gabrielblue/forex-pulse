@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Brain, TrendingUp, TrendingDown, Target, Zap, AlertTriangle } from "lucide-react";
+import { aiAnalyzer } from "@/lib/trading/aiAnalyzer";
+import { exnessAPI } from "@/lib/trading/exnessApi";
 
 interface Prediction {
   id: string;
@@ -20,70 +22,71 @@ interface Prediction {
   timestamp: Date;
 }
 
-// NOTE: This component shows example predictions for UI demonstration
-// Real predictions use the AI analysis system integrated with the bot
-const examplePredictions: Prediction[] = [
-  {
-    id: "1",
-    symbol: "EURUSD",
-    direction: "BUY",
-    confidence: 87,
-    targetPrice: 1.0920,
-    currentPrice: 1.0895,
-    timeframe: "15M",
-    reasoning: "Strong bullish momentum with RSI oversold recovery and MACD crossover",
-    stopLoss: 1.0875,
-    takeProfit: 1.0920,
-    riskReward: 1.25,
-    timestamp: new Date()
-  },
-  {
-    id: "2", 
-    symbol: "GBPUSD",
-    direction: "SELL",
-    confidence: 73,
-    targetPrice: 1.2700,
-    currentPrice: 1.2745,
-    timeframe: "5M",
-    reasoning: "Bearish divergence detected, resistance at 1.2750 level",
-    stopLoss: 1.2765,
-    takeProfit: 1.2700,
-    riskReward: 2.25,
-    timestamp: new Date()
-  },
-  {
-    id: "3",
-    symbol: "USDJPY", 
-    direction: "BUY",
-    confidence: 91,
-    targetPrice: 150.20,
-    currentPrice: 149.82,
-    timeframe: "1H",
-    reasoning: "Break above key resistance, strong USD momentum confirmed",
-    stopLoss: 149.50,
-    takeProfit: 150.20,
-    riskReward: 1.19,
-    timestamp: new Date()
-  }
-];
+// Real predictions will be generated from AI analyzer using live Exness prices
 
 export const AIPredictionSystem = () => {
-  const [predictions] = useState<Prediction[]>(examplePredictions);
+  const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiStatus, setAiStatus] = useState<"active" | "analyzing" | "idle">("active");
 
-  useEffect(() => {
-    // Simulate AI analysis cycle
-    const interval = setInterval(() => {
-      setIsAnalyzing(true);
-      setAiStatus("analyzing");
-      
-      setTimeout(() => {
-        setIsAnalyzing(false);
-        setAiStatus("active");
-      }, 3000);
-    }, 30000);
+  const symbols = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD"]; 
 
+  const fetchPredictions = async () => {
+    if (!exnessAPI.isConnectedToExness()) {
+      setPredictions([]);
+      return;
+    }
+
+    setIsAnalyzing(true);
+    setAiStatus("analyzing");
+
+    const results: Prediction[] = [];
+    for (const symbol of symbols) {
+      try {
+        const price = await exnessAPI.getCurrentPrice(symbol);
+        if (!price) continue;
+        const analysis = await aiAnalyzer.analyzeMarket({
+          symbol,
+          timeframe: "15m",
+          marketData: {
+            currentPrice: price.bid,
+            bid: price.bid,
+            ask: price.ask,
+            spread: price.spread
+          },
+          technicalIndicators: {}
+        });
+        if (analysis.signal !== 'HOLD' && analysis.confidence >= 60) {
+          const target = analysis.takeProfit ?? (analysis.signal === 'BUY' ? price.bid * 1.002 : price.bid * 0.998);
+          const stop = analysis.stopLoss ?? (analysis.signal === 'BUY' ? price.bid * 0.998 : price.bid * 1.002);
+          results.push({
+            id: crypto.randomUUID(),
+            symbol,
+            direction: analysis.signal as 'BUY' | 'SELL',
+            confidence: analysis.confidence,
+            targetPrice: Number(target.toFixed(5)),
+            currentPrice: Number(price.bid.toFixed(5)),
+            timeframe: "15M",
+            reasoning: analysis.reasoning,
+            stopLoss: Number(stop.toFixed(5)),
+            takeProfit: Number(target.toFixed(5)),
+            riskReward: Number((Math.abs(target - price.bid) / Math.abs(price.bid - stop || 1e-6)).toFixed(2)),
+            timestamp: new Date()
+          });
+        }
+      } catch (e) {
+        console.warn('Prediction fetch failed for', symbol, e);
+      }
+    }
+
+    setPredictions(results);
+    setAiStatus("active");
+    setIsAnalyzing(false);
+  };
+
+  useEffect(() => {
+    fetchPredictions();
+    const interval = setInterval(fetchPredictions, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -233,7 +236,7 @@ export const AIPredictionSystem = () => {
           <div className="mt-6 flex justify-center">
             <Button 
               variant="outline" 
-              onClick={() => setIsAnalyzing(true)}
+              onClick={fetchPredictions}
               disabled={isAnalyzing}
             >
               {isAnalyzing ? (
