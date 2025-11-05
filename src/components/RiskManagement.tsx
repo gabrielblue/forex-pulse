@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,8 @@ import {
   Lock,
   Target
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { exnessAPI } from "@/lib/trading/exnessApi";
 
 export const RiskManagement = () => {
   const [riskSettings, setRiskSettings] = useState({
@@ -42,7 +44,44 @@ export const RiskManagement = () => {
   });
 
   const marginUsage = (riskSettings.usedMargin / riskSettings.accountBalance) * 100;
-  const dailyRiskUsed = 2.3; // Mock current daily risk
+  const [dailyRiskUsed, setDailyRiskUsed] = useState(0);
+
+  useEffect(() => {
+    const loadRealRiskData = async () => {
+      try {
+        // Load real account info from Exness if connected
+        const info = await exnessAPI.getAccountInfo();
+        if (info) {
+          setRiskSettings(prev => ({
+            ...prev,
+            accountBalance: info.balance,
+            usedMargin: info.margin,
+            freeMargin: info.freeMargin,
+          }));
+        }
+
+        // Load today's PnL from Supabase if authenticated
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const today = new Date().toISOString().split('T')[0];
+          const { data: trades } = await supabase
+            .from('live_trades')
+            .select('profit, opened_at')
+            .eq('user_id', user.id)
+            .gte('opened_at', today);
+
+          const pnl = (trades || []).reduce((sum: number, t: any) => sum + (parseFloat(t.profit?.toString() || '0')), 0);
+          const balance = info?.balance || riskSettings.accountBalance || 0;
+          const riskPct = balance > 0 && pnl < 0 ? (Math.abs(pnl) / balance) * 100 : 0;
+          setDailyRiskUsed(Number(riskPct.toFixed(2)));
+        }
+      } catch (e) {
+        // Silent fail for UI, trading logic remains unaffected
+      }
+    };
+
+    loadRealRiskData();
+  }, []);
 
   return (
     <div className="space-y-6">

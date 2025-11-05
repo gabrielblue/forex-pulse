@@ -10,6 +10,7 @@ import Calendar from "./pages/Calendar";
 import Learn from "./pages/Learn";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
+import Auth from "./pages/Auth";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +27,7 @@ const App = () => (
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/learn" element={<Learn />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/auth" element={<Auth />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
