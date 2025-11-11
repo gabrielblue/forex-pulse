@@ -4,13 +4,11 @@ import type { Database } from './types';
 
 // Use environment variables for security
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
   throw new Error(
-    'Missing Supabase environment variables. Please create a .env file with:\n' +
-    'VITE_SUPABASE_URL=your_project_url\n' +
-    'VITE_SUPABASE_ANON_KEY=your_anon_key'
+    'Missing Supabase environment variables. Please check your .env file.'
   );
 }
 
