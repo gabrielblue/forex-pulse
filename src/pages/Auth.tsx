@@ -4,6 +4,7 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { supabase } from "@/integrations/supabase/client";
+import { PasswordValidator } from "@/lib/security/validator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,8 +17,15 @@ const authSchema = z.object({
   email: z.string().trim().email("Invalid email address").max(255),
   password: z
     .string()
-    .min(6, "Password must be at least 6 characters")
-    .max(100, "Password must be less than 100 characters"),
+    .min(12, "Password must be at least 12 characters")
+    .max(100, "Password must be less than 100 characters")
+    .refine(
+      (val) => PasswordValidator.validate(val).valid,
+      (val) => {
+        const errors = PasswordValidator.validate(val).errors;
+        return { message: errors.join(". ") };
+      }
+    ),
 });
 
 type AuthFormValues = z.infer<typeof authSchema>;
@@ -141,8 +149,11 @@ const Auth = () => {
                   </div>
                   <div>
                     <Label htmlFor="password2">Password</Label>
-                    <Input id="password2" type="password" placeholder="••••••••" {...register("password")} />
+                    <Input id="password2" type="password" placeholder="Min 12 chars, uppercase, lowercase, numbers, symbols" {...register("password")} />
                     {errors.password && <p className="text-sm text-bearish mt-1">{errors.password.message}</p>}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Must include uppercase, lowercase, numbers, and special characters
+                    </p>
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? "Creating account..." : "Sign Up"}
