@@ -44,7 +44,7 @@ enable_signup = true
 enable_anonymous_sign_ins = false
 # Email settings
 double_confirm_changes = true
-enable_confirmations = false
+enable_confirmations = true
 # Session settings (in seconds)
 jwt_expiry = 3600
 refresh_token_rotation_enabled = true
