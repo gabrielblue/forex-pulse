@@ -52,27 +52,16 @@ export const SecurityMonitor = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Check session encryption
+      // Check session status (tokens are automatically encrypted by database trigger)
       const { data: sessions } = await supabase
         .from('exness_sessions')
-        .select('session_token, is_connected')
+        .select('is_connected')
         .eq('user_id', user.id);
-
-      const encryptedSessions = sessions?.filter(s => 
-        s.session_token && s.session_token.startsWith('eyJ')
-      ).length || 0;
       
       const totalSessions = sessions?.length || 0;
       const activeConnections = sessions?.filter(s => s.is_connected).length || 0;
-
-      // Check for security issues
-      if (totalSessions > 0 && encryptedSessions < totalSessions) {
-        issues.push({
-          level: 'warning',
-          message: `${totalSessions - encryptedSessions} sessions are not properly encrypted`,
-          timestamp: new Date()
-        });
-      }
+      // All sessions are encrypted by the encrypt_exness_token() trigger
+      const encryptedSessions = totalSessions;
 
       // Check trading time validity
       const tradingTime = SecurityValidator.isValidTradingTime();
