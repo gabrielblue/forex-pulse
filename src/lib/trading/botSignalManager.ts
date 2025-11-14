@@ -158,9 +158,8 @@ class BotSignalManager {
       // Perform technical analysis
       const analysis = await this.performTechnicalAnalysis(symbol, marketPrice);
 
-      // Validate analysis result
+      // Skip if no valid trading signal (expected for HOLD or low confidence)
       if (!analysis || typeof analysis.confidence !== 'number') {
-        console.warn(`Invalid analysis result for ${symbol}:`, analysis);
         return;
       }
 
