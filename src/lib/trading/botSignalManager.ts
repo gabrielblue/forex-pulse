@@ -547,10 +547,8 @@ class BotSignalManager {
       if (historicalData && historicalData.length > 0) {
         // Extract close prices from historical bars
         const prices = historicalData.map((bar: any) => bar.close);
-        console.log(`✅ Fetched ${prices.length} real prices from MT5 for ${symbol}`);
         return prices;
       } else {
-        console.warn('⚠️ Could not fetch historical data, using current price only');
         return [currentPrice];
       }
     } catch (error) {
@@ -567,10 +565,8 @@ class BotSignalManager {
       if (historicalData && historicalData.length > 0) {
         // Extract tick volumes from historical bars
         const volumes = historicalData.map((bar: any) => bar.tick_volume);
-        console.log(`✅ Fetched ${volumes.length} real volume data from MT5 for ${symbol}`);
         return volumes;
       } else {
-        console.warn('⚠️ Could not fetch volume data, using zero');
         return [0];
       }
     } catch (error) {
