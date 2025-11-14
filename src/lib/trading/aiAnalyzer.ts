@@ -40,6 +40,11 @@ export interface AIAnalysisResult {
 class AIAnalyzer {
   private analysisCache: Map<string, { result: AIAnalysisResult; timestamp: number }> = new Map();
   private cacheDuration = 60000; // 1 minute cache
+  
+  constructor() {
+    // Clear any stale cache on initialization
+    this.initializeCache();
+  }
 
   async analyzeMarket(input: MarketAnalysisInput): Promise<AIAnalysisResult> {
     const cacheKey = `${input.symbol}_${input.timeframe}`;
@@ -111,6 +116,12 @@ class AIAnalyzer {
   }
 
   clearCache(): void {
+    this.analysisCache.clear();
+    console.log('🧹 AI analysis cache cleared');
+  }
+  
+  // Clear cache on module load to ensure fresh analysis after deployment
+  private initializeCache(): void {
     this.analysisCache.clear();
   }
 }
