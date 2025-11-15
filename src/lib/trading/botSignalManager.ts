@@ -228,6 +228,15 @@ class BotSignalManager {
       // Get recent news events
       const newsEvents = await this.getRecentNews(symbol);
       
+      // Log data quality before sending to AI
+      console.log(`📊 Sending to AI for ${symbol}:`, {
+        priceDataPoints: prices.length,
+        volumeDataPoints: volumes.length,
+        hasRSI: !!indicators.rsi,
+        hasEMA: !!indicators.ema20,
+        currentPrice: price.bid
+      });
+
       // Use AI-powered analysis for intelligent trading decisions
       const aiAnalysis = await aiAnalyzer.analyzeMarket({
         symbol,
@@ -236,14 +245,27 @@ class BotSignalManager {
           currentPrice: price.bid,
           bid: price.bid,
           ask: price.ask,
-          spread: price.spread
+          spread: price.spread,
+          high: prices.length > 0 ? Math.max(...prices) : price.bid,
+          low: prices.length > 0 ? Math.min(...prices) : price.bid
         },
-        technicalIndicators: indicators
+        technicalIndicators: {
+          ...indicators,
+          volume: volumes.length > 0 ? volumes[volumes.length - 1] : 0
+        }
       });
 
-      // Only trade if AI gives HIGH confidence
-      if (aiAnalysis.signal === 'HOLD' || aiAnalysis.confidence < 70) {
-        return null; // Skip low-confidence signals
+      console.log(`🎯 AI Analysis for ${symbol}:`, {
+        signal: aiAnalysis.signal,
+        confidence: aiAnalysis.confidence,
+        regime: aiAnalysis.regime,
+        reasoning: aiAnalysis.reasoning.substring(0, 100) + '...'
+      });
+
+      // Adjusted confidence threshold - 60% for live trading
+      if (aiAnalysis.signal === 'HOLD' || aiAnalysis.confidence < 60) {
+        console.log(`⏸️  Skipping ${symbol} - signal: ${aiAnalysis.signal}, confidence: ${aiAnalysis.confidence}%`);
+        return null;
       }
 
       return {
