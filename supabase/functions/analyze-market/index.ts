@@ -56,25 +56,30 @@ Recent Price Action:
 
     const systemPrompt = `You are an elite forex trading analyst with deep expertise in technical analysis, market microstructure, and algorithmic trading. Your role is to provide highly accurate, data-driven trading analysis.
 
-IMPORTANT: You must be DECISIVE and provide actionable signals. Do not default to HOLD unless the market is truly uncertain.
+CRITICAL RULES:
+1. Be DECISIVE - provide actionable BUY/SELL signals when technical conditions support it
+2. Use HOLD only when truly uncertain or conflicting signals
+3. Assign confidence 70-90% for clear setups with multiple confirmations
+4. Assign confidence 50-69% for decent setups with some confirmations  
+5. Assign confidence 30-49% for weak/mixed signals
+6. Below 30% = true HOLD situation
 
-Analyze the provided market data and provide:
-1. Market regime classification (trending/ranging/volatile)
-2. Trading signal (BUY/SELL/HOLD) with detailed reasoning
-3. Confidence score (0-100) based on technical alignment - Be confident with your analysis! Use 60-90% confidence for clear signals.
-4. Risk assessment and position sizing recommendation
-5. Entry, stop-loss, and take-profit levels with precise calculations
-6. Key support/resistance levels
-7. Pattern recognition (if any chart patterns are forming)
+When analyzing:
+- Strong RSI divergence + price action = HIGH confidence
+- Multiple timeframe alignment = HIGH confidence
+- Key level bounces with volume = HIGH confidence
+- Single indicator without confirmation = MEDIUM confidence
+- Choppy/ranging with no clear direction = LOW confidence / HOLD
 
-Guidelines for confidence scoring:
-- 80-100%: Very strong technical confluence, multiple indicators aligned
-- 60-79%: Good technical setup, most indicators aligned
-- 40-59%: Mixed signals but leaning one direction
-- 20-39%: Uncertain market, conflicting signals
-- 0-19%: No clear direction, true HOLD situation
-
-Be proactive with trade recommendations. If RSI shows oversold/overbought, if price is near key levels, or if there's momentum - recommend a trade with appropriate confidence.`;
+Provide:
+1. Market regime (trending/ranging/volatile/consolidating)
+2. Clear BUY/SELL/HOLD signal with reasoning
+3. Confidence score reflecting technical strength
+4. Precise entry, stop-loss, take-profit levels
+5. Risk assessment
+6. Position sizing recommendation
+7. Support/resistance levels
+8. Any chart patterns`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -184,17 +189,34 @@ Be proactive with trade recommendations. If RSI shows oversold/overbought, if pr
     }
 
     const aiResponse = await response.json();
-    console.log('🤖 AI Response received:', JSON.stringify(aiResponse, null, 2));
+    console.log('🤖 Raw AI Response:', JSON.stringify(aiResponse, null, 2));
     
     const toolCall = aiResponse.choices?.[0]?.message?.tool_calls?.[0];
     
-    if (!toolCall) {
-      console.error('❌ No tool call in AI response');
-      throw new Error("No analysis returned from AI");
+    if (!toolCall || !toolCall.function || !toolCall.function.arguments) {
+      console.error('❌ No valid tool call in AI response. Full response:', JSON.stringify(aiResponse, null, 2));
+      throw new Error("AI did not return a structured analysis. This may indicate poor data quality or AI service issues.");
     }
 
-    const analysis = JSON.parse(toolCall.function.arguments);
-    console.log('✅ Analysis parsed:', JSON.stringify(analysis, null, 2));
+    let analysis;
+    try {
+      analysis = JSON.parse(toolCall.function.arguments);
+    } catch (parseError) {
+      console.error('❌ Failed to parse tool call arguments:', toolCall.function.arguments);
+      throw new Error(`Failed to parse AI analysis: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
+    }
+    
+    // Validate required fields
+    const requiredFields = ['regime', 'signal', 'confidence', 'reasoning', 'entryPrice', 'stopLoss', 'takeProfit', 'riskLevel', 'positionSizeRecommendation'];
+    const missingFields = requiredFields.filter(field => !(field in analysis));
+    
+    if (missingFields.length > 0) {
+      console.error('❌ AI analysis missing required fields:', missingFields);
+      console.error('Received analysis:', JSON.stringify(analysis, null, 2));
+      throw new Error(`AI analysis incomplete. Missing fields: ${missingFields.join(', ')}`);
+    }
+    
+    console.log('✅ Valid analysis parsed:', JSON.stringify(analysis, null, 2));
 
     return new Response(
       JSON.stringify({ 

@@ -1,5 +1,6 @@
 import { exnessAPI } from './exnessApi';
 import { botSignalManager } from './botSignalManager';
+import { systemHealthMonitor } from './systemHealth';
 
 export interface BotStatus {
   isActive: boolean;
@@ -80,6 +81,25 @@ class TradingBot {
     if (!exnessConnected) {
       console.error('❌ Cannot start bot: Exness not connected');
       throw new Error('Connect to Exness first');
+    }
+
+    // Perform system health check
+    console.log('🏥 Performing system health check...');
+    const healthCheck = await systemHealthMonitor.performHealthCheck();
+    
+    if (!healthCheck.isHealthy) {
+      const criticalIssues = healthCheck.issues.filter(i => i.severity === 'critical');
+      if (criticalIssues.length > 0) {
+        const issueMessages = criticalIssues.map(i => `${i.component}: ${i.message}`).join('\n');
+        console.error('❌ Cannot start bot - critical issues detected:\n', issueMessages);
+        throw new Error(`System health check failed:\n${issueMessages}\n\nPlease resolve these issues before starting the bot.`);
+      }
+      
+      // Log warnings but allow bot to start
+      healthCheck.issues.forEach(issue => {
+        console.warn(`⚠️ ${issue.component}: ${issue.message}`);
+        console.warn(`   → ${issue.resolution}`);
+      });
     }
 
     // Update internal status to match reality

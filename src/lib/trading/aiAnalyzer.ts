@@ -69,10 +69,17 @@ class AIAnalyzer {
       }
 
       if (!data?.success || !data?.analysis) {
-        throw new Error('Invalid AI response');
+        console.error('❌ Invalid AI response:', data);
+        throw new Error(`Invalid AI response: ${JSON.stringify(data)}`);
       }
 
       const analysis = data.analysis as AIAnalysisResult;
+      
+      // Validate analysis has required fields
+      if (!analysis.signal || typeof analysis.confidence !== 'number') {
+        console.error('❌ AI analysis missing required fields:', analysis);
+        throw new Error('AI analysis incomplete');
+      }
       
       // Cache the result
       this.analysisCache.set(cacheKey, {
