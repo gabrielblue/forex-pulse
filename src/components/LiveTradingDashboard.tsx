@@ -25,6 +25,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { exnessAPI } from "@/lib/trading/exnessApi";
 import { orderManager } from "@/lib/trading/orderManager";
 import { toast } from "sonner";
+import { TradeExecutionLog } from "@/components/TradeExecutionLog";
 
 interface LivePosition {
   id: string;
@@ -388,8 +389,9 @@ export const LiveTradingDashboard = () => {
       )}
 
       <Tabs defaultValue="positions" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="positions">Open Positions ({positions.length})</TabsTrigger>
+          <TabsTrigger value="executions">Execution Log</TabsTrigger>
           <TabsTrigger value="prices">Market Prices</TabsTrigger>
           <TabsTrigger value="account">Account Details</TabsTrigger>
         </TabsList>
@@ -498,6 +500,10 @@ export const LiveTradingDashboard = () => {
               ))}
             </div>
           )}
+        </TabsContent>
+        
+        <TabsContent value="executions" className="space-y-4">
+          <TradeExecutionLog />
         </TabsContent>
         
         <TabsContent value="prices" className="space-y-4">
