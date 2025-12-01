@@ -112,18 +112,25 @@ class BotSignalManager {
       
       // Check if we're connected and can trade
       if (!exnessAPI.isConnectedToExness()) {
+        console.warn('⚠️ Not connected to Exness - skipping signal generation');
+        console.warn('💡 Please connect to your Exness MT5 account to enable trading');
         return;
       }
 
       const { canTrade, issues } = await exnessAPI.verifyTradingCapabilities();
       if (!canTrade) {
+        console.warn('⚠️ Trading not allowed:', issues.join(', '));
+        console.warn('💡 Please resolve these issues to enable trading');
         return;
       }
 
       // Generate signals for each symbol with enhanced processing
-      for (const symbol of this.config.symbols) {
-        await this.analyzeAndGenerateSignal(symbol);
-      }
+      const signalPromises = this.config.symbols.map(symbol => 
+        this.analyzeAndGenerateSignal(symbol)
+      );
+      
+      // Wait for all analysis to complete
+      await Promise.all(signalPromises);
 
       // Process any pending signals if auto-execution is enabled
       if (this.config.autoExecute && orderManager.isAutoTradingActive()) {
@@ -212,6 +219,17 @@ class BotSignalManager {
       const prices = await this.generateRecentPrices(price.bid, 100, symbol);
       const volumes = await this.generateRecentVolumes(100, symbol);
 
+      // Critical data quality check - abort if we don't have enough data
+      if (prices.length < 20 || volumes.length < 20) {
+        console.error(`❌ Insufficient historical data for ${symbol}:`, {
+          priceDataPoints: prices.length,
+          volumeDataPoints: volumes.length,
+          reason: 'MT5 Bridge may not be running or historical data fetch failed'
+        });
+        console.error('⚠️ CRITICAL: Cannot perform quality analysis without historical data. Check MT5 Bridge connection.');
+        return null;
+      }
+
       const marketData = {
         symbol,
         prices,
@@ -229,11 +247,12 @@ class BotSignalManager {
       const newsEvents = await this.getRecentNews(symbol);
       
       // Log data quality before sending to AI
-      console.log(`📊 Sending to AI for ${symbol}:`, {
+      console.log(`📊 Quality data prepared for ${symbol}:`, {
         priceDataPoints: prices.length,
         volumeDataPoints: volumes.length,
         hasRSI: !!indicators.rsi,
         hasEMA: !!indicators.ema20,
+        rsiValue: indicators.rsi?.toFixed(2),
         currentPrice: price.bid
       });
 
@@ -262,11 +281,13 @@ class BotSignalManager {
         reasoning: aiAnalysis.reasoning.substring(0, 100) + '...'
       });
 
-      // Adjusted confidence threshold - 60% for live trading
-      if (aiAnalysis.signal === 'HOLD' || aiAnalysis.confidence < 60) {
-        console.log(`⏸️  Skipping ${symbol} - signal: ${aiAnalysis.signal}, confidence: ${aiAnalysis.confidence}%`);
+      // Adjusted confidence threshold - 65% for quality trades (lowered from 70%)
+      if (aiAnalysis.signal === 'HOLD' || aiAnalysis.confidence < 65) {
+        console.log(`⏸️  Skipping ${symbol} - AI recommends: ${aiAnalysis.signal} (${aiAnalysis.confidence}% confidence, need 65%+)`);
         return null;
       }
+      
+      console.log(`✅ Trade signal qualified for ${symbol}: ${aiAnalysis.signal} at ${aiAnalysis.confidence}% confidence`);
 
       return {
         direction: aiAnalysis.signal,
@@ -563,36 +584,40 @@ class BotSignalManager {
   private async generateRecentPrices(currentPrice: number, count: number, symbol: string): Promise<number[]> {
     // Fetch REAL historical prices from MT5
     try {
-      const historicalData = await exnessAPI.getHistoricalData(symbol, 60, count); // H1 timeframe
+      const historicalData = await exnessAPI.getHistoricalData(symbol, 15, count); // M15 timeframe for faster response
 
       if (historicalData && historicalData.length > 0) {
+        console.log(`✅ Fetched ${historicalData.length} price bars for ${symbol}`);
         // Extract close prices from historical bars
         const prices = historicalData.map((bar: any) => bar.close);
         return prices;
       } else {
-        return [currentPrice];
+        console.warn(`⚠️ No historical price data returned for ${symbol} - MT5 Bridge may not be running`);
+        return [currentPrice]; // Minimal fallback
       }
     } catch (error) {
-      console.error('❌ Error fetching historical prices:', error);
-      return [currentPrice];
+      console.error(`❌ Failed to fetch historical prices for ${symbol}:`, error);
+      return [currentPrice]; // Minimal fallback
     }
   }
 
   private async generateRecentVolumes(count: number, symbol: string): Promise<number[]> {
     // Fetch REAL volume data from MT5
     try {
-      const historicalData = await exnessAPI.getHistoricalData(symbol, 60, count); // H1 timeframe
+      const historicalData = await exnessAPI.getHistoricalData(symbol, 15, count); // M15 timeframe for faster response
 
       if (historicalData && historicalData.length > 0) {
+        console.log(`✅ Fetched ${historicalData.length} volume bars for ${symbol}`);
         // Extract tick volumes from historical bars
-        const volumes = historicalData.map((bar: any) => bar.tick_volume);
+        const volumes = historicalData.map((bar: any) => bar.tick_volume || bar.volume || 0);
         return volumes;
       } else {
-        return [0];
+        console.warn(`⚠️ No historical volume data returned for ${symbol} - MT5 Bridge may not be running`);
+        return [0]; // Minimal fallback
       }
     } catch (error) {
-      console.error('❌ Error fetching volume data:', error);
-      return [0];
+      console.error(`❌ Failed to fetch volume data for ${symbol}:`, error);
+      return [0]; // Minimal fallback
     }
   }
   
