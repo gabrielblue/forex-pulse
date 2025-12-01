@@ -693,6 +693,63 @@ export type Database = {
         }
         Relationships: []
       }
+      trade_execution_log: {
+        Row: {
+          account_type: string | null
+          created_at: string
+          daily_trade_count: number | null
+          entry_price: number | null
+          error_message: string | null
+          execution_timestamp: string
+          id: string
+          order_id: string | null
+          order_type: string
+          status: string
+          stop_loss: number | null
+          symbol: string
+          take_profit: number | null
+          ticket_id: string | null
+          user_id: string
+          volume: number
+        }
+        Insert: {
+          account_type?: string | null
+          created_at?: string
+          daily_trade_count?: number | null
+          entry_price?: number | null
+          error_message?: string | null
+          execution_timestamp?: string
+          id?: string
+          order_id?: string | null
+          order_type: string
+          status: string
+          stop_loss?: number | null
+          symbol: string
+          take_profit?: number | null
+          ticket_id?: string | null
+          user_id: string
+          volume: number
+        }
+        Update: {
+          account_type?: string | null
+          created_at?: string
+          daily_trade_count?: number | null
+          entry_price?: number | null
+          error_message?: string | null
+          execution_timestamp?: string
+          id?: string
+          order_id?: string | null
+          order_type?: string
+          status?: string
+          stop_loss?: number | null
+          symbol?: string
+          take_profit?: number | null
+          ticket_id?: string | null
+          user_id?: string
+          volume?: number
+        }
+        Relationships: []
+      }
       trade_journal: {
         Row: {
           closed_at: string | null

@@ -557,7 +557,44 @@ class OrderManager {
 
       const accountType = exnessAPI.getAccountType();
       
-      // Enhanced logging for real trading
+      // Get current price for entry price logging
+      let entryPrice = null;
+      try {
+        const currentPrice = await exnessAPI.getCurrentPrice(orderRequest.symbol);
+        if (currentPrice) {
+          entryPrice = orderRequest.type === 'BUY' ? currentPrice.ask : currentPrice.bid;
+        }
+      } catch (priceError) {
+        console.warn('Could not fetch entry price for log:', priceError);
+      }
+
+      // Store in database for audit trail
+      const { error: dbError } = await supabase
+        .from('trade_execution_log')
+        .insert({
+          user_id: user.id,
+          symbol: orderRequest.symbol,
+          order_type: orderRequest.type,
+          volume: orderRequest.volume,
+          entry_price: entryPrice,
+          stop_loss: orderRequest.stopLoss,
+          take_profit: orderRequest.takeProfit,
+          order_id: orderId,
+          ticket_id: orderId,
+          status: status,
+          error_message: errorMessage,
+          account_type: accountType,
+          daily_trade_count: this.dailyTradeCount,
+          execution_timestamp: new Date().toISOString()
+        });
+
+      if (dbError) {
+        console.error('Failed to store execution log in database:', dbError);
+      } else {
+        console.log('✅ Execution log stored in database');
+      }
+
+      // Enhanced console logging for real trading
       console.log('📝 Enhanced order execution log:', {
         user_id: user.id,
         account_type: accountType,
@@ -568,9 +605,6 @@ class OrderManager {
         daily_trade_count: this.dailyTradeCount,
         timestamp: new Date().toISOString()
       });
-
-      // Store in database for audit trail
-      // You might want to create a trading_logs table for this
     } catch (error) {
       console.error('Failed to log order execution:', error);
     }
