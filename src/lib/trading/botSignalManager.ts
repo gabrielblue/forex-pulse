@@ -443,17 +443,19 @@ class BotSignalManager {
 
           console.log(`🎯 Executing enhanced signal ${signal.id}: ${signal.signal_type} ${symbol} with ${signal.confidence_score}% confidence`);
 
-          // Execute the trade with enhanced volume calculation
-          const enhancedVolume = this.calculateEnhancedVolume(signal);
+          // Execute the trade - let orderManager calculate optimal position size
+          console.log(`💰 Executing trade for signal ${signal.id}: ${signal.signal_type} ${symbol}`);
+          
           const orderRequest = {
             symbol,
             type: signal.signal_type as 'BUY' | 'SELL',
-            volume: enhancedVolume,
+            volume: 0.01, // Start with minimum - orderManager will adjust based on risk
             stopLoss: signal.stop_loss ? parseFloat(signal.stop_loss.toString()) : undefined,
             takeProfit: signal.take_profit ? parseFloat(signal.take_profit.toString()) : undefined,
-            comment: `EnhancedAuto-${signal.confidence_score.toFixed(0)}%-${signal.id.substring(0, 8)}`
+            comment: `AI-${signal.confidence_score.toFixed(0)}%-${signal.id.substring(0, 8)}`
           };
 
+          console.log(`📋 Order request prepared:`, orderRequest);
           const orderId = await orderManager.executeOrder(orderRequest);
           
           if (orderId) {
@@ -466,7 +468,7 @@ class BotSignalManager {
               })
               .eq('id', signal.id);
 
-            console.log(`✅ Enhanced signal ${signal.id} executed successfully: Order ${orderId}, Volume: ${enhancedVolume}`);
+            console.log(`✅ Signal ${signal.id} executed successfully - Order ${orderId}`);
           } else {
             console.error(`❌ Failed to execute signal ${signal.id}: No order ID returned`);
           }
@@ -488,31 +490,7 @@ class BotSignalManager {
     }
   }
 
-  private calculateEnhancedVolume(signal: any): number {
-    // Enhanced volume calculation for aggressive day trading
-    let baseVolume = 0.20; // Increased base volume
-    
-    // Confidence-based multiplier
-    const confidenceMultiplier = Math.max(1.5, signal.confidence_score / 60); // More aggressive multiplier
-    baseVolume *= confidenceMultiplier;
-    
-    // Session-based adjustments
-    const currentHour = new Date().getUTCHours();
-    const isOptimalSession = (currentHour >= 8 && currentHour <= 17) || (currentHour >= 13 && currentHour <= 22);
-    
-    if (isOptimalSession) {
-      baseVolume *= 2.5; // Massive boost during optimal sessions
-    }
-    
-    // Symbol-specific adjustments for major pairs
-    const majorPairs = ['EURUSD', 'GBPUSD', 'USDJPY'];
-    if (majorPairs.includes(signal.currency_pairs?.symbol)) {
-      baseVolume *= 1.5; // Boost for major pairs
-    }
-    
-    // Apply aggressive limits
-    return Math.max(0.10, Math.min(2.0, baseVolume)); // Increased max to 2.0 lots
-  }
+  // Removed - orderManager now handles all position sizing with proper risk management
 
   async enableAutoExecution(enabled: boolean): Promise<void> {
     this.config.autoExecute = enabled;

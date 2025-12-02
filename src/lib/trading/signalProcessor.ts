@@ -203,77 +203,39 @@ class SignalProcessor {
 
   private async executeSignal(signal: TradingSignal): Promise<void> {
     try {
-      // Enhanced position size calculation
-      const volume = this.calculateEnhancedVolumeFromSignal(signal);
+      console.log(`💰 Executing signal ${signal.id}: ${signal.type} ${signal.symbol} @ ${signal.confidence}% confidence`);
 
       const orderRequest: OrderRequest = {
         symbol: signal.symbol,
         type: signal.type,
-        volume,
+        volume: 0.01, // Start with minimum - orderManager will calculate optimal size
         stopLoss: signal.stopLoss,
         takeProfit: signal.takeProfit,
-        comment: `UltraAI-${signal.confidence.toFixed(0)}%-${signal.id.substring(0, 6)}`
+        comment: `AI-${signal.confidence.toFixed(0)}%-${signal.id.substring(0, 6)}`
       };
 
-      // Execute the order
+      console.log(`📋 Submitting order request:`, orderRequest);
+      
+      // Execute the order through orderManager (handles all risk management)
       const orderId = await orderManager.executeOrder(orderRequest);
 
       if (orderId) {
         // Update signal status
         await this.updateSignalStatus(signal.id, 'EXECUTED', orderId);
-        console.log(`Enhanced signal ${signal.id} executed successfully. Order ID: ${orderId}, Volume: ${volume}`);
+        console.log(`✅ Signal ${signal.id} executed successfully - Order ID: ${orderId}`);
+      } else {
+        console.error(`❌ Signal ${signal.id} execution failed - No order ID returned`);
+        await this.updateSignalStatus(signal.id, 'FAILED', null, 'No order ID returned');
       }
 
     } catch (error) {
-      console.error(`Failed to execute signal ${signal.id}:`, error);
-      await this.updateSignalStatus(signal.id, 'FAILED', null, error.message);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`❌ Failed to execute signal ${signal.id}:`, errorMsg);
+      await this.updateSignalStatus(signal.id, 'FAILED', null, errorMsg);
     }
   }
 
-  private calculateEnhancedVolumeFromSignal(signal: TradingSignal): number {
-    // Ultra aggressive volume calculation for enhanced day trading
-    let baseVolume = 0.50; // Start with ultra large base volume for day trading
-    
-    // Enhanced confidence-based sizing
-    const confidenceMultiplier = Math.max(1.5, signal.confidence / 50); // Ultra aggressive multiplier
-    baseVolume *= confidenceMultiplier;
-    
-    // Enhanced time-based adjustments
-    const currentHour = new Date().getUTCHours();
-    const isOptimalTime = (currentHour >= 8 && currentHour <= 17) || (currentHour >= 13 && currentHour <= 22);
-    
-    if (isOptimalTime) {
-      baseVolume *= 4.0; // Massive boost during optimal trading hours
-    }
-    
-    // Enhanced symbol-specific adjustments
-    if (signal.symbol === 'EURUSD' || signal.symbol === 'GBPUSD') {
-      baseVolume *= 2.5; // Much larger positions for major pairs
-    }
-    
-    // Gold trading boost
-    if (signal.symbol === 'XAUUSD') {
-      baseVolume *= 2.0; // Boost for gold trading
-    }
-    
-    // Enhanced risk-reward ratio bonus
-    if (signal.takeProfit && signal.stopLoss) {
-      const entryPrice = signal.entryPrice;
-      const takeProfitDistance = Math.abs(signal.takeProfit - entryPrice);
-      const stopLossDistance = Math.abs(entryPrice - signal.stopLoss);
-      const riskReward = takeProfitDistance / stopLossDistance;
-      
-      if (riskReward >= 1.5) {
-        baseVolume *= 3.0; // Boost for decent risk-reward
-      }
-      if (riskReward >= 2.0) {
-        baseVolume *= 5.0; // Massive boost for excellent risk-reward
-      }
-    }
-    
-    // Apply enhanced safety limits
-    return Math.max(0.20, Math.min(10.0, baseVolume)); // Increased max volume to 10.0 lots
-  }
+  // Removed - orderManager now handles all position sizing with proper risk management
 
   private async updateSignalStatus(
     signalId: string, 
