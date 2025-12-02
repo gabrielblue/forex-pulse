@@ -210,29 +210,26 @@ class OrderManager {
       const accountType = exnessAPI.getAccountType();
       console.log(`🔍 Risk check for ${accountType?.toUpperCase()} account - Balance: ${accountStatus.accountInfo.balance} ${accountStatus.accountInfo.currency}`);
 
-      // Enhanced daily loss protection for real money
+      // Daily loss protection with proper limits
       if (this.riskParams.maxDailyLoss > 0) {
         const dailyLoss = await this.getDailyLoss();
         const dailyLossPercentage = (Math.abs(dailyLoss) / accountStatus.accountInfo.balance) * 100;
         
+        console.log(`📊 Daily loss check: ${dailyLossPercentage.toFixed(2)}% (limit: ${this.riskParams.maxDailyLoss}%)`);
+        
         if (dailyLossPercentage >= this.riskParams.maxDailyLoss) {
-          // For ultra aggressive day trading, only slightly reduce risk but continue trading
-          this.riskParams.maxRiskPerTrade = Math.max(5.0, this.riskParams.maxRiskPerTrade * 0.9);
-          console.log(`📉 Slightly reduced risk per trade to ${this.riskParams.maxRiskPerTrade}% due to daily loss, continuing ultra aggressive trading`);
+          return { allowed: false, reason: `Daily loss limit reached: ${dailyLossPercentage.toFixed(2)}% (max: ${this.riskParams.maxDailyLoss}%)` };
         }
       }
 
-      // Enhanced position size validation with more lenient limits
+      // Position size validation
       const requiredMargin = await this.calculateRequiredMargin(orderRequest, accountStatus.accountInfo);
-      const riskPercentage = (requiredMargin / accountStatus.accountInfo.balance) * 100; // Use balance for more aggressive calculation
+      const riskPercentage = (requiredMargin / accountStatus.accountInfo.equity) * 100;
       
-      console.log(`💰 Risk calculation: Required margin ${requiredMargin.toFixed(2)}, Risk ${riskPercentage.toFixed(2)}%`);
+      console.log(`💰 Risk calculation: Required margin $${requiredMargin.toFixed(2)}, Risk ${riskPercentage.toFixed(2)}% of equity`);
 
       if (riskPercentage > this.riskParams.maxRiskPerTrade) {
-        // For aggressive day trading, allow slightly higher risk
-        if (riskPercentage > this.riskParams.maxRiskPerTrade * 1.2) {
-          return { allowed: false, reason: `Risk per trade too high: ${riskPercentage.toFixed(2)}% (max: ${(this.riskParams.maxRiskPerTrade * 1.2).toFixed(1)}%)` };
-        }
+        return { allowed: false, reason: `Risk per trade too high: ${riskPercentage.toFixed(2)}% (max: ${this.riskParams.maxRiskPerTrade}%)` };
       }
 
       // Ensure minimum account balance for trading
@@ -240,14 +237,13 @@ class OrderManager {
         return { allowed: false, reason: `Account balance too low: ${accountStatus.accountInfo.currency} ${accountStatus.accountInfo.balance} (min: $${this.riskParams.minAccountBalance})` };
       }
 
-      // Check margin level - ultra aggressive for day trading with more lenient limits
-      const minMarginForDemo = 2; // Ultra aggressive: 2% for demo
-      const minMarginForLive = 10; // Ultra aggressive: 10% for live
+      // Check margin level
+      const minMarginForDemo = 50; // 50% for demo
+      const minMarginForLive = 100; // 100% for live (industry standard)
       const minMargin = accountStatus.accountInfo.isDemo ? minMarginForDemo : minMarginForLive;
       
       if (accountStatus.accountInfo.marginLevel > 0 && accountStatus.accountInfo.marginLevel < minMargin) {
-        console.warn(`⚠️ Ultra low margin level: ${accountStatus.accountInfo.marginLevel.toFixed(1)}% (min: ${minMargin}%) - continuing with ultra aggressive day trading`);
-        // Don't block trades for day trading, just warn
+        return { allowed: false, reason: `Margin level too low: ${accountStatus.accountInfo.marginLevel.toFixed(1)}% (min: ${minMargin}%)` };
       }
 
       // Verify symbol is tradeable
@@ -255,18 +251,15 @@ class OrderManager {
         return { allowed: false, reason: `Symbol ${orderRequest.symbol} not tradeable or market closed` };
       }
 
-      // Enhanced margin check - use more of free margin for aggressive trading
-      const availableMargin = accountStatus.accountInfo.freeMargin * 0.99; // Use 99% of free margin for ultra aggressive trading
+      // Margin availability check
+      const availableMargin = accountStatus.accountInfo.freeMargin * 0.80; // Use 80% of free margin for safety
       if (requiredMargin > availableMargin) {
-        return { allowed: false, reason: `Insufficient free margin: Required ${requiredMargin.toFixed(2)}, Available ${availableMargin.toFixed(2)}` };
+        return { allowed: false, reason: `Insufficient free margin: Required $${requiredMargin.toFixed(2)}, Available $${availableMargin.toFixed(2)}` };
       }
 
       // Position limit check
       if (accountStatus.openPositions >= this.riskParams.maxConcurrentPositions) {
-        // For day trading, allow slight overflow
-        if (accountStatus.openPositions >= this.riskParams.maxConcurrentPositions * 1.1) {
-          return { allowed: false, reason: `Maximum concurrent positions reached: ${accountStatus.openPositions}/${Math.floor(this.riskParams.maxConcurrentPositions * 1.1)}` };
-        }
+        return { allowed: false, reason: `Maximum concurrent positions reached: ${accountStatus.openPositions}/${this.riskParams.maxConcurrentPositions}` };
       }
 
       // Check minimum lot size
@@ -286,22 +279,16 @@ class OrderManager {
 
       // Check daily trade count
       if (this.dailyTradeCount >= this.maxDailyTrades) {
-        // Allow 20% overflow for ultra aggressive day trading
-        if (this.dailyTradeCount >= this.maxDailyTrades * 1.2) {
-          return { allowed: false, reason: `Daily trade limit reached: ${this.dailyTradeCount}/${Math.floor(this.maxDailyTrades * 1.2)}` };
-        }
+        return { allowed: false, reason: `Daily trade limit reached: ${this.dailyTradeCount}/${this.maxDailyTrades}` };
       }
 
-      // Check order frequency with reduced restrictions
+      // Check order frequency
       const timeSinceLastOrder = Date.now() - this.lastOrderTime;
-      if (timeSinceLastOrder < this.minOrderInterval) { // Ultra aggressive: 0.1 second minimum
-        // For ultra aggressive trading, allow some frequency violations
-        if (timeSinceLastOrder < this.minOrderInterval * 0.5) {
-          return { allowed: false, reason: `Order frequency limit: ${Math.ceil((this.minOrderInterval - timeSinceLastOrder))}ms remaining` };
-        }
+      if (timeSinceLastOrder < this.minOrderInterval) {
+        return { allowed: false, reason: `Order frequency limit: wait ${Math.ceil((this.minOrderInterval - timeSinceLastOrder) / 1000)}s` };
       }
 
-      console.log(`✅ All ultra enhanced risk checks passed for ${accountType?.toUpperCase()} aggressive day trading`);
+      console.log(`✅ All risk checks passed for ${accountType?.toUpperCase()} account`);
       return { allowed: true };
 
     } catch (error) {
@@ -362,7 +349,7 @@ class OrderManager {
         throw new Error('Unable to get real account information');
       }
 
-      console.log('💰 Enhanced position sizing calculation:', {
+      console.log('💰 Position sizing calculation:', {
         balance: accountInfo.balance,
         equity: accountInfo.equity,
         freeMargin: accountInfo.freeMargin,
@@ -370,15 +357,14 @@ class OrderManager {
         isDemo: accountInfo.isDemo
       });
 
-      // Ultra enhanced position sizing for aggressive day trading
-      // Use balance for more aggressive approach
-      const availableCapital = accountInfo.balance;
+      // Professional position sizing based on risk management
+      const availableCapital = accountInfo.equity; // Use equity for conservative approach
       const riskAmount = (availableCapital * this.riskParams.maxRiskPerTrade) / 100;
       
-      console.log('📊 Enhanced risk calculation:', {
+      console.log('📊 Risk calculation:', {
         availableCapital,
         riskPercentage: this.riskParams.maxRiskPerTrade,
-        riskAmount
+        riskAmount: riskAmount.toFixed(2)
       });
 
       // Get real-time price for accurate calculations
@@ -387,8 +373,8 @@ class OrderManager {
         throw new Error('Unable to get current market price for position sizing');
       }
 
-      // Calculate stop loss distance in pips - tighter for day trading
-      let stopLossDistance = 8; // Ultra tight: 8 pips for day trading
+      // Calculate stop loss distance in pips
+      let stopLossDistance = 30; // Default: 30 pips
       if (orderRequest.stopLoss && orderRequest.stopLoss > 0) {
         const pipValue = this.getPipValue(orderRequest.symbol);
         if (pipValue <= 0) {
@@ -398,9 +384,9 @@ class OrderManager {
         stopLossDistance = Math.abs(priceToUse - orderRequest.stopLoss) / pipValue;
       }
 
-      // Ensure minimum stop loss distance for safety - tighter for day trading
-      stopLossDistance = Math.max(stopLossDistance, 3); // Ultra aggressive: Minimum 3 pips
-      stopLossDistance = Math.min(stopLossDistance, 25); // Maximum 25 pips for day trading
+      // Ensure reasonable stop loss distance
+      stopLossDistance = Math.max(stopLossDistance, 15); // Minimum 15 pips
+      stopLossDistance = Math.min(stopLossDistance, 100); // Maximum 100 pips
 
       // Calculate position size based on risk management
       const pipValue = this.getPipValue(orderRequest.symbol);
