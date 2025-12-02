@@ -26,6 +26,7 @@ import { exnessAPI } from "@/lib/trading/exnessApi";
 import { orderManager } from "@/lib/trading/orderManager";
 import { toast } from "sonner";
 import { TradeExecutionLog } from "@/components/TradeExecutionLog";
+import { TradeExecutionChecklist } from "@/components/TradeExecutionChecklist";
 
 interface LivePosition {
   id: string;
@@ -257,6 +258,13 @@ export const LiveTradingDashboard = () => {
           </div>
         </AlertDescription>
       </Alert>
+
+      {/* Trade Execution Checklist */}
+      <TradeExecutionChecklist
+        isConnected={status.isConnected}
+        isBotActive={status.isActive}
+        isAutoTradingEnabled={status.autoTradingEnabled}
+      />
 
       {/* Account Overview - Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
