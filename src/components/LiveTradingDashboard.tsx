@@ -27,6 +27,7 @@ import { orderManager } from "@/lib/trading/orderManager";
 import { toast } from "sonner";
 import { TradeExecutionLog } from "@/components/TradeExecutionLog";
 import { TradeExecutionChecklist } from "@/components/TradeExecutionChecklist";
+import { SMCAnalysisPanel } from "@/components/SMCAnalysisPanel";
 
 interface LivePosition {
   id: string;
@@ -397,12 +398,17 @@ export const LiveTradingDashboard = () => {
       )}
 
       <Tabs defaultValue="positions" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="positions">Open Positions ({positions.length})</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="positions">Positions ({positions.length})</TabsTrigger>
+          <TabsTrigger value="smc">SMC Analysis</TabsTrigger>
           <TabsTrigger value="executions">Execution Log</TabsTrigger>
-          <TabsTrigger value="prices">Market Prices</TabsTrigger>
-          <TabsTrigger value="account">Account Details</TabsTrigger>
+          <TabsTrigger value="prices">Prices</TabsTrigger>
+          <TabsTrigger value="account">Account</TabsTrigger>
         </TabsList>
+        
+        <TabsContent value="smc" className="mt-4">
+          <SMCAnalysisPanel />
+        </TabsContent>
         
         <TabsContent value="positions" className="space-y-4">
           {positions.length === 0 ? (
