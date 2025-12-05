@@ -395,53 +395,59 @@ class OrderManager {
       // Position size = Risk Amount / (Stop Loss Distance * Dollar Per Pip)
       let positionSize = riskAmount / (stopLossDistance * dollarPerPip);
 
-      // Ultra aggressive multiplier for enhanced day trading
-      const aggressiveMultiplier = accountInfo.isDemo ? 20.0 : 10.0; // Ultra aggressive: 2000% for demo, 1000% for live
-      positionSize *= aggressiveMultiplier;
+      // SAFE position sizing - ChartLord style capital preservation
+      // No aggressive multipliers - trade within risk limits
+      const safeMultiplier = 1.0; // Trade exactly what risk management calculates
+      positionSize *= safeMultiplier;
 
-      // Ultra aggressive position size limits for enhanced day trading
-      const minSize = 0.25; // Increased minimum to 0.25 lots for day trading
+      // Safe position size limits - capital preservation focus
+      const minSize = 0.01; // Minimum 0.01 lots (micro lot)
       const maxSize = Math.min(
         this.riskParams.maxPositionSize, // Maximum from settings
-        (accountInfo.freeMargin / 10), // Ultra aggressive: use up to 1/10th of free margin
-        (availableCapital / 50), // Ultra aggressive: 1/50th of capital
-        accountInfo.isDemo ? 1000.0 : 200.0 // Demo: up to 1000 lots, Live: up to 200 lots
+        (accountInfo.freeMargin / 1000), // Conservative: use max 0.1% of free margin per 0.01 lot
+        (availableCapital / 10000) * 0.1, // Conservative: 0.01 lot per $100 of capital
+        accountInfo.isDemo ? 1.0 : 0.5 // Demo: max 1.0 lot, Live: max 0.5 lot per trade
       );
       
       const adjustedSize = Math.max(minSize, Math.min(maxSize, positionSize));
       
-      console.log('📈 Enhanced final position size calculation:', {
+      // Round to 2 decimal places for proper lot sizing
+      const finalSize = Math.round(adjustedSize * 100) / 100;
+      
+      console.log('📈 Safe position size calculation (ChartLord style):', {
         availableCapital,
         riskAmount,
         stopLossDistance,
         currentPrice: currentPrice.ask,
         pipValue,
         calculatedSize: positionSize,
-        adjustedSize,
-        aggressiveMultiplier,
+        adjustedSize: finalSize,
+        riskPerTrade: this.riskParams.maxRiskPerTrade + '%',
         accountType: accountInfo.isDemo ? 'DEMO' : 'LIVE'
       });
 
-      return parseFloat(adjustedSize.toFixed(2));
+      return finalSize;
 
     } catch (error) {
-      console.error('Error calculating optimal position size for real trading:', error);
-      return 0.20; // Return larger minimum size on error for enhanced day trading
+      console.error('Error calculating optimal position size:', error);
+      return 0.01; // Return minimum safe size on error
     }
   }
 
   private calculateOptimalStopLoss(price: number, type: 'BUY' | 'SELL', symbol: string): number {
-    // Ultra enhanced stop loss calculation for day trading
+    // Safe stop loss calculation - ChartLord style capital preservation
     const pipValue = this.getPipValue(symbol);
     
-    // Tighter stop loss distances for aggressive day trading
+    // Reasonable stop loss distances for safe trading
     let stopLossPips: number;
     if (symbol.includes('JPY')) {
-      stopLossPips = 15; // Ultra tight: 15 pips for JPY pairs
+      stopLossPips = 30; // 30 pips for JPY pairs
     } else if (['GBPUSD', 'GBPJPY', 'EURGBP'].some(pair => symbol.includes(pair.replace('/', '')))) {
-      stopLossPips = 12; // Ultra tight: 12 pips for GBP pairs
+      stopLossPips = 25; // 25 pips for volatile GBP pairs
+    } else if (symbol.includes('XAU') || symbol.includes('GOLD')) {
+      stopLossPips = 200; // 200 points for gold
     } else {
-      stopLossPips = 8; // Ultra tight: 8 pips for major pairs
+      stopLossPips = 20; // 20 pips for major pairs
     }
     
     if (type === 'BUY') {
@@ -452,17 +458,19 @@ class OrderManager {
   }
 
   private calculateOptimalTakeProfit(price: number, type: 'BUY' | 'SELL', symbol: string): number {
-    // Ultra enhanced take profit calculation with 1.2:1 risk-reward ratio for ultra fast profits
+    // ChartLord style 2:1 risk-reward ratio for consistent profits
     const pipValue = this.getPipValue(symbol);
     
-    // Calculate take profit based on stop loss distance - tighter for day trading
+    // Take profit at 2x stop loss distance (2:1 R:R)
     let takeProfitPips: number;
     if (symbol.includes('JPY')) {
-      takeProfitPips = 18; // Ultra fast profits (1.2:1 ratio)
+      takeProfitPips = 60; // 60 pips (2:1 ratio from 30 SL)
     } else if (['GBPUSD', 'GBPJPY', 'EURGBP'].some(pair => symbol.includes(pair.replace('/', '')))) {
-      takeProfitPips = 15; // Ultra fast profits (1.25:1 ratio)
+      takeProfitPips = 50; // 50 pips (2:1 ratio from 25 SL)
+    } else if (symbol.includes('XAU') || symbol.includes('GOLD')) {
+      takeProfitPips = 400; // 400 points for gold (2:1 ratio)
     } else {
-      takeProfitPips = 10; // Ultra fast profits (1.25:1 ratio)
+      takeProfitPips = 40; // 40 pips (2:1 ratio from 20 SL)
     }
     
     if (type === 'BUY') {

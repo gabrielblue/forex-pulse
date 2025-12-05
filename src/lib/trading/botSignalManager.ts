@@ -19,11 +19,11 @@ export interface SignalGenerationConfig {
 class BotSignalManager {
   private config: SignalGenerationConfig = {
     enabled: false,
-    interval: 60000, // Professional standard: 60 seconds (1 minute) for quality analysis
-    symbols: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'], // All major pairs
-    minConfidence: 70, // Professional standard: 70% minimum confidence for quality signals
+    interval: 30000, // 30 seconds - more responsive like ChartLord's OnTick style
+    symbols: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'XAUUSD'], // Focus on 6 liquid pairs
+    minConfidence: 70, // Professional standard: 70% minimum for quality signals
     autoExecute: false,
-    maxDailySignals: 200, // Professional standard: 200 signals maximum per day
+    maxDailySignals: 50, // Conservative: 50 signals max per day
     aggressiveMode: false
   };
 
