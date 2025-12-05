@@ -1,6 +1,7 @@
 import { exnessAPI } from './exnessApi';
 import { botSignalManager } from './botSignalManager';
 import { systemHealthMonitor } from './systemHealth';
+import { onTickEngine } from './onTickEngine';
 
 export interface BotStatus {
   isActive: boolean;
@@ -108,10 +109,20 @@ class TradingBot {
     this.status.isActive = true;
     this.status.lastUpdate = new Date();
 
-    // Start signal generation
+    // Start signal generation (legacy interval-based)
     console.log('✅ Trading bot started - activating signal generation...');
     botSignalManager.setConfiguration({ enabled: true });
     botSignalManager.startAutomaticGeneration();
+
+    // Start OnTick Engine (ChartLord style real-time monitoring)
+    console.log('⚡ Starting OnTick Engine for real-time SMC analysis...');
+    await onTickEngine.initialize({
+      enabled: true,
+      minConfluence: 50, // 5+ confluence factors
+      autoExecute: false, // Will be enabled when auto-trading is enabled
+      trailingEnabled: true
+    });
+    onTickEngine.start();
   }
 
   async stopBot(): Promise<void> {
@@ -123,6 +134,11 @@ class TradingBot {
     console.log('⏸️ Trading bot stopped - deactivating signal generation...');
     botSignalManager.stopAutomaticGeneration();
     botSignalManager.setConfiguration({ enabled: false });
+
+    // Stop OnTick Engine
+    console.log('⚡ Stopping OnTick Engine...');
+    onTickEngine.stop();
+    onTickEngine.setEnabled(false);
   }
 
   async enableAutoTrading(enabled: boolean): Promise<void> {
@@ -144,11 +160,15 @@ class TradingBot {
     
     // Enable/disable auto-execution in signal manager
     await botSignalManager.enableAutoExecution(enabled);
+
+    // Enable/disable OnTick Engine auto-execution
+    onTickEngine.setAutoExecute(enabled);
     
     console.log(`${enabled ? '🚀' : '⏸️'} Auto-trading ${enabled ? 'ENABLED - REAL TRADES WILL BE EXECUTED' : 'disabled'}`);
     
     if (enabled) {
       console.log('⚠️ WARNING: Auto-trading is now ACTIVE. Real orders will be placed on your Exness account!');
+      console.log('⚡ OnTick Engine will execute trades based on SMC confluence (50%+ / 5+ factors)');
     }
   }
 
