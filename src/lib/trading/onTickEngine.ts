@@ -1,11 +1,13 @@
 /**
  * OnTick Engine - ChartLord AI Style Real-Time Execution
  * Monitors price changes and reacts instantly, not on intervals
+ * Now with Session Killzones + News Blackout filters
  */
 
 import { exnessAPI } from './exnessApi';
 import { orderManager } from './orderManager';
 import { smartMoneyAnalyzer, CandleData, SMCAnalysis } from './smartMoneyAnalyzer';
+import { tradingFilters, TradingFilterResult } from './tradingFilters';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface TickData {
@@ -23,6 +25,10 @@ export interface OnTickConfig {
   autoExecute: boolean;
   trailingEnabled: boolean;
   maxPositionsPerSymbol: number;
+  // New filter options
+  killzoneFilterEnabled: boolean;
+  newsBlackoutEnabled: boolean;
+  newsBlackoutMinutes: number;
 }
 
 export interface ActiveTrade {
@@ -46,7 +52,11 @@ class OnTickEngine {
     minConfluence: 50, // 50% = approximately 5 confluence factors
     autoExecute: false,
     trailingEnabled: true,
-    maxPositionsPerSymbol: 1
+    maxPositionsPerSymbol: 1,
+    // ChartLord-style filters - only trade during optimal conditions
+    killzoneFilterEnabled: true,
+    newsBlackoutEnabled: true,
+    newsBlackoutMinutes: 30
   };
 
   private tickInterval: NodeJS.Timeout | null = null;
@@ -54,6 +64,7 @@ class OnTickEngine {
   private candleHistory: Map<string, CandleData[]> = new Map();
   private activeTrades: Map<string, ActiveTrade> = new Map();
   private lastAnalysis: Map<string, SMCAnalysis> = new Map();
+  private lastFilterResult: Map<string, TradingFilterResult> = new Map();
   private isProcessing = false;
   
   // OnTick speed - 500ms for near real-time monitoring
@@ -64,7 +75,18 @@ class OnTickEngine {
     if (config) {
       this.config = { ...this.config, ...config };
     }
+    
+    // Sync filter settings
+    tradingFilters.setKillzoneEnabled(this.config.killzoneFilterEnabled);
+    tradingFilters.setNewsBlackoutEnabled(this.config.newsBlackoutEnabled);
+    tradingFilters.setNewsBlackoutMinutes(this.config.newsBlackoutMinutes);
+    
     console.log('⚡ OnTick Engine initialized (ChartLord Style):', this.config);
+    console.log('🔒 Trading Filters:', {
+      killzones: this.config.killzoneFilterEnabled ? 'ENABLED' : 'DISABLED',
+      newsBlackout: this.config.newsBlackoutEnabled ? 'ENABLED' : 'DISABLED',
+      blackoutMinutes: this.config.newsBlackoutMinutes
+    });
   }
 
   start(): void {
@@ -145,23 +167,38 @@ class OnTickEngine {
       return;
     }
 
-    // Perform SMC analysis
+    // ============= CHECK TRADING FILTERS FIRST =============
+    const filterResult = await tradingFilters.canTradeNow(symbol);
+    this.lastFilterResult.set(symbol, filterResult);
+
+    // Log filter status for this symbol
+    if (!filterResult.canTrade) {
+      // Only log occasionally to avoid spam
+      if (Math.random() < 0.01) { // 1% of ticks
+        console.log(`🚫 ${symbol} BLOCKED: ${filterResult.reason}`);
+      }
+    }
+
+    // Perform SMC analysis (always run for display purposes)
     const analysis = smartMoneyAnalyzer.analyze(candles, tick.bid);
     this.lastAnalysis.set(symbol, analysis);
 
     // Log high-confluence setups
     if (analysis.confluenceScore >= 40) {
-      console.log(`📊 ${symbol} SMC Analysis:`, {
+      const filterStatus = filterResult.canTrade ? '✅ CAN TRADE' : `🚫 ${filterResult.reason}`;
+      console.log(`📊 ${symbol} SMC Analysis [${filterStatus}]:`, {
         bias: analysis.tradeBias,
         confluence: analysis.confluenceScore,
         factors: analysis.confluenceFactors.length,
         orderBlocks: analysis.orderBlocks.length,
-        fvgs: analysis.fairValueGaps.length
+        fvgs: analysis.fairValueGaps.length,
+        inKillzone: filterResult.inKillzone,
+        newsBlackout: filterResult.newsBlackout
       });
     }
 
-    // Execute trade if conditions met
-    if (this.shouldExecuteTrade(symbol, analysis, tick)) {
+    // Execute trade if conditions met AND filters allow
+    if (filterResult.canTrade && this.shouldExecuteTrade(symbol, analysis, tick)) {
       await this.executeSMCTrade(symbol, analysis, tick);
     }
   }
@@ -497,6 +534,18 @@ class OnTickEngine {
 
   setConfig(config: Partial<OnTickConfig>): void {
     this.config = { ...this.config, ...config };
+    
+    // Sync filter settings
+    if (config.killzoneFilterEnabled !== undefined) {
+      tradingFilters.setKillzoneEnabled(config.killzoneFilterEnabled);
+    }
+    if (config.newsBlackoutEnabled !== undefined) {
+      tradingFilters.setNewsBlackoutEnabled(config.newsBlackoutEnabled);
+    }
+    if (config.newsBlackoutMinutes !== undefined) {
+      tradingFilters.setNewsBlackoutMinutes(config.newsBlackoutMinutes);
+    }
+    
     console.log('⚡ OnTick Engine config updated:', this.config);
   }
 
@@ -508,6 +557,37 @@ class OnTickEngine {
   setAutoExecute(enabled: boolean): void {
     this.config.autoExecute = enabled;
     console.log(`⚡ OnTick auto-execute ${enabled ? 'ENABLED' : 'DISABLED'}`);
+  }
+
+  // New filter-related getters
+  getLastFilterResult(symbol: string): TradingFilterResult | null {
+    return this.lastFilterResult.get(symbol) || null;
+  }
+
+  getAllFilterResults(): Map<string, TradingFilterResult> {
+    return new Map(this.lastFilterResult);
+  }
+
+  async getFilterStatus() {
+    return tradingFilters.getFilterStatus();
+  }
+
+  setKillzoneFilter(enabled: boolean): void {
+    this.config.killzoneFilterEnabled = enabled;
+    tradingFilters.setKillzoneEnabled(enabled);
+  }
+
+  setNewsBlackout(enabled: boolean): void {
+    this.config.newsBlackoutEnabled = enabled;
+    tradingFilters.setNewsBlackoutEnabled(enabled);
+  }
+
+  getKillzones() {
+    return tradingFilters.getKillzones();
+  }
+
+  getUpcomingNews() {
+    return tradingFilters.getCachedNews();
   }
 }
 

@@ -14,7 +14,17 @@ export { tradingBot } from './tradingBot';
 // Real-time data feed - integrated with Exness API
 export { realTimeDataFeed } from './realTimeDataFeed';
 
-// Signal processor - integrated with bot signal manager
+// Smart Money Concepts exports
+export { smartMoneyAnalyzer } from './smartMoneyAnalyzer';
+export type { SMCAnalysis, CandleData, OrderBlock, FairValueGap, LiquidityZone, MarketStructure } from './smartMoneyAnalyzer';
+
+// OnTick Engine exports
+export { onTickEngine } from './onTickEngine';
+export type { OnTickConfig, TickData, ActiveTrade } from './onTickEngine';
+
+// Trading Filters exports (Session Killzones + News Blackout)
+export { tradingFilters } from './tradingFilters';
+export type { Killzone, UpcomingNews, TradingFilterResult } from './tradingFilters';
 export const signalProcessor = {
   processSignal: async (signal: any) => {
     const { botSignalManager } = await import('./botSignalManager');
