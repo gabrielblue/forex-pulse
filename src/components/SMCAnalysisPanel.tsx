@@ -4,6 +4,9 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -12,31 +15,70 @@ import {
   Zap,
   BarChart3,
   Activity,
-  AlertTriangle
+  AlertTriangle,
+  Clock,
+  Newspaper,
+  CheckCircle,
+  XCircle
 } from 'lucide-react';
 import { onTickEngine } from '@/lib/trading/onTickEngine';
 import { SMCAnalysis } from '@/lib/trading/smartMoneyAnalyzer';
+import { TradingFilterResult, Killzone, UpcomingNews } from '@/lib/trading/tradingFilters';
 
 interface SMCAnalysisPanelProps {
   symbol?: string;
+}
+
+interface FilterStatus {
+  killzoneEnabled: boolean;
+  newsBlackoutEnabled: boolean;
+  inKillzone: boolean;
+  activeKillzone: Killzone | null;
+  upcomingHighImpactNews: UpcomingNews[];
+  canTradeAny: boolean;
 }
 
 export const SMCAnalysisPanel = ({ symbol = 'EURUSD' }: SMCAnalysisPanelProps) => {
   const [analysis, setAnalysis] = useState<SMCAnalysis | null>(null);
   const [activeTrades, setActiveTrades] = useState<any[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState(symbol);
+  const [filterResult, setFilterResult] = useState<TradingFilterResult | null>(null);
+  const [filterStatus, setFilterStatus] = useState<FilterStatus | null>(null);
+  const [killzoneEnabled, setKillzoneEnabled] = useState(true);
+  const [newsBlackoutEnabled, setNewsBlackoutEnabled] = useState(true);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       const smcAnalysis = onTickEngine.getLastAnalysis(selectedSymbol);
       if (smcAnalysis) {
         setAnalysis(smcAnalysis);
       }
+      
+      // Get filter results
+      const filter = onTickEngine.getLastFilterResult(selectedSymbol);
+      if (filter) {
+        setFilterResult(filter);
+      }
+      
+      // Get overall filter status
+      const status = await onTickEngine.getFilterStatus();
+      setFilterStatus(status);
+      
       setActiveTrades(onTickEngine.getActiveTrades());
     }, 1000);
 
     return () => clearInterval(interval);
   }, [selectedSymbol]);
+
+  const handleKillzoneToggle = (enabled: boolean) => {
+    setKillzoneEnabled(enabled);
+    onTickEngine.setKillzoneFilter(enabled);
+  };
+
+  const handleNewsBlackoutToggle = (enabled: boolean) => {
+    setNewsBlackoutEnabled(enabled);
+    onTickEngine.setNewsBlackout(enabled);
+  };
 
   const getBiasColor = (bias: string) => {
     switch (bias) {
@@ -66,6 +108,103 @@ export const SMCAnalysisPanel = ({ symbol = 'EURUSD' }: SMCAnalysisPanelProps) =
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Trading Filters Status - NEW */}
+        <div className="p-3 rounded-lg bg-muted/30 border border-border space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium flex items-center gap-2">
+              <Shield className="h-4 w-4 text-primary" />
+              Trading Filters
+            </span>
+            {filterResult?.canTrade ? (
+              <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Can Trade
+              </Badge>
+            ) : (
+              <Badge className="bg-red-500/20 text-red-400 border-red-500/30">
+                <XCircle className="h-3 w-3 mr-1" />
+                Blocked
+              </Badge>
+            )}
+          </div>
+
+          {/* Killzone Status */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-amber-400" />
+              <Label htmlFor="killzone" className="text-xs">Session Killzone</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              {filterResult?.inKillzone ? (
+                <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-400">
+                  {filterResult.activeKillzone?.name || 'Active'}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-xs text-muted-foreground">
+                  Outside
+                </Badge>
+              )}
+              <Switch 
+                id="killzone"
+                checked={killzoneEnabled}
+                onCheckedChange={handleKillzoneToggle}
+                className="scale-75"
+              />
+            </div>
+          </div>
+
+          {/* News Blackout Status */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Newspaper className="h-4 w-4 text-blue-400" />
+              <Label htmlFor="newsblackout" className="text-xs">News Blackout</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              {filterResult?.newsBlackout ? (
+                <Badge variant="outline" className="text-xs bg-red-500/10 text-red-400">
+                  ⚠️ Active
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-xs text-emerald-400">
+                  Clear
+                </Badge>
+              )}
+              <Switch 
+                id="newsblackout"
+                checked={newsBlackoutEnabled}
+                onCheckedChange={handleNewsBlackoutToggle}
+                className="scale-75"
+              />
+            </div>
+          </div>
+
+          {/* Filter Reason */}
+          {filterResult && !filterResult.canTrade && (
+            <Alert className="bg-amber-500/10 border-amber-500/30">
+              <AlertTriangle className="h-4 w-4 text-amber-400" />
+              <AlertDescription className="text-xs text-amber-300">
+                {filterResult.reason}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Upcoming News */}
+          {filterResult?.upcomingNews && (
+            <div className="p-2 rounded bg-red-500/10 border border-red-500/20 text-xs">
+              <div className="font-medium text-red-400">📰 {filterResult.upcomingNews.title}</div>
+              <div className="text-muted-foreground">{filterResult.upcomingNews.currency} - {filterResult.upcomingNews.impact}</div>
+            </div>
+          )}
+
+          {/* Best Pairs for Current Killzone */}
+          {filterResult?.inKillzone && filterResult.bestPairsNow.length > 0 && (
+            <div className="text-xs">
+              <span className="text-muted-foreground">Best pairs now: </span>
+              <span className="text-primary">{filterResult.bestPairsNow.slice(0, 4).join(', ')}</span>
+            </div>
+          )}
+        </div>
+
         {/* Symbol Selector */}
         <div className="flex gap-2 flex-wrap">
           {['EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'AUDUSD', 'USDCHF'].map(sym => (
@@ -82,8 +221,9 @@ export const SMCAnalysisPanel = ({ symbol = 'EURUSD' }: SMCAnalysisPanelProps) =
 
         {analysis ? (
           <Tabs defaultValue="confluence" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="confluence">Confluence</TabsTrigger>
+              <TabsTrigger value="filters">Filters</TabsTrigger>
               <TabsTrigger value="structure">Structure</TabsTrigger>
               <TabsTrigger value="levels">Levels</TabsTrigger>
             </TabsList>
@@ -151,6 +291,94 @@ export const SMCAnalysisPanel = ({ symbol = 'EURUSD' }: SMCAnalysisPanelProps) =
                   </div>
                 </div>
               )}
+            </TabsContent>
+
+            {/* NEW: Filters Tab */}
+            <TabsContent value="filters" className="space-y-4 mt-4">
+              {/* Killzones Overview */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-amber-400" />
+                  <span className="text-sm font-medium">Session Killzones (UTC)</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {onTickEngine.getKillzones().map((kz, idx) => (
+                    <div 
+                      key={idx}
+                      className={`p-2 rounded text-xs ${
+                        filterResult?.activeKillzone?.name === kz.name
+                          ? 'bg-emerald-500/20 border border-emerald-500/30'
+                          : 'bg-muted/30'
+                      }`}
+                    >
+                      <div className="font-medium">{kz.name}</div>
+                      <div className="text-muted-foreground">
+                        {kz.startHour.toString().padStart(2, '0')}:00 - {kz.endHour.toString().padStart(2, '0')}:00
+                      </div>
+                      <div className="text-xs text-primary mt-1">
+                        {kz.bestPairs.slice(0, 3).join(', ')}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Upcoming High-Impact News */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Newspaper className="h-4 w-4 text-red-400" />
+                  <span className="text-sm font-medium">Upcoming News (±2h)</span>
+                </div>
+                <ScrollArea className="h-32">
+                  <div className="space-y-1">
+                    {filterStatus?.upcomingHighImpactNews.map((news, idx) => (
+                      <div 
+                        key={idx}
+                        className="p-2 rounded text-xs bg-red-500/10 border-l-2 border-red-500"
+                      >
+                        <div className="flex justify-between">
+                          <span className="font-medium">{news.title}</span>
+                          <Badge variant="outline" className="text-xs">{news.currency}</Badge>
+                        </div>
+                        <div className="text-muted-foreground">
+                          {news.eventTime.toLocaleTimeString()} - {news.impact}
+                        </div>
+                      </div>
+                    ))}
+                    {(!filterStatus?.upcomingHighImpactNews || filterStatus.upcomingHighImpactNews.length === 0) && (
+                      <div className="text-xs text-muted-foreground p-2 text-center">
+                        No high-impact news in next 2 hours
+                      </div>
+                    )}
+                  </div>
+                </ScrollArea>
+              </div>
+
+              {/* Filter Settings */}
+              <div className="space-y-3 p-3 rounded-lg bg-muted/30 border border-border">
+                <div className="text-sm font-medium">Filter Settings</div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="kz-full" className="text-xs">Killzone Filter</Label>
+                  <Switch 
+                    id="kz-full"
+                    checked={killzoneEnabled}
+                    onCheckedChange={handleKillzoneToggle}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="nb-full" className="text-xs">News Blackout (30min)</Label>
+                  <Switch 
+                    id="nb-full"
+                    checked={newsBlackoutEnabled}
+                    onCheckedChange={handleNewsBlackoutToggle}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {killzoneEnabled && newsBlackoutEnabled 
+                    ? '✅ Maximum protection - only trades during optimal windows'
+                    : '⚠️ Some filters disabled - increased risk'}
+                </p>
+              </div>
             </TabsContent>
 
             <TabsContent value="structure" className="space-y-4 mt-4">
