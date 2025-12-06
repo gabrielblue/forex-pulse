@@ -406,34 +406,11 @@ class OnTickEngine {
 
       return [];
     } catch (error) {
-      // Fallback: generate from current prices
-      const price = this.lastPrices.get(symbol);
-      if (!price) return [];
-
-      // Generate synthetic candles for testing
-      const candles: CandleData[] = [];
-      let basePrice = price.bid;
-      
-      for (let i = 99; i >= 0; i--) {
-        const variance = (Math.random() - 0.5) * 0.002 * basePrice;
-        const open = basePrice + variance;
-        const high = open + Math.abs(variance) * 0.5;
-        const low = open - Math.abs(variance) * 0.5;
-        const close = open + (Math.random() - 0.5) * 0.001 * basePrice;
-        
-        candles.push({
-          open,
-          high,
-          low,
-          close,
-          volume: Math.random() * 1000,
-          timestamp: new Date(Date.now() - i * 15 * 60 * 1000)
-        });
-        
-        basePrice = close;
-      }
-
-      return candles;
+      // NO FAKE DATA - Only real MT5 historical data
+      console.error(`❌ Failed to fetch candles for ${symbol}:`, error);
+      console.error('⚠️ CRITICAL: MT5 Bridge not available. Cannot trade without real historical data.');
+      console.error('💡 Ensure MT5 Bridge is running: python mt5_bridge.py');
+      return [];
     }
   }
 
@@ -497,17 +474,25 @@ class OnTickEngine {
     return 0.0001;
   }
 
-  // Getters
+  // Getters for UI
   getConfig(): OnTickConfig {
     return { ...this.config };
   }
 
-  getLastAnalysis(symbol: string): SMCAnalysis | undefined {
-    return this.lastAnalysis.get(symbol);
+  getLastAnalysis(symbol: string): SMCAnalysis | null {
+    return this.lastAnalysis.get(symbol) || null;
+  }
+
+  getAllAnalysis(): Map<string, SMCAnalysis> {
+    return new Map(this.lastAnalysis);
   }
 
   getActiveTrades(): ActiveTrade[] {
     return Array.from(this.activeTrades.values());
+  }
+
+  isRunning(): boolean {
+    return this.tickInterval !== null;
   }
 
   setConfig(config: Partial<OnTickConfig>): void {
