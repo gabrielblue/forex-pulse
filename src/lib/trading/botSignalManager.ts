@@ -19,7 +19,7 @@ export interface SignalGenerationConfig {
 class BotSignalManager {
   private config: SignalGenerationConfig = {
     enabled: false,
-    interval: 30000, // 30 seconds - more responsive like ChartLord's OnTick style
+    interval: 120000, // 2 minutes - prevent rate limiting on AI gateway
     symbols: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'XAUUSD'], // Focus on 6 liquid pairs
     minConfidence: 70, // Professional standard: 70% minimum for quality signals
     autoExecute: false,
@@ -33,6 +33,8 @@ class BotSignalManager {
   private dailySignalCount = 0;
   private lastResetDate = new Date().toDateString();
   private analysisLocks: Set<string> = new Set(); // Track symbols currently being analyzed
+  private lastAICallTime: Map<string, number> = new Map(); // Rate limit AI calls per symbol
+  private readonly AI_CALL_COOLDOWN = 60000; // 1 minute between AI calls per symbol
 
   async initialize(config?: Partial<SignalGenerationConfig>): Promise<void> {
     if (config) {
@@ -92,9 +94,9 @@ class BotSignalManager {
       return;
     }
 
-    // Rate limiting
+    // Rate limiting - minimum 30 seconds between cycles to prevent AI rate limits
     const timeSinceLastGeneration = Date.now() - this.lastGenerationTime;
-    if (timeSinceLastGeneration < 1000) { // Ultra aggressive: 1 second minimum
+    if (timeSinceLastGeneration < 30000) {
       return;
     }
 
@@ -147,18 +149,25 @@ class BotSignalManager {
   private async analyzeAndGenerateSignal(symbol: string): Promise<void> {
     // Prevent race condition - skip if already analyzing this symbol
     if (this.analysisLocks.has(symbol)) {
-      console.log(`⏭️  Skipping ${symbol} - already being analyzed`);
-      return;
+      return; // Silent skip - already being analyzed
+    }
+
+    // Rate limit AI calls per symbol to prevent 429 errors
+    const lastCallTime = this.lastAICallTime.get(symbol) || 0;
+    const timeSinceLastCall = Date.now() - lastCallTime;
+    if (timeSinceLastCall < this.AI_CALL_COOLDOWN) {
+      return; // Silent skip - cooldown active
     }
 
     // Acquire lock
     this.analysisLocks.add(symbol);
+    this.lastAICallTime.set(symbol, Date.now());
 
     try {
       // Get current market price
       const marketPrice = await exnessAPI.getCurrentPrice(symbol);
       if (!marketPrice || !marketPrice.bid || !marketPrice.ask) {
-        console.warn(`Cannot get valid price for ${symbol}`);
+        console.warn(`⚠️ Cannot get valid price for ${symbol}`);
         return;
       }
 
@@ -167,8 +176,7 @@ class BotSignalManager {
 
       // Skip if no valid trading signal (expected for HOLD or low confidence or missing data)
       if (!analysis || typeof analysis.confidence !== 'number') {
-        // Only log once per symbol, not every cycle
-        return;
+        return; // Silent skip - no valid signal
       }
 
       // Generate signal if confidence is high enough
