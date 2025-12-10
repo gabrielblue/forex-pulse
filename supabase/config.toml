@@ -24,15 +24,15 @@ pop3_port = 54326
 verify_jwt = true
 
 [functions.analyze-market]
-verify_jwt = false
+verify_jwt = true
 
 [analytics]
 enabled = false
 
 [auth]
 # Security settings for production
-# OTP expiry in seconds (180 = 3 minutes for financial trading security)
-otp_expiry = 180
+# OTP expiry in seconds (60 = 1 minute for financial trading security)
+otp_expiry = 60
 # Minimum password length
 password_min_length = 12
 # Enable leaked password protection (checks against haveibeenpwned database)

@@ -6,6 +6,83 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Allowed trading symbols whitelist
+const ALLOWED_SYMBOLS = [
+  'EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD', 'NZDUSD',
+  'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY', 'CHFJPY',
+  'XAUUSD', 'XAGUSD', 'BTCUSD', 'ETHUSD',
+  'EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD',
+  'EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'AUD/JPY', 'CAD/JPY', 'CHF/JPY',
+  'XAU/USD', 'XAG/USD', 'BTC/USD', 'ETH/USD'
+];
+
+const ALLOWED_TIMEFRAMES = ['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w', 'M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1'];
+
+// Input validation functions
+function validateSymbol(symbol: string): boolean {
+  if (!symbol || typeof symbol !== 'string') return false;
+  const normalizedSymbol = symbol.toUpperCase().replace('/', '');
+  return ALLOWED_SYMBOLS.some(s => s.toUpperCase().replace('/', '') === normalizedSymbol);
+}
+
+function validateTimeframe(timeframe: string): boolean {
+  if (!timeframe || typeof timeframe !== 'string') return false;
+  return ALLOWED_TIMEFRAMES.includes(timeframe);
+}
+
+function validateNumericRange(value: unknown, min: number, max: number): boolean {
+  if (typeof value !== 'number' || isNaN(value)) return false;
+  return value >= min && value <= max;
+}
+
+function validateMarketData(marketData: unknown): { valid: boolean; error?: string } {
+  if (!marketData || typeof marketData !== 'object') {
+    return { valid: false, error: 'marketData must be an object' };
+  }
+  
+  const data = marketData as Record<string, unknown>;
+  
+  // Validate currentPrice
+  if (data.currentPrice !== undefined && !validateNumericRange(data.currentPrice, 0, 1000000)) {
+    return { valid: false, error: 'currentPrice must be a positive number' };
+  }
+  
+  // Validate bid/ask
+  if (data.bid !== undefined && !validateNumericRange(data.bid, 0, 1000000)) {
+    return { valid: false, error: 'bid must be a positive number' };
+  }
+  if (data.ask !== undefined && !validateNumericRange(data.ask, 0, 1000000)) {
+    return { valid: false, error: 'ask must be a positive number' };
+  }
+  
+  // Validate spread
+  if (data.spread !== undefined && !validateNumericRange(data.spread, 0, 1000)) {
+    return { valid: false, error: 'spread must be between 0 and 1000' };
+  }
+  
+  return { valid: true };
+}
+
+function validateTechnicalIndicators(indicators: unknown): { valid: boolean; error?: string } {
+  if (!indicators || typeof indicators !== 'object') {
+    return { valid: false, error: 'technicalIndicators must be an object' };
+  }
+  
+  const data = indicators as Record<string, unknown>;
+  
+  // Validate RSI (0-100)
+  if (data.rsi !== undefined && !validateNumericRange(data.rsi, 0, 100)) {
+    return { valid: false, error: 'RSI must be between 0 and 100' };
+  }
+  
+  // Validate ATR
+  if (data.atr !== undefined && !validateNumericRange(data.atr, 0, 10000)) {
+    return { valid: false, error: 'ATR must be a positive number' };
+  }
+  
+  return { valid: true };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -14,6 +91,35 @@ serve(async (req) => {
   try {
     console.log('📊 Market analysis request received');
 
+    // Verify JWT authentication
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.error('❌ Missing or invalid authorization header');
+      return new Response(
+        JSON.stringify({ error: "Unauthorized: Missing authentication token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Create Supabase client to verify the user
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    // Verify the user is authenticated
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.error('❌ Authentication failed:', authError?.message);
+      return new Response(
+        JSON.stringify({ error: "Unauthorized: Invalid or expired token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log('✅ Authenticated user:', user.id);
+
     const requestBody = await req.json();
     console.log('📋 Request body:', JSON.stringify(requestBody, null, 2));
     
@@ -21,7 +127,48 @@ serve(async (req) => {
     
     // Validate required fields
     if (!symbol || !marketData || !technicalIndicators) {
-      throw new Error(`Missing required fields. Symbol: ${!!symbol}, MarketData: ${!!marketData}, TechnicalIndicators: ${!!technicalIndicators}`);
+      return new Response(
+        JSON.stringify({ error: `Missing required fields. Symbol: ${!!symbol}, MarketData: ${!!marketData}, TechnicalIndicators: ${!!technicalIndicators}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate symbol against whitelist
+    if (!validateSymbol(symbol)) {
+      console.error('❌ Invalid symbol:', symbol);
+      return new Response(
+        JSON.stringify({ error: `Invalid symbol: ${symbol}. Must be a valid trading pair.` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate timeframe
+    if (timeframe && !validateTimeframe(timeframe)) {
+      console.error('❌ Invalid timeframe:', timeframe);
+      return new Response(
+        JSON.stringify({ error: `Invalid timeframe: ${timeframe}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate marketData
+    const marketDataValidation = validateMarketData(marketData);
+    if (!marketDataValidation.valid) {
+      console.error('❌ Invalid marketData:', marketDataValidation.error);
+      return new Response(
+        JSON.stringify({ error: `Invalid marketData: ${marketDataValidation.error}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate technicalIndicators
+    const indicatorsValidation = validateTechnicalIndicators(technicalIndicators);
+    if (!indicatorsValidation.valid) {
+      console.error('❌ Invalid technicalIndicators:', indicatorsValidation.error);
+      return new Response(
+        JSON.stringify({ error: `Invalid technicalIndicators: ${indicatorsValidation.error}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
