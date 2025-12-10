@@ -39,10 +39,11 @@ export interface AIAnalysisResult {
 
 class AIAnalyzer {
   private analysisCache: Map<string, { result: AIAnalysisResult; timestamp: number }> = new Map();
-  private cacheDuration = 60000; // 1 minute cache
+  private cacheDuration = 120000; // 2 minutes cache to reduce API calls
+  private rateLimitBackoff = 0; // Global backoff time when rate limited
+  private lastRateLimitTime = 0;
   
   constructor() {
-    // Clear any stale cache on initialization
     this.initializeCache();
   }
 
@@ -56,6 +57,19 @@ class AIAnalyzer {
       return cached.result;
     }
 
+    // Check if we're in rate limit backoff period
+    if (this.rateLimitBackoff > 0) {
+      const timeSinceRateLimit = Date.now() - this.lastRateLimitTime;
+      if (timeSinceRateLimit < this.rateLimitBackoff) {
+        const waitTime = Math.ceil((this.rateLimitBackoff - timeSinceRateLimit) / 1000);
+        console.log(`⏳ Rate limit backoff active, waiting ${waitTime}s before next AI call`);
+        return this.getFallbackAnalysis(input);
+      } else {
+        // Backoff period ended, reduce backoff for next time
+        this.rateLimitBackoff = Math.max(0, this.rateLimitBackoff / 2);
+      }
+    }
+
     try {
       console.log(`🤖 Requesting AI analysis for ${input.symbol} on ${input.timeframe}...`);
       
@@ -64,6 +78,11 @@ class AIAnalyzer {
       });
 
       if (error) {
+        // Check if it's a rate limit error
+        if (error.message?.includes('429') || error.message?.includes('Too Many Requests')) {
+          this.handleRateLimit();
+          return this.getFallbackAnalysis(input);
+        }
         console.error('AI analysis error:', error);
         throw error;
       }
@@ -81,6 +100,9 @@ class AIAnalyzer {
         throw new Error('AI analysis incomplete');
       }
       
+      // Success - reset backoff
+      this.rateLimitBackoff = 0;
+      
       // Cache the result
       this.analysisCache.set(cacheKey, {
         result: analysis,
@@ -95,16 +117,26 @@ class AIAnalyzer {
       });
 
       return analysis;
-    } catch (error) {
+    } catch (error: any) {
+      // Check for rate limit in catch block too
+      if (error?.message?.includes('429') || error?.message?.includes('Too Many Requests') || 
+          error?.message?.includes('non-2xx')) {
+        this.handleRateLimit();
+      }
       console.error('Failed to get AI analysis:', error);
-      
-      // Return conservative fallback
       return this.getFallbackAnalysis(input);
     }
   }
 
+  private handleRateLimit(): void {
+    // Exponential backoff: start at 60s, double each time, max 5 minutes
+    this.rateLimitBackoff = Math.min(300000, Math.max(60000, this.rateLimitBackoff * 2 || 60000));
+    this.lastRateLimitTime = Date.now();
+    console.warn(`⚠️ Rate limited! Backing off for ${this.rateLimitBackoff / 1000}s`);
+  }
+
   private getFallbackAnalysis(input: MarketAnalysisInput): AIAnalysisResult {
-    console.warn('⚠️ Using fallback analysis - AI unavailable');
+    console.warn('⚠️ Using fallback analysis - AI unavailable or rate limited');
     
     return {
       regime: 'RANGING',
@@ -124,12 +156,23 @@ class AIAnalyzer {
 
   clearCache(): void {
     this.analysisCache.clear();
+    this.rateLimitBackoff = 0;
     console.log('🧹 AI analysis cache cleared');
   }
   
-  // Clear cache on module load to ensure fresh analysis after deployment
   private initializeCache(): void {
     this.analysisCache.clear();
+  }
+
+  // Check if currently rate limited
+  isRateLimited(): boolean {
+    if (this.rateLimitBackoff === 0) return false;
+    return Date.now() - this.lastRateLimitTime < this.rateLimitBackoff;
+  }
+
+  getRemainingBackoff(): number {
+    if (!this.isRateLimited()) return 0;
+    return Math.max(0, this.rateLimitBackoff - (Date.now() - this.lastRateLimitTime));
   }
 }
 
