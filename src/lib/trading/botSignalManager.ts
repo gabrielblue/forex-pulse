@@ -19,8 +19,8 @@ export interface SignalGenerationConfig {
 class BotSignalManager {
   private config: SignalGenerationConfig = {
     enabled: false,
-    interval: 120000, // 2 minutes - prevent rate limiting on AI gateway
-    symbols: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'XAUUSD'], // Focus on 6 liquid pairs
+    interval: 180000, // 3 minutes - prevent rate limiting on AI gateway
+    symbols: ['EURUSD', 'GBPUSD', 'USDJPY'], // Reduced to 3 pairs to prevent rate limits
     minConfidence: 70, // Professional standard: 70% minimum for quality signals
     autoExecute: false,
     maxDailySignals: 50, // Conservative: 50 signals max per day
@@ -34,7 +34,8 @@ class BotSignalManager {
   private lastResetDate = new Date().toDateString();
   private analysisLocks: Set<string> = new Set(); // Track symbols currently being analyzed
   private lastAICallTime: Map<string, number> = new Map(); // Rate limit AI calls per symbol
-  private readonly AI_CALL_COOLDOWN = 60000; // 1 minute between AI calls per symbol
+  private readonly AI_CALL_COOLDOWN = 120000; // 2 minutes between AI calls per symbol
+  private currentSymbolIndex = 0; // For sequential symbol analysis
 
   async initialize(config?: Partial<SignalGenerationConfig>): Promise<void> {
     if (config) {
@@ -126,13 +127,13 @@ class BotSignalManager {
         return;
       }
 
-      // Generate signals for each symbol with enhanced processing
-      const signalPromises = this.config.symbols.map(symbol => 
-        this.analyzeAndGenerateSignal(symbol)
-      );
+      // Analyze ONE symbol per cycle to prevent rate limiting
+      // Rotate through symbols sequentially
+      const symbol = this.config.symbols[this.currentSymbolIndex];
+      this.currentSymbolIndex = (this.currentSymbolIndex + 1) % this.config.symbols.length;
       
-      // Wait for all analysis to complete
-      await Promise.all(signalPromises);
+      console.log(`📈 Analyzing ${symbol} (${this.currentSymbolIndex + 1}/${this.config.symbols.length})`);
+      await this.analyzeAndGenerateSignal(symbol);
 
       // Process any pending signals if auto-execution is enabled
       if (this.config.autoExecute && orderManager.isAutoTradingActive()) {
