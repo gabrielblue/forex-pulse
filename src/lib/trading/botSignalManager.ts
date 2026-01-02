@@ -20,10 +20,10 @@ class BotSignalManager {
   private config: SignalGenerationConfig = {
     enabled: false,
     interval: 180000, // 3 minutes - prevent rate limiting on AI gateway
-    symbols: ['EURUSD', 'GBPUSD', 'USDJPY'], // Reduced to 3 pairs to prevent rate limits
-    minConfidence: 70, // Professional standard: 70% minimum for quality signals
+    symbols: ['XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY'], // Gold first priority, then major forex pairs
+    minConfidence: 65, // ChartLord-style: 65% minimum (5+ confluence factors)
     autoExecute: false,
-    maxDailySignals: 50, // Conservative: 50 signals max per day
+    maxDailySignals: 100, // Increased for more opportunities
     aggressiveMode: false
   };
 
