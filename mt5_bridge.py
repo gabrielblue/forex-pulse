@@ -25,8 +25,10 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:3000",
+        "http://localhost:8080",
         "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000"
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8080"
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST"],
@@ -512,12 +514,12 @@ async def get_sessions():
 if __name__ == "__main__":
     print("🚀 Starting MT5 Bridge Service...")
     print("📋 Make sure MetaTrader 5 terminal is running!")
-    print("🔗 Service will be available at http://localhost:8001")
+    print("🔗 Service will be available at http://localhost:8000")
     print("🔒 Security: Binding to localhost only (127.0.0.1)")
 
     uvicorn.run(
         app,
         host="127.0.0.1",  # Bind to localhost only for security
-        port=8001,
+        port=8000,  # Matches VITE_MT5_BRIDGE_URL in .env
         log_level="info"
     )
