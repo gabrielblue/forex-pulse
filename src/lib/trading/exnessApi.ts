@@ -1,3 +1,5 @@
+import { MT5_BRIDGE_URL } from "./config";
+
 export interface ExnessCredentials {
   accountNumber: string;
   password: string;
@@ -64,8 +66,8 @@ class ExnessAPI {
   private connectionInfo: any = null;
   private lastUpdate: Date = new Date();
 
-  // MT5 Bridge URL - configurable via environment variable
-  private readonly MT5_BRIDGE_URL = import.meta.env.VITE_MT5_BRIDGE_URL || 'http://localhost:8001';
+  // MT5 Bridge URL (local runtime)
+  private readonly MT5_BRIDGE_URL = MT5_BRIDGE_URL;
   private readonly REQUEST_TIMEOUT = 30000; // 30 seconds
   private readonly MAX_RETRIES = 3;
 

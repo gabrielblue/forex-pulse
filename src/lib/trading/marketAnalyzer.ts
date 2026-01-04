@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { exnessAPI } from './exnessApi';
+import { MT5_BRIDGE_URL } from './config';
 
 export interface MarketNote {
   id: string;
@@ -468,7 +469,6 @@ class MarketAnalyzer {
   private async fetchHistoricalData(symbol: string, timeframe: string): Promise<number[]> {
     try {
       // Fetch historical price data from MT5 bridge
-      const MT5_BRIDGE_URL = import.meta.env.VITE_MT5_BRIDGE_URL || 'http://localhost:8001';
       const response = await fetch(`${MT5_BRIDGE_URL}/prices/${symbol}`);
       if (!response.ok) {
         console.warn(`Failed to fetch historical data for ${symbol}, using current price only`);
