@@ -1,3 +1,4 @@
+import { MT5_BRIDGE_URL } from "./config";
 import { exnessAPI } from './exnessApi';
 
 export interface SystemHealthCheck {
@@ -89,14 +90,12 @@ class SystemHealthMonitor {
 
   private async checkMT5Bridge(): Promise<boolean> {
     try {
-      // Try to fetch a price as a health check
-      const MT5_BRIDGE_URL = import.meta.env.VITE_MT5_BRIDGE_URL || 'http://localhost:8001';
       const response = await fetch(`${MT5_BRIDGE_URL}/`, {
         method: 'GET',
         signal: AbortSignal.timeout(3000)
       });
       return response.ok;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
