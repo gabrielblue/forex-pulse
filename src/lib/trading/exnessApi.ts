@@ -78,6 +78,19 @@ class ExnessAPI {
   private readonly REQUEST_TIMEOUT = 30000;
   private readonly MAX_RETRIES = 3;
 
+  // MT5 timeframe mapping (string to MT5 constant)
+  private readonly TIMEFRAME_MAP: { [key: string]: number } = {
+    '1m': 1,     // MT5_TIMEFRAME_M1
+    '5m': 5,     // MT5_TIMEFRAME_M5
+    '15m': 15,   // MT5_TIMEFRAME_M15
+    '30m': 30,   // MT5_TIMEFRAME_M30
+    '1h': 60,    // MT5_TIMEFRAME_H1
+    '4h': 240,   // MT5_TIMEFRAME_H4
+    '1d': 1440,  // MT5_TIMEFRAME_D1
+    '1w': 10080, // MT5_TIMEFRAME_W1
+    'M1': 43200, // MT5_TIMEFRAME_MN1
+  };
+
   /* =========================
      Helpers
      ========================= */
@@ -115,6 +128,45 @@ class ExnessAPI {
   /* =========================
      Connection
      ========================= */
+
+  async testConnection(credentials: ExnessCredentials): Promise<any> {
+    const bridgeUp = await this.checkMT5BridgeAvailability();
+    if (!bridgeUp) {
+      throw new Error("MT5 Bridge service is not running");
+    }
+
+    const response = await this.fetchWithTimeout(
+      `${this.MT5_BRIDGE_URL}/mt5/connect`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          login: parseInt(credentials.accountNumber),
+          password: credentials.password,
+          server: credentials.server,
+        }),
+      }
+    );
+
+    const result = await response.json();
+
+    if (!result.success || !result.account_info) {
+      return {
+        success: false,
+        message: result.error || "Connection failed",
+        accountInfo: null
+      };
+    }
+
+    // Don't store session for test connection
+    const accountInfo = this.mapMT5AccountInfo(result.account_info);
+
+    return {
+      success: true,
+      message: "Connection successful",
+      accountInfo
+    };
+  }
 
   async connect(credentials: ExnessCredentials): Promise<boolean> {
     const bridgeUp = await this.checkMT5BridgeAvailability();
@@ -169,9 +221,14 @@ class ExnessAPI {
      Historical Data
      ========================= */
 
-  async getHistoricalData(symbol: string, timeframe: number, count: number): Promise<any[]> {
+  async getHistoricalData(symbol: string, timeframe: string, count: number): Promise<any[]> {
     if (!this.sessionId) {
       throw new Error('MT5 session not initialized. Call connect() first.');
+    }
+
+    const mt5Timeframe = this.TIMEFRAME_MAP[timeframe];
+    if (!mt5Timeframe) {
+      throw new Error(`Unsupported timeframe: ${timeframe}`);
     }
 
     try {
@@ -181,7 +238,7 @@ class ExnessAPI {
         body: JSON.stringify({
           session_id: this.sessionId,
           symbol,
-          timeframe,
+          timeframe: mt5Timeframe,
           count
         })
       });
@@ -193,12 +250,12 @@ class ExnessAPI {
       }
 
       const result = await response.json();
-      if (!result.success || !Array.isArray(result.data) || result.data.length === 0) {
+      if (!result.success || !result.data?.bars || !Array.isArray(result.data.bars)) {
         console.warn(`⚠️ Historical data invalid or empty for ${symbol}`);
         return [];
       }
 
-      return result.data;
+      return result.data.bars;
 
     } catch (error) {
       console.error('Error fetching historical data:', error);
@@ -242,6 +299,82 @@ class ExnessAPI {
 
   async getPositions(): Promise<Position[]> {
     return this.accountInfo?.positions || [];
+  }
+
+  async placeOrder(order: TradeOrder): Promise<any> {
+    if (!this.sessionId) {
+      throw new Error('MT5 session not initialized. Call connect() first.');
+    }
+
+    const response = await this.fetchWithTimeout(
+      `${this.MT5_BRIDGE_URL}/mt5/place_order`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: this.sessionId,
+          symbol: order.symbol,
+          type: order.type === "BUY" ? 0 : 1,
+          volume: order.volume,
+          price: order.price,
+          sl: order.stopLoss,
+          tp: order.takeProfit,
+          comment: order.comment || "API Order"
+        }),
+      }
+    );
+
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || "Order placement failed");
+    }
+
+    return result.data;
+  }
+
+  async closePosition(ticket: number): Promise<any> {
+    if (!this.sessionId) {
+      throw new Error('MT5 session not initialized. Call connect() first.');
+    }
+
+    const response = await this.fetchWithTimeout(
+      `${this.MT5_BRIDGE_URL}/mt5/close_position`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: this.sessionId,
+          ticket
+        }),
+      }
+    );
+
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || "Position close failed");
+    }
+
+    return result.data;
+  }
+
+  async refreshAccountInfo(): Promise<AccountInfo | null> {
+    if (!this.sessionId) return null;
+
+    const response = await this.fetchWithTimeout(
+      `${this.MT5_BRIDGE_URL}/mt5/account_info`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: this.sessionId }),
+      }
+    );
+
+    const result = await response.json();
+    if (!result.success) return null;
+
+    this.accountInfo = this.mapMT5AccountInfo(result.data);
+    this.lastUpdate = new Date();
+    return this.accountInfo;
   }
 
   /* =========================
@@ -289,6 +422,22 @@ class ExnessAPI {
      ========================= */
 
   private mapMT5AccountInfo(mt5: any): AccountInfo {
+    const positions: Position[] = (mt5.positions || []).map((pos: any) => ({
+      ticket: pos.ticket,
+      ticketId: pos.ticket.toString(),
+      symbol: pos.symbol,
+      type: pos.type === 0 ? "BUY" : "SELL",
+      volume: Number(pos.volume),
+      openPrice: Number(pos.price_open),
+      currentPrice: 0, // Will be updated separately
+      profit: Number(pos.profit),
+      stopLoss: pos.sl ? Number(pos.sl) : undefined,
+      takeProfit: pos.tp ? Number(pos.tp) : undefined,
+      openTime: new Date(pos.time * 1000), // MT5 timestamp
+      commission: 0,
+      swap: 0
+    }));
+
     return {
       accountNumber: mt5.login?.toString() || "",
       balance: Number(mt5.balance || 0),
@@ -304,6 +453,7 @@ class ExnessAPI {
       profit: Number(mt5.profit || 0),
       credit: Number(mt5.credit || 0),
       company: mt5.company || "Exness",
+      positions
     };
   }
 }

@@ -50,7 +50,7 @@ class AIAnalyzer {
   async analyzeMarket(input: MarketAnalysisInput): Promise<AIAnalysisResult> {
     const cacheKey = `${input.symbol}_${input.timeframe}`;
     const cached = this.analysisCache.get(cacheKey);
-    
+
     // Return cached result if still fresh
     if (cached && Date.now() - cached.timestamp < this.cacheDuration) {
       console.log(`📊 Using cached AI analysis for ${cacheKey}`);
@@ -70,9 +70,16 @@ class AIAnalyzer {
       }
     }
 
+    // Check if user is authenticated before calling the function
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.warn('⚠️ User not authenticated, using fallback analysis');
+      return this.getFallbackAnalysis(input);
+    }
+
     try {
       console.log(`🤖 Requesting AI analysis for ${input.symbol} on ${input.timeframe}...`);
-      
+
       const { data, error } = await supabase.functions.invoke('analyze-market', {
         body: input
       });
