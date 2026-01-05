@@ -219,7 +219,7 @@ class OnTickEngine {
 
   private async fetchCandleData(symbol: string): Promise<CandleData[]> {
     try {
-      const bars = await exnessAPI.getHistoricalData(symbol, 15, 100);
+      const bars = await exnessAPI.getHistoricalData(symbol, '15m', 100);
       return bars.map((bar: any) => ({
         open: bar.open, high: bar.high, low: bar.low, close: bar.close,
         volume: bar.tick_volume, timestamp: new Date(bar.time * 1000)

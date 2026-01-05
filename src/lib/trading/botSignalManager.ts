@@ -295,7 +295,7 @@ class BotSignalManager {
     const cached = this.historicalDataCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) return cached.data;
 
-    const data = await exnessAPI.getHistoricalData(symbol, 15, count);
+    const data = await exnessAPI.getHistoricalData(symbol, '15m', count);
     if (data?.length) this.historicalDataCache.set(cacheKey, { data, timestamp: Date.now() });
     return data;
   }

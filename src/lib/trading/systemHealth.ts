@@ -103,7 +103,7 @@ class SystemHealthMonitor {
   private async checkHistoricalData(): Promise<boolean> {
     try {
       // Test with 15-minute candles, 10 bars
-      const historicalData = await exnessAPI.getHistoricalData('EURUSD', 15, 10);
+      const historicalData = await exnessAPI.getHistoricalData('EURUSD', '15m', 10);
       return historicalData !== null && historicalData.length > 0;
     } catch (error) {
       console.error('Historical data check failed:', error);
