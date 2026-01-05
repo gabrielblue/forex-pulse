@@ -14,6 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { TrendingUp, Shield, Zap, BarChart3, Eye, EyeOff } from "lucide-react";
 
+// Schemas
 const loginSchema = z.object({
   email: z.string().trim().email("Invalid email address").max(255),
   password: z.string().min(1, "Password is required").max(100),
@@ -54,62 +55,83 @@ const Auth = () => {
     defaultValues: { email: "", password: "" },
   });
 
+  // Update title based on tab
   useEffect(() => {
     document.title = tab === "login" ? "Login | ForexPulse AI" : "Sign Up | ForexPulse AI";
   }, [tab]);
 
+  // Session check to prevent reload loop
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        toast.success("Welcome to ForexPulse AI!");
+    let mounted = true;
+
+    const processSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
+      if (data.session?.user && window.location.pathname === "/login") {
+        navigate("/", { replace: true });
+      }
+    };
+
+    processSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user && window.location.pathname === "/login") {
         navigate("/", { replace: true });
       }
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        navigate("/", { replace: true });
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [navigate]);
 
+  // Login handler
   const onLogin = async (values: LoginFormValues) => {
     try {
       setLoading(true);
       setError(null);
-      const { error } = await supabase.auth.signInWithPassword({
+
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: values.email,
         password: values.password,
       });
+
       if (error) throw error;
+
+      // Success
+      toast.success("Welcome back!");
+      navigate("/", { replace: true });
     } catch (e: any) {
-      const msg = e?.message || "Login failed";
-      setError(msg);
-      toast.error(msg);
+      setError(e.message || "Login failed");
+      toast.error(e.message || "Login failed");
     } finally {
       setLoading(false);
     }
   };
 
+  // Signup handler
   const onSignup = async (values: SignupFormValues) => {
     try {
       setLoading(true);
       setError(null);
+
       const redirectUrl = `${window.location.origin}/`;
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: values.email,
         password: values.password,
         options: { emailRedirectTo: redirectUrl },
       });
+
       if (error) throw error;
+
       toast.success("Check your email to confirm your account");
       setTab("login");
     } catch (e: any) {
-      const msg = e?.message || "Signup failed";
-      setError(msg);
-      toast.error(msg);
+      setError(e.message || "Signup failed");
+      toast.error(e.message || "Signup failed");
     } finally {
       setLoading(false);
     }
@@ -124,7 +146,7 @@ const Auth = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex">
-      {/* Left Panel - Features */}
+      {/* Left Panel */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary/10 via-primary/5 to-background p-12 flex-col justify-center">
         <div className="max-w-md mx-auto">
           <div className="flex items-center gap-3 mb-8">
@@ -136,15 +158,14 @@ const Auth = () => {
               <p className="text-muted-foreground">Institutional-Grade Trading</p>
             </div>
           </div>
-          
+
           <h2 className="text-2xl font-semibold text-foreground mb-6">
             Trade Like The Institutions
           </h2>
           <p className="text-muted-foreground mb-8">
-            AI-powered trading bot using Smart Money Concepts (SMC) - Order Blocks, Fair Value Gaps, 
-            Liquidity Zones, and Break of Structure analysis.
+            AI-powered trading bot using Smart Money Concepts (SMC) - Order Blocks, Fair Value Gaps, Liquidity Zones, and Break of Structure analysis.
           </p>
-          
+
           <div className="grid gap-4">
             {features.map((feature, i) => (
               <div key={i} className="flex items-start gap-4 p-4 rounded-lg bg-card/50 border border-border/50">
@@ -158,7 +179,7 @@ const Auth = () => {
               </div>
             ))}
           </div>
-          
+
           <div className="mt-8 p-4 rounded-lg bg-bullish/10 border border-bullish/20">
             <p className="text-sm text-bullish font-medium">
               ✓ ChartLord AI-style confluence trading
@@ -170,7 +191,7 @@ const Auth = () => {
         </div>
       </div>
 
-      {/* Right Panel - Auth Form */}
+      {/* Right Panel */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-4 sm:p-8">
         <div className="w-full max-w-md">
           {/* Mobile Logo */}
@@ -220,6 +241,7 @@ const Auth = () => {
                         <p className="text-sm text-destructive">{loginForm.formState.errors.email.message}</p>
                       )}
                     </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="login-password">Password</Label>
                       <div className="relative">
@@ -244,6 +266,7 @@ const Auth = () => {
                         <p className="text-sm text-destructive">{loginForm.formState.errors.password.message}</p>
                       )}
                     </div>
+
                     <Button type="submit" className="w-full" size="lg" disabled={loading}>
                       {loading ? (
                         <span className="flex items-center gap-2">
@@ -272,6 +295,7 @@ const Auth = () => {
                         <p className="text-sm text-destructive">{signupForm.formState.errors.email.message}</p>
                       )}
                     </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="signup-password">Password</Label>
                       <div className="relative">
@@ -299,6 +323,7 @@ const Auth = () => {
                         Min 12 chars with uppercase, lowercase, numbers & symbols
                       </p>
                     </div>
+
                     <Button type="submit" className="w-full" size="lg" disabled={loading}>
                       {loading ? (
                         <span className="flex items-center gap-2">
@@ -309,7 +334,7 @@ const Auth = () => {
                         "Create Account"
                       )}
                     </Button>
-                    <p className="text-xs text-center text-muted-foreground">
+                    <p className="text-xs text-center text-muted-foreground mt-2">
                       By signing up, you agree to our terms of service
                     </p>
                   </form>

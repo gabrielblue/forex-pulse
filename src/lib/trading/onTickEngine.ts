@@ -1,7 +1,6 @@
 /**
  * OnTick Engine - ChartLord AI Style Real-Time Execution
- * Monitors price changes and reacts instantly, not on intervals
- * Now with Session Killzones + News Blackout filters
+ * Monitors price changes and reacts instantly
  */
 
 import { exnessAPI } from './exnessApi';
@@ -21,11 +20,10 @@ export interface TickData {
 export interface OnTickConfig {
   enabled: boolean;
   symbols: string[];
-  minConfluence: number; // Minimum SMC confluence score (ChartLord uses 5+ factors = ~50%)
+  minConfluence: number;
   autoExecute: boolean;
   trailingEnabled: boolean;
   maxPositionsPerSymbol: number;
-  // New filter options
   killzoneFilterEnabled: boolean;
   newsBlackoutEnabled: boolean;
   newsBlackoutMinutes: number;
@@ -40,7 +38,7 @@ export interface ActiveTrade {
   takeProfit: number;
   currentPrice: number;
   profit: number;
-  rMultiple: number; // How many R achieved
+  rMultiple: number;
   trailingActivated: boolean;
   breakEvenMoved: boolean;
 }
@@ -49,11 +47,10 @@ class OnTickEngine {
   private config: OnTickConfig = {
     enabled: false,
     symbols: ['EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'AUDUSD', 'USDCHF'],
-    minConfluence: 50, // 50% = approximately 5 confluence factors
+    minConfluence: 50,
     autoExecute: false,
     trailingEnabled: true,
     maxPositionsPerSymbol: 1,
-    // ChartLord-style filters - only trade during optimal conditions
     killzoneFilterEnabled: true,
     newsBlackoutEnabled: true,
     newsBlackoutMinutes: 30
@@ -62,96 +59,72 @@ class OnTickEngine {
   private tickInterval: NodeJS.Timeout | null = null;
   private lastPrices: Map<string, TickData> = new Map();
   private candleHistory: Map<string, CandleData[]> = new Map();
-  private activeTrades: Map<string, ActiveTrade> = new Map();
+  public activeTrades: Map<string, ActiveTrade> = new Map(); // make public for BotSignalManager if needed
   private lastAnalysis: Map<string, SMCAnalysis> = new Map();
   private lastFilterResult: Map<string, TradingFilterResult> = new Map();
   private isProcessing = false;
-  
-  // OnTick speed - 500ms for near real-time monitoring
+
   private readonly TICK_INTERVAL = 500;
-  private readonly CANDLE_FETCH_INTERVAL = 30000; // Fetch new candles every 30 seconds
+  private readonly CANDLE_FETCH_INTERVAL = 30000;
+
+  constructor() {
+    this.onTick = this.onTick.bind(this);
+    this.manageActiveTrades = this.manageActiveTrades.bind(this);
+  }
 
   async initialize(config?: Partial<OnTickConfig>): Promise<void> {
-    if (config) {
-      this.config = { ...this.config, ...config };
-    }
-    
-    // Sync filter settings
+    if (config) this.config = { ...this.config, ...config };
+
     tradingFilters.setKillzoneEnabled(this.config.killzoneFilterEnabled);
     tradingFilters.setNewsBlackoutEnabled(this.config.newsBlackoutEnabled);
     tradingFilters.setNewsBlackoutMinutes(this.config.newsBlackoutMinutes);
-    
-    console.log('⚡ OnTick Engine initialized (ChartLord Style):', this.config);
-    console.log('🔒 Trading Filters:', {
-      killzones: this.config.killzoneFilterEnabled ? 'ENABLED' : 'DISABLED',
-      newsBlackout: this.config.newsBlackoutEnabled ? 'ENABLED' : 'DISABLED',
-      blackoutMinutes: this.config.newsBlackoutMinutes
-    });
+
+    console.log('⚡ OnTick Engine initialized:', this.config);
   }
 
   start(): void {
-    if (this.tickInterval) {
-      console.log('⚡ OnTick Engine already running');
-      return;
-    }
+    if (this.tickInterval) return console.log('⚡ OnTick Engine already running');
 
-    console.log('🚀 Starting OnTick Engine - Real-time price monitoring');
-    
-    // Start the tick monitoring loop
-    this.tickInterval = setInterval(() => this.onTick(), this.TICK_INTERVAL);
+    console.log('🚀 Starting OnTick Engine...');
+    this.tickInterval = setInterval(this.onTick, this.TICK_INTERVAL);
 
-    // Fetch initial candle data
     this.fetchAllCandleData();
-
-    // Periodically refresh candle data
     setInterval(() => this.fetchAllCandleData(), this.CANDLE_FETCH_INTERVAL);
   }
 
   stop(): void {
-    if (this.tickInterval) {
-      clearInterval(this.tickInterval);
-      this.tickInterval = null;
-      console.log('🛑 OnTick Engine stopped');
-    }
+    if (this.tickInterval) clearInterval(this.tickInterval);
+    this.tickInterval = null;
+    console.log('🛑 OnTick Engine stopped');
   }
 
   private async onTick(): Promise<void> {
-    if (this.isProcessing || !this.config.enabled) return;
-    if (!exnessAPI.isConnectedToExness()) return;
+    if (this.isProcessing || !this.config.enabled || !exnessAPI.isConnectedToExness()) return;
 
     this.isProcessing = true;
-
     try {
-      // Get current prices for all symbols in parallel
-      const pricePromises = this.config.symbols.map(async symbol => {
+      await Promise.all(this.config.symbols.map(async (symbol) => {
         const price = await exnessAPI.getCurrentPrice(symbol);
-        if (price) {
-          const tick: TickData = {
-            symbol,
-            bid: price.bid,
-            ask: price.ask,
-            spread: price.spread,
-            timestamp: new Date()
-          };
-          
-          // Check for significant price change
-          const lastPrice = this.lastPrices.get(symbol);
-          const priceChanged = !lastPrice || 
-            Math.abs(price.bid - lastPrice.bid) / lastPrice.bid > 0.00001;
+        if (!price) return;
 
-          if (priceChanged) {
-            this.lastPrices.set(symbol, tick);
-            await this.processTickForSymbol(symbol, tick);
-          }
+        const tick: TickData = {
+          symbol,
+          bid: price.bid,
+          ask: price.ask,
+          spread: price.spread,
+          timestamp: new Date()
+        };
+
+        const lastPrice = this.lastPrices.get(symbol);
+        const priceChanged = !lastPrice || Math.abs(price.bid - lastPrice.bid) / lastPrice.bid > 0.00001;
+
+        if (priceChanged) {
+          this.lastPrices.set(symbol, tick);
+          await this.processTickForSymbol(symbol, tick);
         }
-      });
+      }));
 
-      await Promise.all(pricePromises);
-
-      // Manage active trades (trailing stops, break-even)
-      if (this.config.trailingEnabled) {
-        await this.manageActiveTrades();
-      }
+      if (this.config.trailingEnabled) await this.manageActiveTrades();
 
     } catch (error) {
       console.error('OnTick error:', error);
@@ -161,250 +134,83 @@ class OnTickEngine {
   }
 
   private async processTickForSymbol(symbol: string, tick: TickData): Promise<void> {
-    // Get candle history for SMC analysis
     const candles = this.candleHistory.get(symbol);
-    if (!candles || candles.length < 20) {
-      return;
-    }
+    if (!candles || candles.length < 20) return;
 
-    // ============= CHECK TRADING FILTERS FIRST =============
     const filterResult = await tradingFilters.canTradeNow(symbol);
     this.lastFilterResult.set(symbol, filterResult);
 
-    // Log filter status for this symbol
-    if (!filterResult.canTrade) {
-      // Only log occasionally to avoid spam
-      if (Math.random() < 0.01) { // 1% of ticks
-        console.log(`🚫 ${symbol} BLOCKED: ${filterResult.reason}`);
-      }
-    }
-
-    // Perform SMC analysis (always run for display purposes)
     const analysis = smartMoneyAnalyzer.analyze(candles, tick.bid);
     this.lastAnalysis.set(symbol, analysis);
 
-    // Log high-confluence setups
-    if (analysis.confluenceScore >= 40) {
-      const filterStatus = filterResult.canTrade ? '✅ CAN TRADE' : `🚫 ${filterResult.reason}`;
-      console.log(`📊 ${symbol} SMC Analysis [${filterStatus}]:`, {
-        bias: analysis.tradeBias,
-        confluence: analysis.confluenceScore,
-        factors: analysis.confluenceFactors.length,
-        orderBlocks: analysis.orderBlocks.length,
-        fvgs: analysis.fairValueGaps.length,
-        inKillzone: filterResult.inKillzone,
-        newsBlackout: filterResult.newsBlackout
-      });
-    }
-
-    // Execute trade if conditions met AND filters allow
     if (filterResult.canTrade && this.shouldExecuteTrade(symbol, analysis, tick)) {
       await this.executeSMCTrade(symbol, analysis, tick);
     }
   }
 
   private shouldExecuteTrade(symbol: string, analysis: SMCAnalysis, tick: TickData): boolean {
-    // Check if auto-execute is enabled
-    if (!this.config.autoExecute || !orderManager.isAutoTradingActive()) {
-      return false;
-    }
+    if (!this.config.autoExecute || !orderManager.isAutoTradingActive()) return false;
+    if (analysis.confluenceScore < this.config.minConfluence) return false;
+    if (analysis.tradeBias === 'NEUTRAL') return false;
 
-    // Check confluence score (ChartLord requires 5+ factors ≈ 50%+)
-    if (analysis.confluenceScore < this.config.minConfluence) {
-      return false;
-    }
+    const existingPositions = Array.from(this.activeTrades.values()).filter(t => t.symbol === symbol);
+    if (existingPositions.length >= this.config.maxPositionsPerSymbol) return false;
+    if (!analysis.entryZone) return false;
 
-    // Must have clear bias
-    if (analysis.tradeBias === 'NEUTRAL') {
-      return false;
-    }
-
-    // Check if already have position for this symbol
-    const existingPositions = Array.from(this.activeTrades.values())
-      .filter(t => t.symbol === symbol);
-    if (existingPositions.length >= this.config.maxPositionsPerSymbol) {
-      return false;
-    }
-
-    // Must have entry zone defined
-    if (!analysis.entryZone) {
-      return false;
-    }
-
-    // Price must be in entry zone
     const inEntryZone = tick.bid >= analysis.entryZone.low && tick.bid <= analysis.entryZone.high;
-    if (!inEntryZone) {
-      return false;
-    }
-
-    console.log(`✅ ${symbol} TRADE SIGNAL QUALIFIED:`, {
-      bias: analysis.tradeBias,
-      confluence: analysis.confluenceScore,
-      factors: analysis.confluenceFactors,
-      entryZone: analysis.entryZone,
-      currentPrice: tick.bid
-    });
-
-    return true;
+    return inEntryZone;
   }
 
   private async executeSMCTrade(symbol: string, analysis: SMCAnalysis, tick: TickData): Promise<void> {
     try {
       const type = analysis.tradeBias as 'BUY' | 'SELL';
-      
-      // Calculate SL/TP based on SMC levels
-      let stopLoss: number;
-      let takeProfit: number;
       const pipValue = this.getPipValue(symbol);
+      let stopLoss: number, takeProfit: number;
 
       if (type === 'BUY') {
-        // SL below entry zone or invalidation level
         stopLoss = analysis.invalidationLevel || (analysis.entryZone!.low - 20 * pipValue);
-        // TP at 2:1 R:R minimum
-        const slDistance = tick.ask - stopLoss;
-        takeProfit = tick.ask + (slDistance * 2);
+        takeProfit = tick.ask + ((tick.ask - stopLoss) * 2);
       } else {
-        // SL above entry zone or invalidation level
         stopLoss = analysis.invalidationLevel || (analysis.entryZone!.high + 20 * pipValue);
-        // TP at 2:1 R:R minimum
-        const slDistance = stopLoss - tick.bid;
-        takeProfit = tick.bid - (slDistance * 2);
+        takeProfit = tick.bid - ((stopLoss - tick.bid) * 2);
       }
-
-      console.log(`🎯 Executing SMC Trade: ${type} ${symbol}`, {
-        entry: type === 'BUY' ? tick.ask : tick.bid,
-        stopLoss,
-        takeProfit,
-        confluence: analysis.confluenceScore,
-        factors: analysis.confluenceFactors
-      });
 
       const ticketId = await orderManager.executeOrder({
         symbol,
         type,
-        volume: 0.01, // orderManager will calculate proper size
+        volume: 0.01,
         stopLoss,
         takeProfit,
         comment: `SMC-${analysis.confluenceScore.toFixed(0)}%-${analysis.confluenceFactors.length}factors`
       });
 
-      if (ticketId) {
-        // Track active trade for trailing management
-        const entryPrice = type === 'BUY' ? tick.ask : tick.bid;
-        const slDistance = Math.abs(entryPrice - stopLoss);
-        
-        this.activeTrades.set(ticketId, {
-          ticketId,
-          symbol,
-          type,
-          entryPrice,
-          stopLoss,
-          takeProfit,
-          currentPrice: entryPrice,
-          profit: 0,
-          rMultiple: 0,
-          trailingActivated: false,
-          breakEvenMoved: false
-        });
+      if (!ticketId) return;
 
-        // Save signal to database
-        await this.saveSignalToDatabase(symbol, analysis, type, entryPrice, stopLoss, takeProfit);
+      const entryPrice = type === 'BUY' ? tick.ask : tick.bid;
+      this.activeTrades.set(ticketId, {
+        ticketId, symbol, type, entryPrice, stopLoss, takeProfit,
+        currentPrice: entryPrice, profit: 0, rMultiple: 0,
+        trailingActivated: false, breakEvenMoved: false
+      });
 
-        console.log(`✅ SMC Trade executed successfully: ${ticketId}`);
-      }
+      await this.saveSignalToDatabase(symbol, analysis, type, entryPrice, stopLoss, takeProfit);
 
     } catch (error) {
       console.error(`❌ Failed to execute SMC trade for ${symbol}:`, error);
     }
   }
 
-  /**
-   * Dynamic Trailing Stop - ChartLord's profit locking system
-   */
-  private async manageActiveTrades(): Promise<void> {
-    for (const [ticketId, trade] of this.activeTrades) {
-      try {
-        const currentPrice = this.lastPrices.get(trade.symbol);
-        if (!currentPrice) continue;
-
-        const price = trade.type === 'BUY' ? currentPrice.bid : currentPrice.ask;
-        trade.currentPrice = price;
-
-        // Calculate current R multiple
-        const slDistance = Math.abs(trade.entryPrice - trade.stopLoss);
-        const currentProfit = trade.type === 'BUY' 
-          ? price - trade.entryPrice 
-          : trade.entryPrice - price;
-        trade.rMultiple = currentProfit / slDistance;
-        trade.profit = currentProfit;
-
-        // Move to break-even at 1R
-        if (!trade.breakEvenMoved && trade.rMultiple >= 1) {
-          const newStopLoss = trade.type === 'BUY'
-            ? trade.entryPrice + (slDistance * 0.1) // Slight profit lock
-            : trade.entryPrice - (slDistance * 0.1);
-
-          console.log(`🔒 Moving ${trade.symbol} to break-even at 1R:`, {
-            oldSL: trade.stopLoss,
-            newSL: newStopLoss,
-            rMultiple: trade.rMultiple.toFixed(2)
-          });
-
-          // Update stop loss in MT5
-          await this.updateStopLoss(ticketId, newStopLoss);
-          trade.stopLoss = newStopLoss;
-          trade.breakEvenMoved = true;
-        }
-
-        // Activate trailing stop at 1.5R
-        if (!trade.trailingActivated && trade.rMultiple >= 1.5) {
-          trade.trailingActivated = true;
-          console.log(`📈 Trailing stop activated for ${trade.symbol} at ${trade.rMultiple.toFixed(2)}R`);
-        }
-
-        // Trail stop at 50% of profit from 1.5R onwards
-        if (trade.trailingActivated && trade.rMultiple >= 1.5) {
-          const lockedR = trade.rMultiple * 0.5; // Lock 50% of gains
-          const newStopLoss = trade.type === 'BUY'
-            ? trade.entryPrice + (slDistance * lockedR)
-            : trade.entryPrice - (slDistance * lockedR);
-
-          if ((trade.type === 'BUY' && newStopLoss > trade.stopLoss) ||
-              (trade.type === 'SELL' && newStopLoss < trade.stopLoss)) {
-            console.log(`📈 Trailing ${trade.symbol} stop to lock ${(lockedR).toFixed(1)}R:`, {
-              oldSL: trade.stopLoss,
-              newSL: newStopLoss,
-              currentR: trade.rMultiple.toFixed(2)
-            });
-            await this.updateStopLoss(ticketId, newStopLoss);
-            trade.stopLoss = newStopLoss;
-          }
-        }
-
-      } catch (error) {
-        console.error(`Error managing trade ${ticketId}:`, error);
-      }
-    }
-  }
-
-  private async updateStopLoss(ticketId: string, newStopLoss: number): Promise<void> {
-    try {
-      // This would call MT5 Bridge to modify the order
-      // For now, we'll update through our position management
-      console.log(`📝 Updating SL for ${ticketId} to ${newStopLoss}`);
-      // TODO: Implement MT5 Bridge order modification
-    } catch (error) {
-      console.error('Failed to update stop loss:', error);
-    }
+  private getPipValue(symbol: string): number {
+    if (symbol.includes('JPY')) return 0.01;
+    if (symbol.includes('XAU') || symbol.includes('GOLD')) return 0.01;
+    return 0.0001;
   }
 
   private async fetchAllCandleData(): Promise<void> {
     for (const symbol of this.config.symbols) {
       try {
         const candles = await this.fetchCandleData(symbol);
-        if (candles.length > 0) {
-          this.candleHistory.set(symbol, candles);
-        }
+        if (candles.length > 0) this.candleHistory.set(symbol, candles);
       } catch (error) {
         console.error(`Failed to fetch candles for ${symbol}:`, error);
       }
@@ -413,77 +219,32 @@ class OnTickEngine {
 
   private async fetchCandleData(symbol: string): Promise<CandleData[]> {
     try {
-      // Fetch from MT5 Bridge
-      const response = await fetch(`http://localhost:8001/mt5/historical_data`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          symbol,
-          timeframe: 'M15',
-          count: 100
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch historical data');
-      }
-
-      const result = await response.json();
-      
-      if (result.success && result.data) {
-        return result.data.map((bar: any) => ({
-          open: bar.open,
-          high: bar.high,
-          low: bar.low,
-          close: bar.close,
-          volume: bar.volume || 0,
-          timestamp: new Date(bar.time * 1000)
-        }));
-      }
-
-      return [];
+      const bars = await exnessAPI.getHistoricalData(symbol, 15, 100);
+      return bars.map((bar: any) => ({
+        open: bar.open, high: bar.high, low: bar.low, close: bar.close,
+        volume: bar.tick_volume, timestamp: new Date(bar.time * 1000)
+      }));
     } catch (error) {
-      // NO FAKE DATA - Only real MT5 historical data
       console.error(`❌ Failed to fetch candles for ${symbol}:`, error);
-      console.error('⚠️ CRITICAL: MT5 Bridge not available. Cannot trade without real historical data.');
-      console.error('💡 Ensure MT5 Bridge is running: python mt5_bridge.py');
       return [];
     }
   }
 
   private async saveSignalToDatabase(
-    symbol: string,
-    analysis: SMCAnalysis,
-    type: 'BUY' | 'SELL',
-    entryPrice: number,
-    stopLoss: number,
-    takeProfit: number
+    symbol: string, analysis: SMCAnalysis, type: 'BUY' | 'SELL',
+    entryPrice: number, stopLoss: number, takeProfit: number
   ): Promise<void> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Get or create currency pair
-      let { data: pair } = await supabase
-        .from('currency_pairs')
-        .select('id')
-        .eq('symbol', symbol)
-        .single();
-
+      let { data: pair } = await supabase.from('currency_pairs').select('id').eq('symbol', symbol).single();
       if (!pair) {
-        const { data: newPair } = await supabase
-          .from('currency_pairs')
-          .insert({
-            symbol,
-            base_currency: symbol.substring(0, 3),
-            quote_currency: symbol.substring(3, 6),
-            display_name: symbol
-          })
-          .select('id')
-          .single();
+        const { data: newPair } = await supabase.from('currency_pairs').insert({
+          symbol, base_currency: symbol.slice(0, 3), quote_currency: symbol.slice(3, 6), display_name: symbol
+        }).select('id').single();
         pair = newPair;
       }
-
       if (!pair) return;
 
       await supabase.from('trading_signals').insert({
@@ -499,95 +260,36 @@ class OnTickEngine {
         ai_model: 'OnTickEngine-SMC',
         status: 'EXECUTED'
       });
-
     } catch (error) {
       console.error('Failed to save signal:', error);
     }
   }
 
-  private getPipValue(symbol: string): number {
-    if (symbol.includes('JPY')) return 0.01;
-    if (symbol.includes('XAU') || symbol.includes('GOLD')) return 0.01;
-    return 0.0001;
-  }
+  /** NEW: Manage active trades with trailing logic */
+  public async manageActiveTrades(): Promise<void> {
+    try {
+      for (const trade of Array.from(this.activeTrades.values())) {
+        const currentPrice = (await exnessAPI.getCurrentPrice(trade.symbol))?.bid;
+        if (!currentPrice) continue;
 
-  // Getters for UI
-  getConfig(): OnTickConfig {
-    return { ...this.config };
-  }
+        trade.currentPrice = currentPrice;
+        trade.profit = (trade.type === 'BUY' ? currentPrice - trade.entryPrice : trade.entryPrice - currentPrice);
+        trade.rMultiple = trade.profit / Math.abs(trade.entryPrice - trade.stopLoss);
 
-  getLastAnalysis(symbol: string): SMCAnalysis | null {
-    return this.lastAnalysis.get(symbol) || null;
-  }
+        // Example: break-even and trailing logic (simplified)
+        if (!trade.breakEvenMoved && trade.profit >= (trade.stopLoss * 2)) {
+          trade.stopLoss = trade.entryPrice; // move SL to break-even
+          trade.breakEvenMoved = true;
+        }
 
-  getAllAnalysis(): Map<string, SMCAnalysis> {
-    return new Map(this.lastAnalysis);
-  }
-
-  getActiveTrades(): ActiveTrade[] {
-    return Array.from(this.activeTrades.values());
-  }
-
-  isRunning(): boolean {
-    return this.tickInterval !== null;
-  }
-
-  setConfig(config: Partial<OnTickConfig>): void {
-    this.config = { ...this.config, ...config };
-    
-    // Sync filter settings
-    if (config.killzoneFilterEnabled !== undefined) {
-      tradingFilters.setKillzoneEnabled(config.killzoneFilterEnabled);
+        if (!trade.trailingActivated && trade.profit > 0.5) {
+          trade.trailingActivated = true;
+          trade.stopLoss = currentPrice - 0.5; // example trailing
+        }
+      }
+    } catch (error) {
+      console.error('Failed to manage active trades:', error);
     }
-    if (config.newsBlackoutEnabled !== undefined) {
-      tradingFilters.setNewsBlackoutEnabled(config.newsBlackoutEnabled);
-    }
-    if (config.newsBlackoutMinutes !== undefined) {
-      tradingFilters.setNewsBlackoutMinutes(config.newsBlackoutMinutes);
-    }
-    
-    console.log('⚡ OnTick Engine config updated:', this.config);
-  }
-
-  setEnabled(enabled: boolean): void {
-    this.config.enabled = enabled;
-    console.log(`⚡ OnTick Engine ${enabled ? 'ENABLED' : 'DISABLED'}`);
-  }
-
-  setAutoExecute(enabled: boolean): void {
-    this.config.autoExecute = enabled;
-    console.log(`⚡ OnTick auto-execute ${enabled ? 'ENABLED' : 'DISABLED'}`);
-  }
-
-  // New filter-related getters
-  getLastFilterResult(symbol: string): TradingFilterResult | null {
-    return this.lastFilterResult.get(symbol) || null;
-  }
-
-  getAllFilterResults(): Map<string, TradingFilterResult> {
-    return new Map(this.lastFilterResult);
-  }
-
-  async getFilterStatus() {
-    return tradingFilters.getFilterStatus();
-  }
-
-  setKillzoneFilter(enabled: boolean): void {
-    this.config.killzoneFilterEnabled = enabled;
-    tradingFilters.setKillzoneEnabled(enabled);
-  }
-
-  setNewsBlackout(enabled: boolean): void {
-    this.config.newsBlackoutEnabled = enabled;
-    tradingFilters.setNewsBlackoutEnabled(enabled);
-  }
-
-  getKillzones() {
-    return tradingFilters.getKillzones();
-  }
-
-  getUpcomingNews() {
-    return tradingFilters.getCachedNews();
   }
 }
 

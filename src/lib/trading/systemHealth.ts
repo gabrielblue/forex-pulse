@@ -10,7 +10,7 @@ export interface SystemHealthCheck {
 
 export interface HealthIssue {
   severity: 'critical' | 'error' | 'warning';
-  component: 'MT5_BRIDGE' | 'EXNESS_CONNECTION' | 'HISTORICAL_DATA' | 'AI_SERVICE' | 'TRADING_CAPABILITIES';
+  component: 'MT5_BRIDGE' | 'EXNESS_CONNECTION' | 'HISTORICAL_DATA' | 'TRADING_CAPABILITIES';
   message: string;
   resolution: string;
 }
@@ -38,7 +38,7 @@ class SystemHealthMonitor {
       });
     }
 
-    // 2. Check MT5 Bridge availability (only if connected)
+    // 2. Check MT5 Bridge availability
     if (isConnected) {
       const mt5BridgeAvailable = await this.checkMT5Bridge();
       if (!mt5BridgeAvailable) {
@@ -46,12 +46,12 @@ class SystemHealthMonitor {
           severity: 'critical',
           component: 'MT5_BRIDGE',
           message: 'MT5 Bridge service is not running',
-          resolution: 'Start the Python MT5 Bridge service (python mt5_bridge.py) - see MT5_SETUP_INSTRUCTIONS.md'
+          resolution: 'Start the Python MT5 Bridge service (python mt5_bridge.py)'
         });
       }
     }
 
-    // 3. Check historical data availability (only if connected and bridge is up)
+    // 3. Check historical data availability
     if (isConnected) {
       const historicalDataWorks = await this.checkHistoricalData();
       if (!historicalDataWorks) {
@@ -90,7 +90,7 @@ class SystemHealthMonitor {
 
   private async checkMT5Bridge(): Promise<boolean> {
     try {
-      const response = await fetch(`${MT5_BRIDGE_URL}/`, {
+      const response = await fetch(`${MT5_BRIDGE_URL}/status`, {
         method: 'GET',
         signal: AbortSignal.timeout(3000)
       });
@@ -102,10 +102,11 @@ class SystemHealthMonitor {
 
   private async checkHistoricalData(): Promise<boolean> {
     try {
-      // Try to fetch historical data for EURUSD as a test
+      // Test with 15-minute candles, 10 bars
       const historicalData = await exnessAPI.getHistoricalData('EURUSD', 15, 10);
       return historicalData !== null && historicalData.length > 0;
     } catch (error) {
+      console.error('Historical data check failed:', error);
       return false;
     }
   }
