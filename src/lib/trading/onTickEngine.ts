@@ -151,7 +151,7 @@ class OnTickEngine {
   private shouldExecuteTrade(symbol: string, analysis: SMCAnalysis, tick: TickData): boolean {
     if (!this.config.autoExecute || !orderManager.isAutoTradingActive()) return false;
     if (analysis.confluenceScore < this.config.minConfluence) return false;
-    if (analysis.tradeBias === 'NEUTRAL') return false;
+    if (!analysis.tradeBias || analysis.tradeBias === 'NEUTRAL') return false;
 
     const existingPositions = Array.from(this.activeTrades.values()).filter(t => t.symbol === symbol);
     if (existingPositions.length >= this.config.maxPositionsPerSymbol) return false;

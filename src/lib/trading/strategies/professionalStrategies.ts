@@ -26,32 +26,32 @@ export class ProfessionalTradingStrategies {
     const currentPrice = marketData.prices[marketData.prices.length - 1];
     
     // RSI oversold/overbought with MACD confirmation
-    if (rsi < 60 && macd.value > macd.signal && ema20 > ema50) { // Ultra lenient RSI for day trading
+    if (rsi < 35 && macd.value > macd.signal && ema20 > ema50) { // Proper RSI oversold threshold
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'BUY',
-        confidence: 60, // Lower confidence for maximum opportunities
+        confidence: 75, // Increased confidence with proper thresholds
         entryPrice: currentPrice,
         stopLoss: currentPrice - (0.0001 * this.getPipValue(marketData.symbol)), // Ultra tight stop loss
-        takeProfit: currentPrice + (0.0003 * this.getPipValue(marketData.symbol)), // Ultra close take profit
+        takeProfit: currentPrice + (0.0005 * this.getPipValue(marketData.symbol)), // Balanced take profit
         timeframe: '1M',
-        reasoning: 'Day trading scalping: RSI oversold with bullish MACD crossover',
+        reasoning: 'Scalping: RSI oversold with bullish MACD crossover',
         source: 'Scalping Strategy'
       };
     }
     
-    if (rsi > 40 && macd.value < macd.signal && ema20 < ema50) { // Ultra lenient RSI for day trading
+    if (rsi > 65 && macd.value < macd.signal && ema20 < ema50) { // Proper RSI overbought threshold
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'SELL',
-        confidence: 60,
+        confidence: 75,
         entryPrice: currentPrice,
         stopLoss: currentPrice + (0.0001 * this.getPipValue(marketData.symbol)), // Ultra tight stop loss
-        takeProfit: currentPrice - (0.0003 * this.getPipValue(marketData.symbol)), // Ultra close take profit
+        takeProfit: currentPrice - (0.0005 * this.getPipValue(marketData.symbol)), // Balanced take profit
         timeframe: '1M',
-        reasoning: 'Day trading scalping: RSI overbought with bearish MACD crossover',
+        reasoning: 'Scalping: RSI overbought with bearish MACD crossover',
         source: 'Scalping Strategy'
       };
     }
@@ -65,33 +65,33 @@ export class ProfessionalTradingStrategies {
     const currentPrice = marketData.prices[marketData.prices.length - 1];
     
     // Golden Cross with trend confirmation
-    if (ema20 > ema50 && currentPrice > bollinger.middle && rsi > 40) { // Ultra lenient conditions
+    if (ema20 > ema50 && currentPrice > bollinger.middle && rsi > 45 && rsi < 70) { // Proper RSI range
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'BUY',
-        confidence: 75, // Lower confidence for maximum opportunities
+        confidence: 80, // Higher confidence with proper conditions
         entryPrice: currentPrice,
         stopLoss: currentPrice - (currentPrice * 0.006), // Ultra tight stop loss (0.6%)
-        takeProfit: currentPrice + (currentPrice * 0.009), // Closer take profit (0.9%)
+        takeProfit: currentPrice + (currentPrice * 0.012), // Proper take profit (1.2%)
         timeframe: '4H',
-        reasoning: 'Day trading swing: EMA bullish alignment with momentum',
+        reasoning: 'Swing: EMA bullish alignment with momentum',
         source: 'Swing Trading Strategy'
       };
     }
     
     // Death Cross with trend confirmation
-    if (ema20 < ema50 && currentPrice < bollinger.middle && rsi < 60) { // Ultra lenient conditions
+    if (ema20 < ema50 && currentPrice < bollinger.middle && rsi < 55 && rsi > 30) { // Proper RSI range
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'SELL',
-        confidence: 75,
+        confidence: 80,
         entryPrice: currentPrice,
         stopLoss: currentPrice + (currentPrice * 0.006), // Ultra tight stop loss
-        takeProfit: currentPrice - (currentPrice * 0.009), // Closer take profit
+        takeProfit: currentPrice - (currentPrice * 0.012), // Proper take profit
         timeframe: '4H',
-        reasoning: 'Day trading swing: EMA bearish alignment with momentum',
+        reasoning: 'Swing: EMA bearish alignment with momentum',
         source: 'Swing Trading Strategy'
       };
     }
@@ -108,32 +108,32 @@ export class ProfessionalTradingStrategies {
     const support = Math.min(...recentPrices);
     
     // Bollinger Band breakout with volume confirmation
-    if (currentPrice > bollinger.upper && rsi < 90) { // Ultra lenient RSI
+    if (currentPrice > bollinger.upper && rsi < 75) { // Proper RSI threshold
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'BUY',
-        confidence: 72, // Ultra low confidence for maximum opportunities
+        confidence: 78, // Higher confidence with proper thresholds
         entryPrice: currentPrice,
         stopLoss: currentPrice - (atr * 0.6), // Ultra tight stop loss
-        takeProfit: currentPrice + (atr * 0.9), // Ultra close take profit
+        takeProfit: currentPrice + (atr * 1.5), // Proper take profit
         timeframe: '1H',
-        reasoning: 'Day trading breakout: Bollinger upper breakout with momentum',
+        reasoning: 'Breakout: Bollinger upper breakout with momentum',
         source: 'Breakout Strategy'
       };
     }
     
-    if (currentPrice < bollinger.lower && rsi > 10) { // Ultra lenient RSI
+    if (currentPrice < bollinger.lower && rsi > 25) { // Proper RSI threshold
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'SELL',
-        confidence: 72,
+        confidence: 78,
         entryPrice: currentPrice,
         stopLoss: currentPrice + (atr * 0.6), // Ultra tight stop loss
-        takeProfit: currentPrice - (atr * 0.9), // Ultra close take profit
+        takeProfit: currentPrice - (atr * 1.5), // Proper take profit
         timeframe: '1H',
-        reasoning: 'Day trading breakout: Bollinger lower breakout with momentum',
+        reasoning: 'Breakout: Bollinger lower breakout with momentum',
         source: 'Breakout Strategy'
       };
     }
@@ -147,33 +147,33 @@ export class ProfessionalTradingStrategies {
     const currentPrice = marketData.prices[marketData.prices.length - 1];
     
     // Oversold conditions with mean reversion signals
-    if (currentPrice < bollinger.middle && rsi < 40 && stochastic.k < 35) { // Ultra lenient conditions
+    if (currentPrice < bollinger.middle && rsi < 30 && stochastic.k < 25) { // Proper oversold thresholds
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'BUY',
-        confidence: 68, // Ultra low confidence for maximum opportunities
+        confidence: 77, // Higher confidence with proper conditions
         entryPrice: currentPrice,
         stopLoss: currentPrice - (indicators.atr * 0.6), // Ultra tight stop loss
-        takeProfit: currentPrice + (indicators.atr * 0.8), // Ultra close take profit
+        takeProfit: currentPrice + (indicators.atr * 1.2), // Proper take profit
         timeframe: '1H',
-        reasoning: 'Day trading mean reversion: Oversold conditions with reversal potential',
+        reasoning: 'Mean reversion: Oversold conditions with reversal potential',
         source: 'Mean Reversion Strategy'
       };
     }
     
     // Overbought conditions with mean reversion signals
-    if (currentPrice > bollinger.middle && rsi > 60 && stochastic.k > 65) { // Ultra lenient conditions
+    if (currentPrice > bollinger.middle && rsi > 70 && stochastic.k > 75) { // Proper overbought thresholds
       return {
         id: this.generateSignalId(),
         symbol: marketData.symbol,
         type: 'SELL',
-        confidence: 68,
+        confidence: 77,
         entryPrice: currentPrice,
         stopLoss: currentPrice + (indicators.atr * 0.6), // Ultra tight stop loss
-        takeProfit: currentPrice - (indicators.atr * 0.8), // Ultra close take profit
+        takeProfit: currentPrice - (indicators.atr * 1.2), // Proper take profit
         timeframe: '1H',
-        reasoning: 'Day trading mean reversion: Overbought conditions with reversal potential',
+        reasoning: 'Mean reversion: Overbought conditions with reversal potential',
         source: 'Mean Reversion Strategy'
       };
     }
@@ -314,17 +314,36 @@ export class ProfessionalTradingStrategies {
   }
   
   private calculateStochastic(prices: number[], period: number): { k: number; d: number } {
-    if (prices.length < period) return { k: 50, d: 50 };
-    
-    const recentPrices = prices.slice(-period);
-    const highest = Math.max(...recentPrices);
-    const lowest = Math.min(...recentPrices);
-    const current = prices[prices.length - 1];
-    
-    const k = ((current - lowest) / (highest - lowest)) * 100;
-    const d = k * 0.9; // Simplified D% calculation
-    
-    return { k, d };
+    if (prices.length < period + 2) return { k: 50, d: 50 };
+
+    // Calculate %K for multiple periods to compute %D (SMA of %K)
+    const kValues: number[] = [];
+
+    // Calculate last 3 %K values for %D smoothing
+    for (let offset = 0; offset < 3; offset++) {
+      const endIndex = prices.length - offset;
+      if (endIndex < period) break;
+
+      const recentPrices = prices.slice(endIndex - period, endIndex);
+      const highest = Math.max(...recentPrices);
+      const lowest = Math.min(...recentPrices);
+      const current = prices[endIndex - 1];
+
+      if (highest === lowest) {
+        kValues.push(50); // Neutral when no range
+      } else {
+        const k = ((current - lowest) / (highest - lowest)) * 100;
+        kValues.push(k);
+      }
+    }
+
+    // %K is the most recent value
+    const k = kValues[0];
+
+    // %D is the 3-period SMA of %K
+    const d = kValues.reduce((sum, val) => sum + val, 0) / kValues.length;
+
+    return { k: Math.min(100, Math.max(0, k)), d: Math.min(100, Math.max(0, d)) };
   }
 
   private calculateRSI(prices: number[], period: number): number {
@@ -395,13 +414,20 @@ export class ProfessionalTradingStrategies {
 
   private calculateATR(prices: number[], period: number): number {
     if (prices.length < period + 1) return 0.001;
-    
+
     let trSum = 0;
     for (let i = prices.length - period; i < prices.length - 1; i++) {
-      const high = prices[i];
-      const low = prices[i];
-      const prevClose = prices[i - 1];
-      
+      // Use price range approximation: current price vs previous
+      const currentPrice = prices[i];
+      const prevPrice = prices[i - 1];
+
+      // Estimate high and low from price movements (simplified from OHLC)
+      const range = Math.abs(currentPrice - prevPrice);
+      const high = Math.max(currentPrice, prevPrice);
+      const low = Math.min(currentPrice, prevPrice);
+      const prevClose = prevPrice;
+
+      // True Range calculation
       const tr = Math.max(
         high - low,
         Math.abs(high - prevClose),
@@ -409,7 +435,7 @@ export class ProfessionalTradingStrategies {
       );
       trSum += tr;
     }
-    
+
     return trSum / period;
   }
 }
