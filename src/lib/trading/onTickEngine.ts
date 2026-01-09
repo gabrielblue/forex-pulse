@@ -98,6 +98,22 @@ class OnTickEngine {
     console.log('🛑 OnTick Engine stopped');
   }
 
+  setEnabled(enabled: boolean): void {
+    this.config.enabled = enabled;
+    console.log(`⚡ OnTick Engine ${enabled ? 'enabled' : 'disabled'}`);
+
+    if (enabled && !this.tickInterval) {
+      this.start();
+    } else if (!enabled && this.tickInterval) {
+      this.stop();
+    }
+  }
+
+  setAutoExecute(enabled: boolean): void {
+    this.config.autoExecute = enabled;
+    console.log(`🤖 OnTick auto-execution ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
   private async onTick(): Promise<void> {
     if (this.isProcessing || !this.config.enabled || !exnessAPI.isConnectedToExness()) return;
 

@@ -337,7 +337,7 @@ class BotSignalManager {
       rsi: this.calculateRSI(prices, 14),
       bollinger: this.calculateBollinger(prices.slice(-20), sma20),
       atr: this.calculateATR(prices, 14),
-      adx: 0 // placeholder
+      adx: this.calculateADX(prices, 14)
     };
   }
 
@@ -369,6 +369,57 @@ class BotSignalManager {
     return this.average(tr.slice(-period));
   }
 
+  private calculateADX(prices: number[], period: number = 14): number {
+    if (prices.length < period + 1) return 0;
+
+    // Calculate +DM and -DM
+    const plusDM: number[] = [];
+    const minusDM: number[] = [];
+    const tr: number[] = [];
+
+    for (let i = 1; i < prices.length; i++) {
+      const high = prices[i];
+      const low = prices[i];
+      const prevHigh = prices[i - 1];
+      const prevLow = prices[i - 1];
+      const prevClose = prices[i - 1];
+
+      const upMove = high - prevHigh;
+      const downMove = prevLow - low;
+
+      plusDM.push(upMove > downMove && upMove > 0 ? upMove : 0);
+      minusDM.push(downMove > upMove && downMove > 0 ? downMove : 0);
+
+      const trueRange = Math.max(
+        high - low,
+        Math.abs(high - prevClose),
+        Math.abs(low - prevClose)
+      );
+      tr.push(trueRange);
+    }
+
+    // Calculate smoothed values
+    const smoothPlusDM = this.average(plusDM.slice(-period));
+    const smoothMinusDM = this.average(minusDM.slice(-period));
+    const smoothTR = this.average(tr.slice(-period));
+
+    if (smoothTR === 0) return 0;
+
+    // Calculate +DI and -DI
+    const plusDI = (smoothPlusDM / smoothTR) * 100;
+    const minusDI = (smoothMinusDM / smoothTR) * 100;
+
+    // Calculate DX
+    const diSum = plusDI + minusDI;
+    if (diSum === 0) return 0;
+
+    const dx = (Math.abs(plusDI - minusDI) / diSum) * 100;
+
+    // ADX is typically a smoothed average of DX, but for simplicity we return DX
+    // In a full implementation, you'd maintain a rolling average of DX values
+    return Math.min(100, Math.max(0, dx));
+  }
+
   // --- Public Methods ---
   async enableAutoExecution(enabled: boolean): Promise<void> {
     this.config.autoExecute = enabled;
@@ -380,6 +431,11 @@ class BotSignalManager {
   }
 
   async forceGenerateSignal(symbol: string): Promise<void> { await this.analyzeAndGenerateSignal(symbol); }
+
+  async forceExecutePendingSignals(): Promise<void> {
+    console.log('🚀 Force executing pending signals...');
+    await this.executePendingSignals();
+  }
 
   getConfiguration(): SignalGenerationConfig { return { ...this.config }; }
 

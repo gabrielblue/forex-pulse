@@ -353,7 +353,7 @@ class SignalProcessor {
 
       // Fallback: If MT5 not connected, use minimal data
       console.warn('⚠️ MT5 not connected, using fallback minimal data for', symbol);
-      const basePrice = this.getBasePrice(symbol);
+      const basePrice = await this.getRealTimePrice(symbol);
       const now = new Date();
       const prices: number[] = [];
       const volumes: number[] = [];
@@ -368,7 +368,7 @@ class SignalProcessor {
       return { symbol, prices, volumes, timestamps };
     } catch (error) {
       console.error('❌ Error fetching historical data, using fallback:', error);
-      const basePrice = this.getBasePrice(symbol);
+      const basePrice = await this.getRealTimePrice(symbol);
       const now = new Date();
       return {
         symbol,
@@ -503,16 +503,30 @@ class SignalProcessor {
     }
   }
 
-  private getBasePrice(symbol: string): number {
-    const basePrices: Record<string, number> = {
-      'EURUSD': 1.0845,
-      'GBPUSD': 1.2734,
-      'USDJPY': 149.85,
-      'AUDUSD': 0.6623,
-      'USDCHF': 0.8892,
-      'NZDUSD': 0.5987
+  private async getRealTimePrice(symbol: string): Promise<number> {
+    try {
+      // Try to get real-time price from API
+      const marketPrice = await exnessAPI.getCurrentPrice(symbol);
+      if (marketPrice?.bid) {
+        return marketPrice.bid;
+      }
+    } catch (error) {
+      console.warn(`Failed to get real-time price for ${symbol}, using approximate fallback`);
+    }
+
+    // Fallback approximate prices (should rarely be used)
+    const approximatePrices: Record<string, number> = {
+      'EURUSD': 1.08,
+      'GBPUSD': 1.27,
+      'USDJPY': 150.0,
+      'AUDUSD': 0.66,
+      'USDCHF': 0.89,
+      'NZDUSD': 0.60,
+      'XAUUSD': 2000.0,
+      'USDCAD': 1.36,
+      'EURGBP': 0.85
     };
-    return basePrices[symbol] || 1.0000;
+    return approximatePrices[symbol] || 1.0000;
   }
 
   setConfiguration(config: Partial<SignalProcessorConfig>): void {

@@ -410,6 +410,43 @@ class ExnessAPI {
     return this.connectionInfo;
   }
 
+  getConnectionStatus(): { connected: boolean; sessionId: string | null; lastUpdate: Date } {
+    return {
+      connected: this.isConnected,
+      sessionId: this.sessionId,
+      lastUpdate: this.lastUpdate
+    };
+  }
+
+  getAccountType(): 'DEMO' | 'LIVE' {
+    if (!this.accountInfo) {
+      return 'DEMO';
+    }
+    return this.accountInfo.isDemo ? 'DEMO' : 'LIVE';
+  }
+
+  async isMarketOpen(symbol: string): Promise<boolean> {
+    if (!this.isConnected || !this.sessionId) {
+      return false;
+    }
+
+    try {
+      // Try to get current price - if we get a valid price, market is open
+      const price = await this.getCurrentPrice(symbol);
+      if (!price) {
+        return false;
+      }
+
+      // Check if spread is reasonable (not too wide, which indicates closed market)
+      const spreadPips = price.spread * 10000; // Convert to pips
+      const maxSpreadPips = 100; // Markets closed typically have spreads > 100 pips
+
+      return spreadPips < maxSpreadPips;
+    } catch (error) {
+      return false;
+    }
+  }
+
   disconnect(): void {
     this.isConnected = false;
     this.sessionId = null;
