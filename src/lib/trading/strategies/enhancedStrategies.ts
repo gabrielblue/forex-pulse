@@ -242,15 +242,15 @@ export class EnhancedTradingSystem {
     newsImpact: any
   ): Promise<OptimizedSignal> {
     
-    // Calculate aggressive position sizing for day trading
-    const baseVolume = 0.20; // Start with much larger base volume
-    const confidenceMultiplier = Math.max(1.0, signal.confidence / 80); // Minimum 100% multiplier
-    const sessionMultiplier = Math.max(2.0, sessionAnalysis.volatilityMultiplier); // Minimum 2.0x
-    const newsRiskFactor = Math.max(0.9, newsImpact.riskMultiplier); // Minimal news impact
-    
+    // Calculate conservative position sizing with proper risk management
+    const baseVolume = 0.05; // Conservative base volume (0.05 lots = $5 per pip on standard)
+    const confidenceMultiplier = Math.min(1.5, signal.confidence / 70); // Max 1.5x multiplier
+    const sessionMultiplier = Math.min(1.3, sessionAnalysis.volatilityMultiplier); // Max 1.3x multiplier
+    const newsRiskFactor = Math.max(0.5, newsImpact.riskMultiplier); // Reduce size for high impact news
+
     const volatilityAdjustedVolume = Math.max(
-      0.15, // Minimum 0.15 lots
-      Math.min(1.0, baseVolume * confidenceMultiplier * sessionMultiplier * newsRiskFactor) // Max 1.0 lots
+      0.01, // Minimum 0.01 lots (micro lot)
+      Math.min(0.5, baseVolume * confidenceMultiplier * sessionMultiplier * newsRiskFactor) // Max 0.5 lots
     );
     
     // Calculate expected outcome
@@ -279,10 +279,10 @@ export class EnhancedTradingSystem {
   
   private calculateExpectedOutcome(signal: AdvancedSignal, marketRegime: string): any {
     const baseWinRate = signal.probabilityOfSuccess / 100;
-    
+
     // Regime adjustments
     let adjustedWinRate = baseWinRate;
-    if (marketRegime === 'TRENDING' && signal.type === this.getTrendDirection()) {
+    if (marketRegime === 'TRENDING' && signal.type === this.getTrendDirection(signal)) {
       adjustedWinRate *= 1.15; // 15% boost in trending markets
     }
     
@@ -341,9 +341,48 @@ export class EnhancedTradingSystem {
   }
   
   private calculateADX(prices: number[], period: number): number {
-    // Simplified ADX calculation
-    // NOTE: Real ADX calculation requires historical price data from MT5
-    return 50; // Neutral value until MT5 integration
+    // Real ADX calculation using price movement
+    if (prices.length < period + 1) return 25; // Neutral trend strength
+
+    let plusDM = 0;
+    let minusDM = 0;
+    let tr = 0;
+
+    // Calculate directional movement and true range
+    for (let i = prices.length - period; i < prices.length - 1; i++) {
+      const currentHigh = prices[i];
+      const currentLow = prices[i];
+      const prevHigh = prices[i - 1];
+      const prevLow = prices[i - 1];
+      const prevClose = prices[i - 1];
+
+      // Directional Movement
+      const upMove = currentHigh - prevHigh;
+      const downMove = prevLow - currentLow;
+
+      if (upMove > downMove && upMove > 0) {
+        plusDM += upMove;
+      } else if (downMove > upMove && downMove > 0) {
+        minusDM += downMove;
+      }
+
+      // True Range
+      const high_low = Math.abs(currentHigh - currentLow);
+      const high_close = Math.abs(currentHigh - prevClose);
+      const low_close = Math.abs(currentLow - prevClose);
+      tr += Math.max(high_low, high_close, low_close);
+    }
+
+    // Calculate +DI and -DI
+    const plusDI = tr > 0 ? (plusDM / tr) * 100 : 0;
+    const minusDI = tr > 0 ? (minusDM / tr) * 100 : 0;
+
+    // Calculate DX
+    const diSum = plusDI + minusDI;
+    const dx = diSum > 0 ? (Math.abs(plusDI - minusDI) / diSum) * 100 : 0;
+
+    // ADX is smoothed DX (simplified to single DX value)
+    return Math.min(100, Math.max(0, dx));
   }
   
   private calculateRangeCompression(prices: number[], bollinger: any): number {
@@ -391,10 +430,14 @@ export class EnhancedTradingSystem {
     return this.correlationMatrix.get(symbol) || 50;
   }
   
-  private getTrendDirection(): 'BUY' | 'SELL' {
-    // This fallback should never be used in production
-    // Real trend direction comes from AI analysis
-    console.warn('⚠️ getTrendDirection fallback should not be used - use AI analysis');
+  private getTrendDirection(signal?: AdvancedSignal): 'BUY' | 'SELL' {
+    // Use signal type if available, otherwise determine from cached market regime
+    if (signal && signal.type) {
+      return signal.type;
+    }
+
+    // Fallback: Return neutral/conservative default only when no signal available
+    console.warn('⚠️ getTrendDirection fallback: No signal available, using conservative default');
     return 'BUY'; // Conservative default
   }
 }
