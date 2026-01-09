@@ -337,8 +337,40 @@ class BotSignalManager {
       rsi: this.calculateRSI(prices, 14),
       bollinger: this.calculateBollinger(prices.slice(-20), sma20),
       atr: this.calculateATR(prices, 14),
-      adx: 0 // placeholder
+      adx: this.calculateADX(prices, 14)
     };
+  }
+
+  private calculateADX(prices: number[], period: number): number {
+    if (prices.length < period + 1) return 25; // Neutral value
+
+    // Calculate +DI and -DI
+    const plusDM: number[] = [];
+    const minusDM: number[] = [];
+    const tr: number[] = [];
+
+    for (let i = 1; i < prices.length; i++) {
+      const highDiff = prices[i] - prices[i - 1];
+      const lowDiff = prices[i - 1] - prices[i];
+
+      plusDM.push(highDiff > lowDiff && highDiff > 0 ? highDiff : 0);
+      minusDM.push(lowDiff > highDiff && lowDiff > 0 ? lowDiff : 0);
+      tr.push(Math.abs(prices[i] - prices[i - 1]));
+    }
+
+    // Smooth the values
+    const smoothPlusDM = this.average(plusDM.slice(-period));
+    const smoothMinusDM = this.average(minusDM.slice(-period));
+    const smoothTR = this.average(tr.slice(-period));
+
+    if (smoothTR === 0) return 25;
+
+    const plusDI = (smoothPlusDM / smoothTR) * 100;
+    const minusDI = (smoothMinusDM / smoothTR) * 100;
+
+    // Calculate DX and ADX
+    const dx = Math.abs(plusDI - minusDI) / (plusDI + minusDI || 1) * 100;
+    return Math.min(100, Math.max(0, dx));
   }
 
   private average(arr: number[]): number { return arr.reduce((a, b) => a + b, 0) / arr.length; }
