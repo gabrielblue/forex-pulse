@@ -63,6 +63,42 @@ export interface MarketPrice {
   timestamp: Date;
 }
 
+export interface MT5ConnectionInfo {
+  status: string;
+  server: string;
+  login: string;
+  isDemo: boolean;
+}
+
+export interface MT5AccountResponse {
+  login: number;
+  balance: number;
+  equity: number;
+  margin: number;
+  free_margin: number;
+  margin_level: number;
+  currency: string;
+  leverage: number;
+  server: string;
+  company: string;
+  mode: string;
+  connected: boolean;
+  positions?: MT5Position[];
+}
+
+export interface MT5Position {
+  ticket: number;
+  symbol: string;
+  type: number;
+  volume: number;
+  price_open: number;
+  sl: number;
+  tp: number;
+  profit: number;
+  time?: number;
+  comment?: string;
+}
+
 /* =========================
    Exness API Class
    ========================= */
@@ -71,12 +107,16 @@ class ExnessAPI {
   private sessionId: string | null = null;
   private accountInfo: AccountInfo | null = null;
   private isConnected = false;
-  private connectionInfo: any = null;
+  private connectionInfo: MT5ConnectionInfo | null = null;
   private lastUpdate: Date = new Date();
+  private heartbeatInterval: NodeJS.Timeout | null = null;
+  private sessionExpiryTime: Date | null = null;
 
   private readonly MT5_BRIDGE_URL = MT5_BRIDGE_URL;
   private readonly REQUEST_TIMEOUT = 30000;
   private readonly MAX_RETRIES = 3;
+  private readonly HEARTBEAT_INTERVAL = 30000; // 30 seconds
+  private readonly SESSION_DURATION = 3600000; // 1 hour
 
   // MT5 timeframe mapping (string to MT5 constant)
   private readonly TIMEFRAME_MAP: { [key: string]: number } = {
@@ -197,6 +237,7 @@ class ExnessAPI {
     this.accountInfo = this.mapMT5AccountInfo(result.account_info);
     this.isConnected = true;
     this.lastUpdate = new Date();
+    this.sessionExpiryTime = new Date(Date.now() + this.SESSION_DURATION);
 
     this.connectionInfo = {
       status: "Connected",
@@ -204,6 +245,9 @@ class ExnessAPI {
       login: this.accountInfo.accountNumber,
       isDemo: this.accountInfo.isDemo,
     };
+
+    // Start heartbeat to keep connection alive
+    this.startHeartbeat();
 
     return true;
   }
@@ -217,6 +261,58 @@ class ExnessAPI {
     }
   }
 
+  private startHeartbeat(): void {
+    // Clear existing heartbeat if any
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+    }
+
+    // Send periodic account info requests to keep session alive
+    this.heartbeatInterval = setInterval(async () => {
+      try {
+        if (!this.isSessionValid()) {
+          console.warn('⚠️ Session expired, stopping heartbeat');
+          this.handleSessionExpired();
+          return;
+        }
+
+        await this.refreshAccountInfo();
+        console.log('✅ Heartbeat successful, session alive');
+      } catch (error) {
+        console.error('❌ Heartbeat failed:', error);
+        // Don't disconnect on single heartbeat failure, will retry
+      }
+    }, this.HEARTBEAT_INTERVAL);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+  }
+
+  private isSessionValid(): boolean {
+    if (!this.sessionId || !this.sessionExpiryTime) {
+      return false;
+    }
+    return new Date() < this.sessionExpiryTime;
+  }
+
+  private handleSessionExpired(): void {
+    console.error('❌ Session expired, disconnecting');
+    this.stopHeartbeat();
+    this.isConnected = false;
+    this.sessionId = null;
+    this.sessionExpiryTime = null;
+  }
+
+  private validateSession(): void {
+    if (!this.isSessionValid()) {
+      throw new Error('Session expired. Please reconnect.');
+    }
+  }
+
   /* =========================
      Historical Data
      ========================= */
@@ -225,6 +321,7 @@ class ExnessAPI {
     if (!this.sessionId) {
       throw new Error('MT5 session not initialized. Call connect() first.');
     }
+    this.validateSession();
 
     const mt5Timeframe = this.TIMEFRAME_MAP[timeframe];
     if (!mt5Timeframe) {
@@ -273,6 +370,7 @@ class ExnessAPI {
 
   async getCurrentPrice(symbol: string): Promise<MarketPrice | null> {
     if (!this.isConnected || !this.sessionId) return null;
+    this.validateSession();
 
     const response = await fetch(
       `${this.MT5_BRIDGE_URL}/mt5/symbol_price`,
@@ -305,6 +403,7 @@ class ExnessAPI {
     if (!this.sessionId) {
       throw new Error('MT5 session not initialized. Call connect() first.');
     }
+    this.validateSession();
 
     const response = await this.fetchWithTimeout(
       `${this.MT5_BRIDGE_URL}/mt5/place_order`,
@@ -336,6 +435,7 @@ class ExnessAPI {
     if (!this.sessionId) {
       throw new Error('MT5 session not initialized. Call connect() first.');
     }
+    this.validateSession();
 
     const response = await this.fetchWithTimeout(
       `${this.MT5_BRIDGE_URL}/mt5/close_position`,
@@ -406,23 +506,52 @@ class ExnessAPI {
     return this.isConnected && this.sessionId !== null;
   }
 
-  getConnectionInfo(): any {
+  getConnectionInfo(): MT5ConnectionInfo | null {
     return this.connectionInfo;
   }
 
+  getConnectionStatus(): 'connected' | 'disconnected' | 'error' {
+    if (this.isConnected && this.sessionId) {
+      return 'connected';
+    }
+    return 'disconnected';
+  }
+
+  getAccountType(): 'demo' | 'live' {
+    return this.accountInfo?.isDemo ? 'demo' : 'live';
+  }
+
+  async isMarketOpen(symbol: string): Promise<boolean> {
+    try {
+      // Check if we can get current price - if yes, market is open
+      const price = await this.getCurrentPrice(symbol);
+      if (!price) return false;
+
+      // Additional check: verify spread is reasonable (market is liquid)
+      // Spread larger than 50 pips usually indicates market closed or illiquid
+      const spreadPips = price.spread * 10000; // Convert to pips for 4-digit pairs
+      return spreadPips < 50;
+    } catch (error) {
+      console.error(`Error checking market status for ${symbol}:`, error);
+      return false;
+    }
+  }
+
   disconnect(): void {
+    this.stopHeartbeat();
     this.isConnected = false;
     this.sessionId = null;
     this.accountInfo = null;
     this.connectionInfo = null;
+    this.sessionExpiryTime = null;
   }
 
   /* =========================
      Mapping
      ========================= */
 
-  private mapMT5AccountInfo(mt5: any): AccountInfo {
-    const positions: Position[] = (mt5.positions || []).map((pos: any) => ({
+  private mapMT5AccountInfo(mt5: MT5AccountResponse): AccountInfo {
+    const positions: Position[] = (mt5.positions || []).map((pos: MT5Position) => ({
       ticket: pos.ticket,
       ticketId: pos.ticket.toString(),
       symbol: pos.symbol,

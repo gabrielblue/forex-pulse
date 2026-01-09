@@ -137,8 +137,8 @@ class BotSignalManager {
 
   private async performTechnicalAnalysis(symbol: string, price: any): Promise<any> {
     try {
-      const prices = await this.generateRecentPrices(price.bid, 100, symbol);
-      const volumes = await this.generateRecentVolumes(100, symbol);
+      const prices = await this.fetchRecentPrices(price.bid, 100, symbol);
+      const volumes = await this.fetchRecentVolumes(100, symbol);
       if (prices.length < 20 || volumes.length < 20) return null;
 
       const indicators = this.calculateTechnicalIndicators(prices);
@@ -300,7 +300,7 @@ class BotSignalManager {
     return data;
   }
 
-  private async generateRecentPrices(currentPrice: number, count: number, symbol: string): Promise<number[]> {
+  private async fetchRecentPrices(currentPrice: number, count: number, symbol: string): Promise<number[]> {
     try {
       const historicalData = await this.fetchHistoricalDataWithCache(symbol, count);
       return historicalData?.map((bar: any) => bar.close) || [];
@@ -310,7 +310,7 @@ class BotSignalManager {
     }
   }
 
-  private async generateRecentVolumes(count: number, symbol: string): Promise<number[]> {
+  private async fetchRecentVolumes(count: number, symbol: string): Promise<number[]> {
     try {
       const historicalData = await this.fetchHistoricalDataWithCache(symbol, count);
       return historicalData?.map((bar: any) => bar.tick_volume || bar.volume || 0) || [];
