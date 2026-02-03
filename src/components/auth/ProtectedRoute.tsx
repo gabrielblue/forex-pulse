@@ -15,9 +15,12 @@ export const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) 
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        console.log('🔍 Checking auth in ProtectedRoute...');
         const { data: { user }, error: userError } = await supabase.auth.getUser();
-        
+        console.log('🔍 Auth check result:', { user: user ? 'exists' : 'null', error: userError });
+
         if (userError || !user) {
+          console.log('🚫 Auth failed, redirecting to /auth');
           navigate('/auth');
           return;
         }

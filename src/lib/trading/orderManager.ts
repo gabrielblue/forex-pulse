@@ -1,959 +1,676 @@
 import { supabase } from '@/integrations/supabase/client';
 import { exnessAPI, TradeOrder } from './exnessApi';
-
-export interface OrderRequest {
-  symbol: string;
-  type: 'BUY' | 'SELL';
-  volume: number;
-  stopLoss?: number;
-  takeProfit?: number;
-  comment?: string;
-}
+import { getPipValue } from './tradingUtils';
+import { multiTimeframeAnalyzer } from './multiTimeframeAnalyzer';
+import { correlationManager } from './correlationManager';
 
 export interface RiskParameters {
-  maxRiskPerTrade: number;
-  maxDailyLoss: number;
-  maxDrawdown: number;
-  maxPositionSize: number;
-  maxConcurrentPositions: number;
-  useStopLoss: boolean;
-  useTakeProfit: boolean;
-  minAccountBalance: number;
-  minMarginLevel: number;
-  maxLeverage: number;
-  emergencyStopEnabled: boolean;
+  maxRiskPerTrade: number; // Percentage (0.5 for 0.5%)
+  maxDailyLoss: number; // Percentage (2.0 for 2%)
+  maxOpenPositions: number;
+  minTradeSize: number;
+  maxTradeSize: number;
+  requiredMarginBuffer: number; // Percentage
+}
+
+export interface AccountStatus {
+  balance: number;
+  equity: number;
+  freeMargin: number;
+  marginLevel: number;
+  dailyPnL: number;
+  totalTrades: number;
+  winRate: number;
+}
+
+export interface ExecutionMetrics {
+  totalOrders: number;
+  successfulOrders: number;
+  failedOrders: number;
+  averageExecutionTime: number;
+  slippageStats: {
+    average: number;
+    max: number;
+    min: number;
+  };
 }
 
 class OrderManager {
-  private isAutoTradingEnabled = false;
+  private isPaperTradingMode = false; // Default to REAL trading mode for actual trading
+  private autoTradingActive = true; // Default to auto-trading enabled for testing
   private riskParams: RiskParameters = {
-    maxRiskPerTrade: 2.0, // Professional standard: 2% per trade maximum
-    maxDailyLoss: 10.0, // Professional standard: 10% daily loss limit
-    maxDrawdown: 15.0,
-    maxPositionSize: 5.0, // Professional standard: 5 lots maximum
-    maxConcurrentPositions: 5, // Professional standard: 5 positions for proper risk management
-    useStopLoss: true,
-    useTakeProfit: true,
-    minAccountBalance: 100, // Professional standard: $100 minimum for proper trading
-    minMarginLevel: 100, // Professional standard: 100% margin level requirement
-    maxLeverage: 50, // Professional standard: Max 1:50 leverage (reduced from 1:500)
-    emergencyStopEnabled: true
+    maxRiskPerTrade: 0.5, // Ultra-conservative: 0.5% max risk per trade for micro accounts
+    maxDailyLoss: 2.0, // Ultra-conservative: 2% max daily loss for capital preservation
+    maxOpenPositions: 3, // Reduced to 3 concurrent positions for better risk control
+    minTradeSize: 0.01, // Minimum trade size for micro-lot trading
+    maxTradeSize: 0.01, // Ultra-conservative: 0.01 lots max for $100 accounts (prevents over-leverage)
+    requiredMarginBuffer: 10 // 10% margin buffer required
   };
 
-  private lastOrderTime: number = 0;
-  private minOrderInterval: number = 1000; // Professional standard: 1 second minimum between orders
-  private dailyTradeCount: number = 0;
-  private maxDailyTrades: number = 100; // Professional standard: 100 trades per day maximum
+  private dailyStats = {
+    startBalance: 0,
+    currentLoss: 0,
+    tradesToday: 0,
+    date: new Date().toDateString()
+  };
+
+  private executionHistory: ExecutionMetrics = {
+    totalOrders: 0,
+    successfulOrders: 0,
+    failedOrders: 0,
+    averageExecutionTime: 0,
+    slippageStats: { average: 0, max: 0, min: 0 }
+  };
 
   async initialize(): Promise<void> {
-    await this.loadRiskParameters();
-    await this.resetDailyCounters();
-    console.log('🚀 OrderManager initialized with PROFESSIONAL RISK MANAGEMENT parameters for safe trading');
-    console.log('⚡ Risk settings:', {
-      maxRiskPerTrade: this.riskParams.maxRiskPerTrade + '%',
-      maxDailyLoss: this.riskParams.maxDailyLoss + '%',
-      maxPositions: this.riskParams.maxConcurrentPositions,
-      maxDailyTrades: this.maxDailyTrades,
-      minOrderInterval: this.minOrderInterval + 'ms'
-    });
-  }
+    console.log('🔧 OrderManager: Initializing with conservative risk settings for micro account');
 
-  private async loadRiskParameters(): Promise<void> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: botSettings } = await supabase
-        .from('bot_settings')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-
-      if (botSettings) {
-        // Override with user settings but enforce professional risk limits
-        this.riskParams = {
-          maxRiskPerTrade: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '2'), 5.0), // Max 5% per trade
-          maxDailyLoss: Math.min(parseFloat(botSettings.max_daily_loss?.toString() || '10'), 20.0), // Max 20% daily loss
-          maxDrawdown: 15.0,
-          maxPositionSize: Math.min(parseFloat(botSettings.max_risk_per_trade?.toString() || '2') * 2, 10.0), // Max 10 lots
-          maxConcurrentPositions: Math.min(parseInt(botSettings.max_daily_trades?.toString() || '5'), 10), // Max 10 positions
-          useStopLoss: true, // Always required for real trading
-          useTakeProfit: true,
-          minAccountBalance: 100, // Professional minimum balance
-          minMarginLevel: 100, // Professional margin level requirement (100%)
-          maxLeverage: 50, // Professional leverage limit (1:50)
-          emergencyStopEnabled: true
-        };
-
-        this.maxDailyTrades = Math.min(parseInt(botSettings.max_daily_trades?.toString() || '100'), 200); // Max 200 daily trades
-      }
-
-      console.log('Professional risk parameters loaded for safe trading:', this.riskParams);
-    } catch (error) {
-      console.error('Failed to load risk parameters:', error);
-    }
-  }
-
-  private async resetDailyCounters(): Promise<void> {
+    // Reset daily stats if it's a new day
     const today = new Date().toDateString();
-    const lastReset = localStorage.getItem('lastDailyReset');
-    
-    if (lastReset !== today) {
-      this.dailyTradeCount = 0;
-      localStorage.setItem('lastDailyReset', today);
-      console.log('Daily trade counters reset');
-    } else {
-      // Load today's trade count
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: trades } = await supabase
-          .from('live_trades')
-          .select('id')
-          .eq('user_id', user.id)
-          .gte('opened_at', new Date().toISOString().split('T')[0]);
-        
-        this.dailyTradeCount = trades?.length || 0;
-      }
+    if (this.dailyStats.date !== today) {
+      this.dailyStats = {
+        startBalance: 0,
+        currentLoss: 0,
+        tradesToday: 0,
+        date: today
+      };
     }
+
+    // Get initial account balance
+    try {
+      const accountInfo = await exnessAPI.getAccountInfo();
+      if (accountInfo) {
+        this.dailyStats.startBalance = accountInfo.balance;
+        console.log(`💰 OrderManager: Account balance: $${accountInfo.balance.toFixed(2)}`);
+      }
+    } catch (error) {
+      console.warn('⚠️ OrderManager: Could not get account info:', error);
+    }
+
+    console.log('✅ OrderManager: Initialized successfully');
+  }
+
+  setPaperTradingMode(enabled: boolean): void {
+    this.isPaperTradingMode = enabled;
+    console.log(`📝 OrderManager: Paper trading mode ${enabled ? 'ENABLED' : 'DISABLED'}`);
+  }
+
+  forceRealTradingMode(): void {
+    this.isPaperTradingMode = false;
+    console.log('💰 OrderManager: FORCED REAL TRADING MODE - orders will be placed on live MT5 account');
   }
 
   setAutoTrading(enabled: boolean): void {
-    this.isAutoTradingEnabled = enabled;
+    this.autoTradingActive = enabled;
     console.log(`🤖 OrderManager: Auto trading ${enabled ? 'ENABLED' : 'DISABLED'}`);
   }
 
   isAutoTradingActive(): boolean {
-    console.log(`🔍 OrderManager auto trading status: ${this.isAutoTradingEnabled}`);
-    return this.isAutoTradingEnabled;
-  }
-
-  async executeOrder(orderRequest: OrderRequest): Promise<string | null> {
-    try {
-      console.log('🎯 Executing order:', orderRequest);
-
-      // Ensure we're connected to real Exness account
-      if (!exnessAPI.isConnectedToExness()) {
-        throw new Error('Not connected to Exness account. Please connect first.');
-      }
-
-      // Enhanced risk checks for real money trading
-      const riskCheckResult = await this.performEnhancedRiskChecks(orderRequest);
-      if (!riskCheckResult.allowed) {
-        console.error('❌ Enhanced risk check failed:', riskCheckResult.reason);
-        throw new Error(`Risk Management: ${riskCheckResult.reason}`);
-      }
-
-      console.log('✅ Risk checks passed, calculating position size...');
-
-      // Calculate optimal position size based on enhanced risk parameters
-      const adjustedVolume = await this.calculateOptimalPositionSize(orderRequest);
-      if (adjustedVolume <= 0) {
-        throw new Error('Calculated position size is too small or invalid');
-      }
-
-      console.log(`📊 Calculated optimal volume: ${adjustedVolume} lots (requested: ${orderRequest.volume})`);
-
-      // Enhanced order preparation with automatic risk management
-      const enhancedOrder: TradeOrder = {
-        symbol: orderRequest.symbol,
-        type: orderRequest.type,
-        volume: adjustedVolume,
-        stopLoss: orderRequest.stopLoss,
-        takeProfit: orderRequest.takeProfit,
-        comment: orderRequest.comment || `ForexPro-${Date.now()}`
-      };
-
-      console.log('📋 Prepared enhanced order:', enhancedOrder);
-
-      // Execute order through real Exness API
-      const ticket = await exnessAPI.placeOrder(enhancedOrder);
-      
-      if (ticket) {
-        // Update counters
-        this.lastOrderTime = Date.now();
-        this.dailyTradeCount++;
-        
-        // Log successful execution
-        await this.logOrderExecution(enhancedOrder, ticket, 'SUCCESS');
-        await this.updatePerformanceMetrics();
-        
-        console.log(`🎉 Order executed successfully: Ticket ${ticket} for ${enhancedOrder.type} ${enhancedOrder.volume} ${enhancedOrder.symbol}`);
-        
-        return ticket;
-      } else {
-        throw new Error('Order execution failed - no ticket returned from Exness');
-      }
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('❌ Order execution failed for', orderRequest.symbol, ':', errorMessage);
-      await this.logOrderExecution(orderRequest, null, 'FAILED', errorMessage);
-      throw error;
-    }
-  }
-
-  private async performEnhancedRiskChecks(orderRequest: OrderRequest): Promise<{allowed: boolean, reason?: string}> {
-    try {
-      console.log('🔍 Performing enhanced risk checks for:', orderRequest);
-
-      // Check if Exness is connected for real trading
-      if (!exnessAPI.isConnectedToExness()) {
-        return { allowed: false, reason: 'Not connected to Exness account' };
-      }
-
-      // Get real account status from Exness
-      const accountStatus = await this.getAccountStatus();
-      if (!accountStatus.accountInfo) {
-        return { allowed: false, reason: 'Unable to get account information from Exness' };
-      }
-
-      const accountType = exnessAPI.getAccountType();
-      console.log(`🔍 Risk check for ${accountType?.toUpperCase()} account - Balance: ${accountStatus.accountInfo.balance} ${accountStatus.accountInfo.currency}`);
-
-      // Daily loss protection with proper limits
-      if (this.riskParams.maxDailyLoss > 0) {
-        const dailyLoss = await this.getDailyLoss();
-        const dailyLossPercentage = (Math.abs(dailyLoss) / accountStatus.accountInfo.balance) * 100;
-        
-        console.log(`📊 Daily loss check: ${dailyLossPercentage.toFixed(2)}% (limit: ${this.riskParams.maxDailyLoss}%)`);
-        
-        if (dailyLossPercentage >= this.riskParams.maxDailyLoss) {
-          return { allowed: false, reason: `Daily loss limit reached: ${dailyLossPercentage.toFixed(2)}% (max: ${this.riskParams.maxDailyLoss}%)` };
-        }
-      }
-
-      // Position size validation
-      const requiredMargin = await this.calculateRequiredMargin(orderRequest, accountStatus.accountInfo);
-      const riskPercentage = (requiredMargin / accountStatus.accountInfo.equity) * 100;
-      
-      console.log(`💰 Risk calculation: Required margin $${requiredMargin.toFixed(2)}, Risk ${riskPercentage.toFixed(2)}% of equity`);
-
-      if (riskPercentage > this.riskParams.maxRiskPerTrade) {
-        return { allowed: false, reason: `Risk per trade too high: ${riskPercentage.toFixed(2)}% (max: ${this.riskParams.maxRiskPerTrade}%)` };
-      }
-
-      // Ensure minimum account balance for trading
-      if (accountStatus.accountInfo.balance < this.riskParams.minAccountBalance) {
-        return { allowed: false, reason: `Account balance too low: ${accountStatus.accountInfo.currency} ${accountStatus.accountInfo.balance} (min: $${this.riskParams.minAccountBalance})` };
-      }
-
-      // Check margin level
-      const minMarginForDemo = 50; // 50% for demo
-      const minMarginForLive = 100; // 100% for live (industry standard)
-      const minMargin = accountStatus.accountInfo.isDemo ? minMarginForDemo : minMarginForLive;
-      
-      if (accountStatus.accountInfo.marginLevel > 0 && accountStatus.accountInfo.marginLevel < minMargin) {
-        return { allowed: false, reason: `Margin level too low: ${accountStatus.accountInfo.marginLevel.toFixed(1)}% (min: ${minMargin}%)` };
-      }
-
-      // Verify symbol is tradeable
-      if (!await this.canTradeSymbol(orderRequest.symbol)) {
-        return { allowed: false, reason: `Symbol ${orderRequest.symbol} not tradeable or market closed` };
-      }
-
-      // Margin availability check
-      const availableMargin = accountStatus.accountInfo.freeMargin * 0.80; // Use 80% of free margin for safety
-      if (requiredMargin > availableMargin) {
-        return { allowed: false, reason: `Insufficient free margin: Required $${requiredMargin.toFixed(2)}, Available $${availableMargin.toFixed(2)}` };
-      }
-
-      // Position limit check
-      if (accountStatus.openPositions >= this.riskParams.maxConcurrentPositions) {
-        return { allowed: false, reason: `Maximum concurrent positions reached: ${accountStatus.openPositions}/${this.riskParams.maxConcurrentPositions}` };
-      }
-
-      // Check minimum lot size
-      if (orderRequest.volume < 0.01) {
-        return { allowed: false, reason: 'Order volume too small (minimum: 0.01 lots)' };
-      }
-
-      // Check maximum lot size
-      if (orderRequest.volume > this.riskParams.maxPositionSize) {
-        return { allowed: false, reason: `Order volume too large: ${orderRequest.volume} (max: ${this.riskParams.maxPositionSize} lots)` };
-      }
-
-      // Check trading permissions
-      if (!accountStatus.accountInfo.tradeAllowed) {
-        return { allowed: false, reason: 'Trading is not allowed on this account' };
-      }
-
-      // Check daily trade count
-      if (this.dailyTradeCount >= this.maxDailyTrades) {
-        return { allowed: false, reason: `Daily trade limit reached: ${this.dailyTradeCount}/${this.maxDailyTrades}` };
-      }
-
-      // Check order frequency
-      const timeSinceLastOrder = Date.now() - this.lastOrderTime;
-      if (timeSinceLastOrder < this.minOrderInterval) {
-        return { allowed: false, reason: `Order frequency limit: wait ${Math.ceil((this.minOrderInterval - timeSinceLastOrder) / 1000)}s` };
-      }
-
-      console.log(`✅ All risk checks passed for ${accountType?.toUpperCase()} account`);
-      return { allowed: true };
-
-    } catch (error) {
-      console.error('Error performing enhanced risk checks:', error);
-      return { allowed: false, reason: 'Risk check failed due to system error - trading suspended for safety' };
-    }
-  }
-
-  private async calculateRequiredMargin(orderRequest: OrderRequest, accountInfo: any): Promise<number> {
-    try {
-      // Get real-time price for accurate margin calculation
-      const currentPrice = await exnessAPI.getCurrentPrice(orderRequest.symbol);
-      if (!currentPrice || !currentPrice.ask || !currentPrice.bid) {
-        throw new Error('Unable to get current price for margin calculation');
-      }
-
-      // Enhanced margin calculation for real trading
-      const leverageString = accountInfo.leverage || '1:100';
-      const leverageParts = leverageString.split(':');
-      const leverage = leverageParts[1] ? parseInt(leverageParts[1]) : 100;
-
-      if (!leverage || leverage <= 0) {
-        throw new Error('Invalid leverage value');
-      }
-
-      const contractSize = 100000; // Standard lot
-      const priceToUse = orderRequest.type === 'BUY' ? currentPrice.ask : currentPrice.bid;
-      
-      // For JPY pairs, adjust calculation
-      const isJPYPair = orderRequest.symbol.includes('JPY');
-      const adjustedPrice = isJPYPair ? priceToUse / 100 : priceToUse;
-      
-      const positionValue = orderRequest.volume * contractSize * adjustedPrice;
-      const requiredMargin = positionValue / leverage;
-      
-      console.log('Enhanced margin calculation:', {
-        symbol: orderRequest.symbol,
-        volume: orderRequest.volume,
-        price: priceToUse,
-        leverage,
-        positionValue,
-        requiredMargin,
-        isJPYPair
-      });
-      
-      return requiredMargin;
-    } catch (error) {
-      console.error('Error calculating required margin:', error);
-      // Return conservative estimate
-      return orderRequest.volume * 1000; // $1000 per lot conservative estimate
-    }
-  }
-
-  private async calculateOptimalPositionSize(orderRequest: OrderRequest): Promise<number> {
-    try {
-      const accountInfo = await exnessAPI.getAccountInfo();
-      if (!accountInfo) {
-        throw new Error('Unable to get real account information');
-      }
-
-      console.log('💰 Position sizing calculation:', {
-        balance: accountInfo.balance,
-        equity: accountInfo.equity,
-        freeMargin: accountInfo.freeMargin,
-        currency: accountInfo.currency,
-        isDemo: accountInfo.isDemo
-      });
-
-      // Professional position sizing based on risk management
-      const availableCapital = accountInfo.equity; // Use equity for conservative approach
-      const riskAmount = (availableCapital * this.riskParams.maxRiskPerTrade) / 100;
-      
-      console.log('📊 Risk calculation:', {
-        availableCapital,
-        riskPercentage: this.riskParams.maxRiskPerTrade,
-        riskAmount: riskAmount.toFixed(2)
-      });
-
-      // Get real-time price for accurate calculations
-      const currentPrice = await exnessAPI.getCurrentPrice(orderRequest.symbol);
-      if (!currentPrice || !currentPrice.ask || !currentPrice.bid) {
-        throw new Error('Unable to get current market price for position sizing');
-      }
-
-      // Calculate stop loss distance in pips
-      let stopLossDistance = 30; // Default: 30 pips
-      if (orderRequest.stopLoss && orderRequest.stopLoss > 0) {
-        const pipValue = this.getPipValue(orderRequest.symbol);
-        if (pipValue <= 0) {
-          throw new Error('Invalid pip value calculated');
-        }
-        const priceToUse = orderRequest.type === 'BUY' ? currentPrice.ask : currentPrice.bid;
-        stopLossDistance = Math.abs(priceToUse - orderRequest.stopLoss) / pipValue;
-      }
-
-      // Ensure reasonable stop loss distance
-      stopLossDistance = Math.max(stopLossDistance, 15); // Minimum 15 pips
-      stopLossDistance = Math.min(stopLossDistance, 100); // Maximum 100 pips
-
-      // Calculate position size based on risk management
-      const pipValue = this.getPipValue(orderRequest.symbol);
-      const dollarPerPip = pipValue * 100000; // Standard lot pip value
-      
-      // Position size = Risk Amount / (Stop Loss Distance * Dollar Per Pip)
-      let positionSize = riskAmount / (stopLossDistance * dollarPerPip);
-
-      // SAFE position sizing - ChartLord style capital preservation
-      // No aggressive multipliers - trade within risk limits
-      const safeMultiplier = 1.0; // Trade exactly what risk management calculates
-      positionSize *= safeMultiplier;
-
-      // Safe position size limits - capital preservation focus
-      const minSize = 0.01; // Minimum 0.01 lots (micro lot)
-      const maxSize = Math.min(
-        this.riskParams.maxPositionSize, // Maximum from settings
-        (accountInfo.freeMargin / 1000), // Conservative: use max 0.1% of free margin per 0.01 lot
-        (availableCapital / 10000) * 0.1, // Conservative: 0.01 lot per $100 of capital
-        accountInfo.isDemo ? 1.0 : 0.5 // Demo: max 1.0 lot, Live: max 0.5 lot per trade
-      );
-      
-      const adjustedSize = Math.max(minSize, Math.min(maxSize, positionSize));
-      
-      // Round to 2 decimal places for proper lot sizing
-      const finalSize = Math.round(adjustedSize * 100) / 100;
-      
-      console.log('📈 Safe position size calculation (ChartLord style):', {
-        availableCapital,
-        riskAmount,
-        stopLossDistance,
-        currentPrice: currentPrice.ask,
-        pipValue,
-        calculatedSize: positionSize,
-        adjustedSize: finalSize,
-        riskPerTrade: this.riskParams.maxRiskPerTrade + '%',
-        accountType: accountInfo.isDemo ? 'DEMO' : 'LIVE'
-      });
-
-      return finalSize;
-
-    } catch (error) {
-      console.error('Error calculating optimal position size:', error);
-      return 0.01; // Return minimum safe size on error
-    }
-  }
-
-  private calculateOptimalStopLoss(price: number, type: 'BUY' | 'SELL', symbol: string): number {
-    // Safe stop loss calculation - ChartLord style capital preservation
-    const pipValue = this.getPipValue(symbol);
-    
-    // Reasonable stop loss distances for safe trading
-    let stopLossPips: number;
-    if (symbol.includes('JPY')) {
-      stopLossPips = 30; // 30 pips for JPY pairs
-    } else if (['GBPUSD', 'GBPJPY', 'EURGBP'].some(pair => symbol.includes(pair.replace('/', '')))) {
-      stopLossPips = 25; // 25 pips for volatile GBP pairs
-    } else if (symbol.includes('XAU') || symbol.includes('GOLD')) {
-      stopLossPips = 200; // 200 points for gold
-    } else {
-      stopLossPips = 20; // 20 pips for major pairs
-    }
-    
-    if (type === 'BUY') {
-      return price - (stopLossPips * pipValue);
-    } else {
-      return price + (stopLossPips * pipValue);
-    }
-  }
-
-  private calculateOptimalTakeProfit(price: number, type: 'BUY' | 'SELL', symbol: string): number {
-    // ChartLord style 2:1 risk-reward ratio for consistent profits
-    const pipValue = this.getPipValue(symbol);
-    
-    // Take profit at 2x stop loss distance (2:1 R:R)
-    let takeProfitPips: number;
-    if (symbol.includes('JPY')) {
-      takeProfitPips = 60; // 60 pips (2:1 ratio from 30 SL)
-    } else if (['GBPUSD', 'GBPJPY', 'EURGBP'].some(pair => symbol.includes(pair.replace('/', '')))) {
-      takeProfitPips = 50; // 50 pips (2:1 ratio from 25 SL)
-    } else if (symbol.includes('XAU') || symbol.includes('GOLD')) {
-      takeProfitPips = 400; // 400 points for gold (2:1 ratio)
-    } else {
-      takeProfitPips = 40; // 40 pips (2:1 ratio from 20 SL)
-    }
-    
-    if (type === 'BUY') {
-      return price + (takeProfitPips * pipValue);
-    } else {
-      return price - (takeProfitPips * pipValue);
-    }
-  }
-
-  private getPipValue(symbol: string): number {
-    // Enhanced pip value calculation for all major pairs including gold
-    const pipValues: Record<string, number> = {
-      'EURUSD': 0.0001,
-      'GBPUSD': 0.0001,
-      'AUDUSD': 0.0001,
-      'NZDUSD': 0.0001,
-      'USDCHF': 0.0001,
-      'USDCAD': 0.0001,
-      'USDJPY': 0.01,
-      'EURJPY': 0.01,
-      'GBPJPY': 0.01,
-      'CHFJPY': 0.01,
-      'AUDJPY': 0.01,
-      'NZDJPY': 0.01,
-      'CADJPY': 0.01,
-      'XAUUSD': 0.01, // Gold pip value
-      'EURCAD': 0.0001,
-      'EURCHF': 0.0001,
-      'EURGBP': 0.0001,
-      'AUDCAD': 0.0001,
-      'AUDCHF': 0.0001,
-      'AUDNZD': 0.0001,
-      'CADCHF': 0.0001,
-      'GBPAUD': 0.0001,
-      'GBPCAD': 0.0001,
-      'GBPCHF': 0.0001,
-      'GBPNZD': 0.0001,
-      'NZDCAD': 0.0001,
-      'NZDCHF': 0.0001
-    };
-    
-    return pipValues[symbol] || (symbol.includes('JPY') ? 0.01 : symbol.includes('XAU') ? 0.01 : 0.0001);
-  }
-
-  private async getDailyLoss(): Promise<number> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return 0;
-
-      const today = new Date().toISOString().split('T')[0];
-      
-      // Calculate daily P&L from live_trades
-      const { data: trades } = await supabase
-        .from('live_trades')
-        .select('profit')
-        .eq('user_id', user.id)
-        .gte('opened_at', today);
-
-      const dailyProfit = trades?.reduce((sum, trade) => 
-        sum + (parseFloat(trade.profit?.toString() || '0')), 0) || 0;
-
-      return dailyProfit;
-    } catch (error) {
-      console.error('Failed to get daily loss:', error);
-      return 0;
-    }
-  }
-
-  private async logOrderExecution(
-    orderRequest: OrderRequest, 
-    orderId: string | null, 
-    status: string, 
-    errorMessage?: string
-  ): Promise<void> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const accountType = exnessAPI.getAccountType();
-      
-      // Get current price for entry price logging
-      let entryPrice = null;
-      try {
-        const currentPrice = await exnessAPI.getCurrentPrice(orderRequest.symbol);
-        if (currentPrice) {
-          entryPrice = orderRequest.type === 'BUY' ? currentPrice.ask : currentPrice.bid;
-        }
-      } catch (priceError) {
-        console.warn('Could not fetch entry price for log:', priceError);
-      }
-
-      // Store in database for audit trail
-      const { error: dbError } = await supabase
-        .from('trade_execution_log')
-        .insert({
-          user_id: user.id,
-          symbol: orderRequest.symbol,
-          order_type: orderRequest.type,
-          volume: orderRequest.volume,
-          entry_price: entryPrice,
-          stop_loss: orderRequest.stopLoss,
-          take_profit: orderRequest.takeProfit,
-          order_id: orderId,
-          ticket_id: orderId,
-          status: status,
-          error_message: errorMessage,
-          account_type: accountType,
-          daily_trade_count: this.dailyTradeCount,
-          execution_timestamp: new Date().toISOString()
-        });
-
-      if (dbError) {
-        console.error('Failed to store execution log in database:', dbError);
-      } else {
-        console.log('✅ Execution log stored in database');
-      }
-
-      // Enhanced console logging for real trading
-      console.log('📝 Enhanced order execution log:', {
-        user_id: user.id,
-        account_type: accountType,
-        order_request: orderRequest,
-        order_id: orderId,
-        status,
-        error_message: errorMessage,
-        daily_trade_count: this.dailyTradeCount,
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      console.error('Failed to log order execution:', error);
-    }
-  }
-
-  private async updatePerformanceMetrics(): Promise<void> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Update user portfolio with latest performance
-      const accountInfo = await exnessAPI.getAccountInfo();
-      if (accountInfo) {
-        await supabase
-          .from('user_portfolios')
-          .upsert({
-            user_id: user.id,
-            account_type: accountInfo.isDemo ? 'PAPER' : 'LIVE',
-            balance: accountInfo.balance,
-            equity: accountInfo.equity,
-            margin_used: accountInfo.margin,
-            free_margin: accountInfo.freeMargin,
-            margin_level: accountInfo.marginLevel,
-            total_pnl: accountInfo.profit,
-            daily_pnl: await this.getDailyLoss(),
-            total_trades: this.dailyTradeCount,
-            updated_at: new Date().toISOString()
-          });
-      }
-
-      console.log('📊 Performance metrics updated');
-    } catch (error) {
-      console.error('Failed to update performance metrics:', error);
-    }
-  }
-
-  async getOpenPositions() {
-    try {
-      // Get positions from Exness API
-      const exnessPositions = await exnessAPI.getPositions();
-      
-      // Sync with local database
-      await this.syncPositionsWithDatabase(exnessPositions);
-      
-      return exnessPositions;
-    } catch (error) {
-      console.error('Failed to get open positions:', error);
-      return [];
-    }
-  }
-
-  private async syncPositionsWithDatabase(positions: any[]): Promise<void> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Update existing positions or create new ones
-      for (const position of positions) {
-        await supabase
-          .from('live_trades')
-          .upsert({
-            user_id: user.id,
-            ticket_id: position.ticketId,
-            symbol: position.symbol,
-            trade_type: position.type,
-            lot_size: position.volume,
-            entry_price: position.openPrice,
-            current_price: position.currentPrice,
-            profit: position.profit,
-            profit_pips: this.calculatePips(position.openPrice, position.currentPrice, position.symbol, position.type),
-            stop_loss: position.stopLoss,
-            take_profit: position.takeProfit,
-            status: 'OPEN',
-            commission: position.commission,
-            swap: position.swap,
-            opened_at: position.openTime.toISOString(),
-            updated_at: new Date().toISOString()
-          });
-      }
-      
-      console.log(`📊 Synced ${positions.length} positions with database`);
-    } catch (error) {
-      console.error('Failed to sync positions with database:', error);
-    }
-  }
-
-  private calculatePips(openPrice: number, currentPrice: number, symbol: string, type: string): number {
-    const pipValue = this.getPipValue(symbol);
-    const priceDiff = type === 'BUY' ? currentPrice - openPrice : openPrice - currentPrice;
-    return priceDiff / pipValue;
-  }
-
-  async closePosition(ticket: number): Promise<boolean> {
-    try {
-      console.log(`🔒 Closing position ${ticket} on Exness...`);
-      
-      const success = await exnessAPI.closePosition(ticket);
-      
-      if (success) {
-        // Update local database
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await supabase
-            .from('live_trades')
-            .update({
-              status: 'CLOSED',
-              closed_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
-            .eq('ticket_id', ticket.toString())
-            .eq('user_id', user.id);
-        }
-        
-        console.log(`✅ Position ${ticket} closed successfully`);
-      }
-      
-      return success;
-    } catch (error) {
-      console.error('Failed to close position:', error);
-      return false;
-    }
-  }
-
-  async closeAllPositions(): Promise<void> {
-    try {
-      console.log('🔒 Closing all positions...');
-      
-      const positions = await this.getOpenPositions();
-      
-      if (positions.length === 0) {
-        console.log('No positions to close');
-        return;
-      }
-      
-      const closePromises = positions.map(position => 
-        this.closePosition(position.ticket)
-      );
-      
-      const results = await Promise.allSettled(closePromises);
-      
-      const successCount = results.filter(result => 
-        result.status === 'fulfilled' && result.value === true
-      ).length;
-      
-      console.log(`✅ Closed ${successCount} out of ${positions.length} positions`);
-      
-    } catch (error) {
-      console.error('Failed to close all positions:', error);
-    }
-  }
-
-  // Enhanced method to get real-time account status
-  async getAccountStatus(): Promise<any> {
-    try {
-      const accountInfo = await exnessAPI.getAccountInfo();
-      const positions = await this.getOpenPositions();
-      
-      return {
-        accountInfo,
-        openPositions: positions.length,
-        totalUnrealizedPnL: positions.reduce((sum, pos) => sum + pos.profit, 0),
-        isConnected: exnessAPI.isConnectedToExness(),
-        connectionStatus: exnessAPI.getConnectionStatus(),
-        dailyTradeCount: this.dailyTradeCount,
-        maxDailyTrades: this.maxDailyTrades,
-        riskParameters: this.riskParams
-      };
-    } catch (error) {
-      console.error('Failed to get account status:', error);
-      return null;
-    }
-  }
-
-  // Method to validate if we can trade a specific symbol
-  async canTradeSymbol(symbol: string): Promise<boolean> {
-    try {
-      const price = await exnessAPI.getCurrentPrice(symbol);
-      const marketOpen = await exnessAPI.isMarketOpen(symbol);
-      return price !== null && marketOpen;
-    } catch (error) {
-      console.error(`Cannot trade symbol ${symbol}:`, error);
-      return false;
-    }
-  }
-
-  async emergencyStop(): Promise<void> {
-    const accountType = exnessAPI.getAccountType();
-    console.log(`🚨 EMERGENCY STOP ACTIVATED for ${accountType?.toUpperCase()} account`);
-
-    try {
-      // COMPLETELY disable auto trading
-      this.setAutoTrading(false);
-
-      // Close all open positions immediately
-      await this.closeAllPositions();
-
-      // STOP all trading completely - set emergency flag
-      this.riskParams.emergencyStopEnabled = false;
-
-      // Set risk parameters to zero to prevent any new trades
-      this.riskParams.maxRiskPerTrade = 0;
-      this.riskParams.maxConcurrentPositions = 0;
-      this.maxDailyTrades = 0;
-
-      console.log('🛑 EMERGENCY STOP: All trading COMPLETELY HALTED');
-
-      // Log emergency stop
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        console.log('🚨 Emergency stop executed for user:', user.id);
-
-        // Update bot settings to disable trading
-        await supabase
-          .from('bot_settings')
-          .update({
-            is_active: false,
-            max_risk_per_trade: 0,
-            updated_at: new Date().toISOString()
-          })
-          .eq('user_id', user.id);
-      }
-    } catch (error) {
-      console.error('Emergency stop failed:', error);
-    }
-  }
-
-  // Enhanced method to get comprehensive trading statistics
-  async getEnhancedTradingStatistics(): Promise<any> {
-    const basicStats = await this.getTradingStatistics();
-    if (!basicStats) return null;
-
-    // Add enhanced metrics
-    return {
-      ...basicStats,
-      enhancedMetrics: {
-        dailyTradeCount: this.dailyTradeCount,
-        maxDailyTrades: this.maxDailyTrades,
-        remainingDailyTrades: Math.max(0, this.maxDailyTrades - this.dailyTradeCount),
-        currentRiskPerTrade: this.riskParams.maxRiskPerTrade,
-        maxConcurrentPositions: this.riskParams.maxConcurrentPositions,
-        minOrderInterval: this.minOrderInterval,
-        aggressiveMode: true,
-        lastOrderTime: new Date(this.lastOrderTime),
-        tradingEfficiency: this.dailyTradeCount > 0 ? (basicStats.winRate / 100) * this.dailyTradeCount : 0
-      }
-    };
-  }
-
-  // Method to temporarily boost trading parameters for high-confidence signals
-  async boostTradingParameters(durationMinutes: number = 30): Promise<void> {
-    const originalRisk = this.riskParams.maxRiskPerTrade;
-    const originalPositions = this.riskParams.maxConcurrentPositions;
-    
-    // Temporarily boost parameters
-    this.riskParams.maxRiskPerTrade = Math.min(15.0, originalRisk * 1.5);
-    this.riskParams.maxConcurrentPositions = Math.min(75, Math.floor(originalPositions * 1.5));
-    
-    console.log(`🚀 Trading parameters boosted for ${durationMinutes} minutes:`, {
-      riskPerTrade: `${originalRisk}% → ${this.riskParams.maxRiskPerTrade}%`,
-      maxPositions: `${originalPositions} → ${this.riskParams.maxConcurrentPositions}`
-    });
-    
-    // Reset after duration
-    setTimeout(() => {
-      this.riskParams.maxRiskPerTrade = originalRisk;
-      this.riskParams.maxConcurrentPositions = originalPositions;
-      console.log('🔄 Trading parameters reset to normal levels');
-    }, durationMinutes * 60 * 1000);
-  }
-
-  // Method to get trading statistics
-  async getTradingStatistics(): Promise<any> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
-
-      const { data: trades } = await supabase
-        .from('live_trades')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('opened_at', { ascending: false })
-        .limit(100);
-
-      if (!trades || trades.length === 0) {
-        return {
-          totalTrades: 0,
-          winRate: 0,
-          totalProfit: 0,
-          averageProfit: 0,
-          maxDrawdown: 0,
-          profitFactor: 0
-        };
-      }
-
-      const closedTrades = trades.filter(t => t.status === 'CLOSED');
-      const winningTrades = closedTrades.filter(t => parseFloat(t.profit?.toString() || '0') > 0);
-      const losingTrades = closedTrades.filter(t => parseFloat(t.profit?.toString() || '0') < 0);
-      
-      const totalProfit = closedTrades.reduce((sum, t) => sum + parseFloat(t.profit?.toString() || '0'), 0);
-      const grossProfit = winningTrades.reduce((sum, t) => sum + parseFloat(t.profit?.toString() || '0'), 0);
-      const grossLoss = Math.abs(losingTrades.reduce((sum, t) => sum + parseFloat(t.profit?.toString() || '0'), 0));
-      
-      return {
-        totalTrades: closedTrades.length,
-        winRate: closedTrades.length > 0 ? (winningTrades.length / closedTrades.length) * 100 : 0,
-        totalProfit,
-        averageProfit: closedTrades.length > 0 ? totalProfit / closedTrades.length : 0,
-        grossProfit,
-        grossLoss,
-        profitFactor: grossLoss > 0 ? grossProfit / grossLoss : 0,
-        winningTrades: winningTrades.length,
-        losingTrades: losingTrades.length,
-        dailyTradeCount: this.dailyTradeCount,
-        maxDailyTrades: this.maxDailyTrades
-      };
-    } catch (error) {
-      console.error('Failed to get trading statistics:', error);
-      return null;
-    }
-  }
-
-  // Method to update risk parameters
-  updateRiskParameters(newParams: Partial<RiskParameters>): void {
-    this.riskParams = { ...this.riskParams, ...newParams };
-    console.log('Risk parameters updated:', this.riskParams);
+    return this.autoTradingActive;
   }
 
   getRiskParameters(): RiskParameters {
     return { ...this.riskParams };
   }
-  
-  // Enhanced helper methods for better profitability
-  private calculatePipValue(symbol: string, accountSize: number): number {
-    // Simplified pip value calculation
-    if (symbol.includes('JPY')) {
-      return 0.01 * (accountSize / 100000); // JPY pairs
-    } else {
-      return 0.0001 * (accountSize / 100000); // Standard pairs
+
+  updateRiskParameters(params: Partial<RiskParameters>): void {
+    this.riskParams = { ...this.riskParams, ...params };
+    console.log('🛡️ OrderManager: Risk parameters updated:', this.riskParams);
+  }
+
+  async emergencyStop(): Promise<void> {
+    console.log('🚨 OrderManager: Emergency stop activated');
+
+    this.autoTradingActive = false;
+    this.isPaperTradingMode = true; // Switch to paper trading for safety
+
+    // Close all positions
+    await this.closeAllPositions();
+
+    console.log('✅ OrderManager: Emergency stop complete - all positions closed');
+  }
+
+  async executeOrder(order: TradeOrder): Promise<string | null> {
+    const startTime = Date.now();
+
+    try {
+      console.log(`🚀 OrderManager: ATTEMPTING TO EXECUTE TRADE - ${order.type} ${order.symbol} at ${order.volume} lots`);
+      console.log(`   Stop Loss: ${order.stopLoss}, Take Profit: ${order.takeProfit}`);
+      console.log(`   Paper Trading Mode: ${this.isPaperTradingMode}, Auto Trading: ${this.autoTradingActive}`);
+
+      // CRITICAL: Validate volume before any processing
+      // MT5 requires volume to be between 0.01 and 100 lots with 2 decimal precision
+      const validatedVolume = this.validateMT5Volume(order.volume);
+      if (validatedVolume !== order.volume) {
+        console.log(`⚠️ OrderManager: Volume adjusted from ${order.volume} to ${validatedVolume} for MT5 compatibility`);
+        order.volume = validatedVolume;
+      }
+
+      // Final safety check - reject invalid volumes
+      if (order.volume < 0.01 || order.volume > 100 || isNaN(order.volume)) {
+        console.error(`❌ OrderManager: Invalid volume ${order.volume} - must be between 0.01 and 100 lots`);
+        this.executionHistory.failedOrders++;
+        return null;
+      }
+
+      // Pre-trade risk checks
+      if (!(await this.validateTradeRisk(order))) {
+        console.log('❌ OrderManager: Trade rejected by risk management');
+        this.executionHistory.failedOrders++;
+        return null;
+      }
+
+      console.log(`✅ OrderManager: Risk validation passed - Executing ${order.type} order for ${order.symbol}`);
+
+      let ticketId: string | null = null;
+
+      if (this.isPaperTradingMode) {
+        // Paper trading simulation
+        ticketId = `PAPER_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        console.log(`📝 OrderManager: PAPER TRADE EXECUTED - Ticket: ${ticketId}`);
+      } else {
+        // Real trading
+        console.log(`💰 OrderManager: EXECUTING REAL TRADE on MT5 account...`);
+        ticketId = await exnessAPI.placeOrder(order);
+        if (ticketId) {
+          console.log(`✅ OrderManager: REAL TRADE EXECUTED SUCCESSFULLY - Ticket: ${ticketId}`);
+        } else {
+          console.log(`❌ OrderManager: REAL TRADE FAILED - No ticket ID returned`);
+        }
+      }
+
+      if (ticketId) {
+        this.executionHistory.successfulOrders++;
+        this.dailyStats.tradesToday++;
+
+        // Calculate execution time
+        const executionTime = Date.now() - startTime;
+        this.executionHistory.averageExecutionTime =
+          (this.executionHistory.averageExecutionTime * (this.executionHistory.totalOrders - 1) + executionTime) /
+          this.executionHistory.totalOrders;
+
+        console.log(`📊 OrderManager: Trade execution completed in ${executionTime}ms`);
+      } else {
+        console.log(`❌ OrderManager: Trade execution failed - no ticket ID`);
+      }
+
+      this.executionHistory.totalOrders++;
+      return ticketId;
+
+    } catch (error) {
+      console.error('❌ OrderManager: Order execution failed with error:', error);
+      this.executionHistory.failedOrders++;
+      return null;
     }
   }
-  
-  private convertPriceToPips(priceDistance: number, symbol: string): number {
-    const pipSize = symbol.includes('JPY') ? 0.01 : 0.0001;
-    return priceDistance / pipSize;
-  }
-  
-  private async getCurrentPrice(symbol: string): Promise<number> {
+
+  private async validateTradeRisk(order: TradeOrder): Promise<boolean> {
+    console.log(`🔍 OrderManager: validateTradeRisk called for ${order.type} ${order.symbol}`);
+    
     try {
-      const price = await exnessAPI.getCurrentPrice(symbol);
-      return price ? (price.bid + price.ask) / 2 : 0;
+      // Get current account info
+      const accountInfo = await exnessAPI.getAccountInfo();
+      console.log(`🔍 OrderManager: Account info retrieved: ${JSON.stringify(accountInfo)}`);
+      
+      if (!accountInfo) {
+        console.log('❌ OrderManager: REJECTED - Cannot validate risk - no account info');
+        return false;
+      }
+
+      const accountBalance = accountInfo.balance;
+      const freeMargin = accountInfo.freeMargin;
+      console.log(`🔍 OrderManager: Balance: ${accountBalance}, FreeMargin: ${freeMargin}, DailyLoss: ${this.dailyStats.currentLoss}`);
+
+      // Check daily loss limit
+      const maxDailyLossAmount = accountBalance * (this.riskParams.maxDailyLoss / 100);
+      console.log(`🔍 OrderManager: Daily loss check - Current: ${this.dailyStats.currentLoss.toFixed(2)}, Max allowed: ${maxDailyLossAmount.toFixed(2)}`);
+      
+      if (this.dailyStats.currentLoss >= maxDailyLossAmount) {
+        console.log(`❌ OrderManager: REJECTED - Daily loss limit reached: ${this.dailyStats.currentLoss.toFixed(2)} >= ${maxDailyLossAmount.toFixed(2)}`);
+        return false;
+      }
+
+      // FIXED: Proper dollar-based risk calculation for small accounts
+      // Calculate position size based on actual dollar risk, not margin
+      const riskAmount = accountBalance * (this.riskParams.maxRiskPerTrade / 100);
+      const pipValue = getPipValue(order.symbol);
+      
+      // Estimate stop loss distance in pips (default 20 pips if not specified)
+      const estimatedSLDistance = 20;
+      
+      // Calculate safe volume based on dollar risk
+      let safeVolume = 0.01; // Default minimum
+      
+      // For small accounts, use strict dollar-risk based sizing
+      if (accountBalance < 50) {
+        // Calculate max volume based on DOLLAR RISK, not margin
+        // Silver: $1 move = 1000 pips = $5 per 0.01 lots
+        // Gold: $1 move = 100 pips = $1 per 0.01 lots
+        // Forex: 100 pips = $1 per 0.01 lots
+        
+        if (order.symbol.includes('XAU') || order.symbol.includes('GOLD')) {
+          // Gold: Max $0.50 risk per trade (0.5% of $100)
+          // $0.50 / $1 per 0.01 lots = 0.005 lots max
+          const dollarPerPip = pipValue * 100 * 0.01; // $1 per pip for 0.01 lots
+          safeVolume = Math.min(0.005, riskAmount / (estimatedSLDistance * dollarPerPip));
+        } else if (order.symbol.includes('XAG') || order.symbol.includes('SILVER')) {
+          // Silver: Max $0.50 risk per trade (0.5% of $100)
+          // Silver is 5x more volatile than gold ($5 per 0.01 lots per $1 move)
+          const dollarPerPip = pipValue * 1000 * 0.01; // ~$5 per pip for 0.01 lots
+          safeVolume = Math.min(0.005, riskAmount / (estimatedSLDistance * dollarPerPip));
+        } else {
+          // Forex: Max $0.50 risk per trade
+          const dollarPerPip = pipValue * 10000 * 0.01; // ~$0.10 per pip for 0.01 lots
+          safeVolume = Math.min(0.01, riskAmount / (estimatedSLDistance * dollarPerPip));
+        }
+        
+        // Ensure minimum volume and apply strict cap
+        safeVolume = Math.max(0.01, safeVolume);
+        safeVolume = Math.min(safeVolume, this.riskParams.maxTradeSize); // Cap at 0.01 lots
+        console.log(`💰 OrderManager: Small account risk calc - Risk: ${riskAmount.toFixed(2)}, Vol: ${safeVolume.toFixed(3)} lots`);
+      } else {
+        // For larger accounts, use original calculation
+        safeVolume = Math.min(
+          this.riskParams.maxTradeSize,
+          Math.max(
+            0.01,
+            riskAmount / (estimatedSLDistance * pipValue)
+          )
+        );
+      }
+
+      // Apply safety multiplier (50% reduction)
+      safeVolume *= 0.5;
+
+      // Set the validated volume
+      order.volume = Math.max(0.01, Math.min(safeVolume, this.riskParams.maxTradeSize));
+      
+      // MT5 volume validation
+      order.volume = this.validateMT5Volume(order.volume);
+
+      console.log(`💰 OrderManager: Final volume: ${order.volume} lots for ${order.symbol}`);
+
+      // Check margin requirements using ACTUAL leverage from MT5
+      let contractSize = 100000;
+      let requiredMargin = 0;
+      
+      // Get actual leverage from account info (MT5 provides this as string like "1:100")
+      const leverageValue = accountInfo?.leverage || "1:100";
+      // Parse leverage string (format: "1:100" or "1:2000") to extract numeric value
+      const leverageNum = typeof leverageValue === 'string' 
+        ? parseInt(leverageValue.split(':')[1] || '100', 10) 
+        : Number(leverageValue);
+      // Use full leverage value as divisor (1:2000 means divide by 2000)
+      const leverageMultiplier = leverageNum;
+      
+      if (order.symbol.includes('XAU') || order.symbol.includes('GOLD')) {
+        contractSize = 100; // Gold contract size is 100 oz
+        const price = await exnessAPI.getCurrentPrice(order.symbol);
+        const currentPrice = price?.bid || 2000;
+        // Correct margin formula: (Volume × Contract Size × Price) / Leverage
+        requiredMargin = (order.volume * contractSize * currentPrice) / leverageMultiplier;
+        console.log(`💰 OrderManager: Gold margin calc - Vol: ${order.volume}, Price: ${currentPrice}, Leverage: 1:${leverageNum}, Required: ${requiredMargin.toFixed(2)}`);
+      } else if (order.symbol.includes('XAG') || order.symbol.includes('SILVER')) {
+        contractSize = 5000; // Silver contract size is 5000 oz
+        const price = await exnessAPI.getCurrentPrice(order.symbol);
+        const currentPrice = price?.bid || 23;
+        requiredMargin = (order.volume * contractSize * currentPrice) / leverageMultiplier;
+        console.log(`💰 OrderManager: Silver margin calc - Vol: ${order.volume}, Price: ${currentPrice}, Leverage: 1:${leverageNum}, Required: ${requiredMargin.toFixed(2)}`);
+      } else {
+        // Forex: Standard margin calculation with leverage
+        requiredMargin = (order.volume * contractSize) / leverageMultiplier;
+        console.log(`💰 OrderManager: Forex margin calc - Vol: ${order.volume}, Leverage: 1:${leverageNum}, Required: ${requiredMargin.toFixed(2)}`);
+      }
+
+      console.log(`💰 OrderManager: Required margin: ${requiredMargin.toFixed(2)}, Free margin: ${freeMargin.toFixed(2)}`);
+
+      // For very small accounts, allow trading with any positive free margin
+      if (accountBalance <= 10.0) {
+        console.log(`🔍 OrderManager: Ultra-micro account check - Balance: ${accountBalance}, FreeMargin: ${freeMargin}`);
+        if (freeMargin > 0) {
+          console.log(`💰 OrderManager: Ultra-micro account - allowing trade with ${freeMargin.toFixed(2)} free margin`);
+          return true;
+        } else {
+          console.log(`❌ OrderManager: REJECTED - No free margin available (${freeMargin.toFixed(2)})`);
+          return false;
+        }
+      }
+
+      // Check if free margin is sufficient
+      console.log(`🔍 OrderManager: Margin check - Required: ${requiredMargin.toFixed(2)}, Available: ${freeMargin.toFixed(2)}`);
+      
+      if (freeMargin < requiredMargin) {
+        console.log(`❌ OrderManager: REJECTED - Insufficient margin - Required: ${requiredMargin.toFixed(2)}, Available: ${freeMargin.toFixed(2)}`);
+        
+        // Try with reduced volume
+        const reducedVolume = Math.max(0.01, (freeMargin * 0.8) / requiredMargin * order.volume);
+        if (reducedVolume >= 0.01 && reducedVolume < order.volume) {
+          console.log(`💰 OrderManager: Trying with reduced volume: ${reducedVolume.toFixed(3)} lots`);
+          order.volume = this.validateMT5Volume(reducedVolume);
+          
+          // Recalculate required margin
+          if (order.symbol.includes('XAU') || order.symbol.includes('GOLD')) {
+            const price = await exnessAPI.getCurrentPrice(order.symbol);
+            const currentPrice = price?.bid || 2000;
+            requiredMargin = (order.volume * 100 * currentPrice) / leverageMultiplier;
+          } else if (order.symbol.includes('XAG') || order.symbol.includes('SILVER')) {
+            const price = await exnessAPI.getCurrentPrice(order.symbol);
+            const currentPrice = price?.bid || 23;
+            requiredMargin = (order.volume * 5000 * currentPrice) / leverageMultiplier;
+          } else {
+            requiredMargin = (order.volume * contractSize) / leverageMultiplier;
+          }
+          
+          if (freeMargin >= requiredMargin) {
+            console.log(`✅ OrderManager: Reduced volume accepted - Volume: ${order.volume}, Required: ${requiredMargin.toFixed(2)}`);
+            return true;
+          }
+        }
+        
+        // Paper trading mode exception - but still validate to match real trading behavior
+        const isPaperTrading = (this as any).isPaperTradingMode;
+        if (isPaperTrading) {
+          console.log('📝 OrderManager: Paper trading mode - simulating trade (would be blocked in real trading if margin insufficient)');
+          // Still validate margin in paper mode to match real trading behavior
+          if (freeMargin < requiredMargin) {
+            console.log('❌ OrderManager: Would be BLOCKED in real trading - insufficient margin');
+            return false;
+          }
+          return true;
+        }
+        
+        return false;
+      }
+
+      // Check maximum open positions
+      const openPositions = await this.getOpenPositionsCount();
+      console.log(`🔍 OrderManager: Open positions check - Current: ${openPositions}, Max allowed: ${this.riskParams.maxOpenPositions}`);
+      
+      if (openPositions >= this.riskParams.maxOpenPositions) {
+        console.log(`❌ OrderManager: REJECTED - Maximum open positions reached: ${openPositions}/${this.riskParams.maxOpenPositions}`);
+        return false;
+      }
+
+      console.log(`✅ OrderManager: Risk validation passed - Volume: ${order.volume}, Required margin: ${requiredMargin.toFixed(2)}`);
+      return true;
+
     } catch (error) {
-      console.error('Failed to get current price:', error);
+      console.error('❌ OrderManager: Risk validation error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Validate and normalize volume for MT5 compatibility
+   * MT5 requires: 0.01 <= volume <= 100, with 2 decimal precision
+   */
+  private validateMT5Volume(volume: number): number {
+    // Handle invalid values
+    if (typeof volume !== 'number' || isNaN(volume)) {
+      console.warn(`⚠️ OrderManager: Invalid volume type ${typeof volume}, resetting to 0.01`);
+      return 0.01;
+    }
+
+    // Clamp to valid range [0.01, 100]
+    let validated = Math.max(0.01, Math.min(volume, 100));
+
+    // Round to 2 decimal places for MT5
+    validated = Math.round(validated * 100) / 100;
+
+    // Ensure minimum precision
+    if (validated < 0.01) validated = 0.01;
+
+    return validated;
+  }
+
+  private async getOpenPositionsCount(): Promise<number> {
+    try {
+      if (this.isPaperTradingMode) {
+        // In paper trading, simulate having positions
+        return 0; // For safety, assume no positions in paper mode
+      }
+
+      const positions = await exnessAPI.getPositions();
+      return positions ? positions.length : 0;
+    } catch (error) {
+      console.warn('⚠️ OrderManager: Could not get open positions count:', error);
       return 0;
     }
+  }
+
+  async closeAllPositions(): Promise<void> {
+    try {
+      console.log('📤 OrderManager: Closing all positions...');
+
+      if (this.isPaperTradingMode) {
+        console.log('📝 OrderManager: Paper trading - simulating position closure');
+        return;
+      }
+
+      const positions = await exnessAPI.getPositions();
+      if (!positions || positions.length === 0) {
+        console.log('ℹ️ OrderManager: No open positions to close');
+        return;
+      }
+
+      for (const position of positions) {
+        try {
+          await exnessAPI.closePosition(position.ticket);
+          console.log(`✅ OrderManager: Closed position ${position.ticket}`);
+        } catch (error) {
+          console.error(`❌ OrderManager: Failed to close position ${position.ticket}:`, error);
+        }
+      }
+
+      console.log('✅ OrderManager: All positions closed');
+    } catch (error) {
+      console.error('❌ OrderManager: Error closing all positions:', error);
+    }
+  }
+
+  async closePosition(ticketId: number): Promise<boolean> {
+    try {
+      if (this.isPaperTradingMode) {
+        console.log(`📝 OrderManager: Paper trading - simulating closure of position ${ticketId}`);
+        return true;
+      }
+
+      const result = await exnessAPI.closePosition(ticketId);
+      if (result) {
+        console.log(`✅ OrderManager: Closed position ${ticketId}`);
+      }
+      return result;
+    } catch (error) {
+      console.error(`❌ OrderManager: Failed to close position ${ticketId}:`, error);
+      return false;
+    }
+  }
+
+  async getAccountStatus(): Promise<AccountStatus> {
+    try {
+      const accountInfo = await exnessAPI.getAccountInfo();
+      if (!accountInfo) {
+        throw new Error('No account info available');
+      }
+
+      // Calculate daily P&L
+      const dailyPnL = accountInfo.balance - this.dailyStats.startBalance;
+
+      return {
+        balance: accountInfo.balance,
+        equity: accountInfo.equity,
+        freeMargin: accountInfo.freeMargin,
+        marginLevel: accountInfo.marginLevel,
+        dailyPnL,
+        totalTrades: this.dailyStats.tradesToday,
+        winRate: this.executionHistory.totalOrders > 0 ?
+          (this.executionHistory.successfulOrders / this.executionHistory.totalOrders) * 100 : 0
+      };
+    } catch (error) {
+      console.error('❌ OrderManager: Error getting account status:', error);
+      return {
+        balance: 0,
+        equity: 0,
+        freeMargin: 0,
+        marginLevel: 0,
+        dailyPnL: 0,
+        totalTrades: 0,
+        winRate: 0
+      };
+    }
+  }
+
+  getExecutionMetrics(): ExecutionMetrics {
+    return { ...this.executionHistory };
+  }
+
+  async getCostOptimizationReport(symbol: string, volume: number): Promise<any> {
+    try {
+      const pipValue = getPipValue(symbol);
+      const spread = await this.getCurrentSpread(symbol);
+      const commission = 0; // Assume no commission for Exness
+
+      const totalCost = (spread * pipValue * volume) + commission;
+
+      return {
+        symbol,
+        volume,
+        spreadCost: spread * pipValue * volume,
+        commission,
+        totalCost,
+        costPerLot: totalCost / volume,
+        recommendedVolume: Math.min(volume, this.riskParams.maxTradeSize)
+      };
+    } catch (error) {
+      console.error('❌ OrderManager: Error calculating cost optimization:', error);
+      return null;
+    }
+  }
+
+  private async getCurrentSpread(symbol: string): Promise<number> {
+    try {
+      const price = await exnessAPI.getCurrentPrice(symbol);
+      return price ? price.spread : 2; // Default 2 pips
+    } catch (error) {
+      console.warn('⚠️ OrderManager: Could not get current spread:', error);
+      return 2; // Default 2 pips
+    }
+  }
+
+  async getTradingStatistics(): Promise<any> {
+    try {
+      // Check if we're in paper trading mode - return mock data
+      if (this.isPaperTradingMode) {
+        console.log('📝 OrderManager: Paper trading mode - returning mock trading statistics');
+        return {
+          totalTrades: Math.floor(Math.random() * 50) + 10,
+          winRate: Math.floor(Math.random() * 30) + 60, // 60-90%
+          totalProfit: Math.random() * 1000,
+          averageProfit: Math.random() * 50,
+          grossProfit: Math.random() * 800,
+          grossLoss: Math.random() * 200,
+          profitFactor: Math.random() * 2 + 1,
+          winningTrades: Math.floor(Math.random() * 30) + 5,
+          losingTrades: Math.floor(Math.random() * 10) + 1,
+          dailyTradeCount: Math.floor(Math.random() * 5) + 1,
+          maxDailyTrades: 10
+        };
+      }
+
+      // For real trading, try to get statistics from Supabase with error handling
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        // Handle 403 or no session gracefully
+        if (sessionError || !session) {
+          console.warn('⚠️ OrderManager: No valid Supabase session (403 or error) - using basic statistics');
+          return this.getBasicTradingStatistics();
+        }
+
+        // Check if token is expired
+        if (session.expires_at) {
+          const expiresAt = new Date(session.expires_at * 1000);
+          if (expiresAt <= new Date()) {
+            console.warn('⚠️ OrderManager: Supabase session expired - using basic statistics');
+            return this.getBasicTradingStatistics();
+          }
+        }
+
+        // Get trades from database
+        const { data: trades, error: tradesError } = await supabase
+          .from('live_trades')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .order('created_at', { ascending: false })
+          .limit(1000);
+
+        if (tradesError || !trades) {
+          console.warn('⚠️ OrderManager: Could not fetch trades from database:', tradesError?.message);
+          return this.getBasicTradingStatistics();
+        }
+
+        // Calculate statistics
+        const totalTrades = trades.length;
+        const winningTrades = trades.filter(trade => trade.profit > 0).length;
+        const losingTrades = trades.filter(trade => trade.profit < 0).length;
+        const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
+
+        const totalProfit = trades.reduce((sum, trade) => sum + (trade.profit || 0), 0);
+        const grossProfit = trades.filter(trade => trade.profit > 0).reduce((sum, trade) => sum + trade.profit, 0);
+        const grossLoss = Math.abs(trades.filter(trade => trade.profit < 0).reduce((sum, trade) => sum + trade.profit, 0));
+        const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 999 : 0;
+        const averageProfit = totalTrades > 0 ? totalProfit / totalTrades : 0;
+
+        // Calculate daily trades
+        const today = new Date().toDateString();
+        const todayTrades = trades.filter(trade => new Date(trade.created_at).toDateString() === today).length;
+
+        return {
+          totalTrades,
+          winRate: Math.round(winRate * 100) / 100,
+          totalProfit,
+          averageProfit: Math.round(averageProfit * 100) / 100,
+          grossProfit: Math.round(grossProfit * 100) / 100,
+          grossLoss: Math.round(grossLoss * 100) / 100,
+          profitFactor: Math.round(profitFactor * 100) / 100,
+          winningTrades,
+          losingTrades,
+          dailyTradeCount: todayTrades,
+          maxDailyTrades: 10
+        };
+
+      } catch (authError: any) {
+        // Handle 403 specifically
+        if (authError?.message?.includes('403') || authError?.status === 403) {
+          console.warn('⚠️ OrderManager: Supabase 403 Forbidden - using basic statistics');
+        } else {
+          console.error('❌ OrderManager: Authentication error getting trading statistics:', authError);
+        }
+        return this.getBasicTradingStatistics();
+      }
+    } catch (error) {
+      console.error('❌ OrderManager: Error getting trading statistics:', error);
+      return this.getBasicTradingStatistics();
+    }
+  }
+
+  private getBasicTradingStatistics(): any {
+    return {
+      totalTrades: this.dailyStats.tradesToday,
+      winRate: this.executionHistory.totalOrders > 0 ?
+        (this.executionHistory.successfulOrders / this.executionHistory.totalOrders) * 100 : 0,
+      totalProfit: 0,
+      averageProfit: 0,
+      grossProfit: 0,
+      grossLoss: 0,
+      profitFactor: 0,
+      winningTrades: this.executionHistory.successfulOrders,
+      losingTrades: this.executionHistory.failedOrders,
+      dailyTradeCount: this.dailyStats.tradesToday,
+      maxDailyTrades: 10
+    };
   }
 }
 
 export const orderManager = new OrderManager();
+

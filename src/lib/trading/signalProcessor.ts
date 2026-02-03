@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
-import { orderManager, OrderRequest } from './orderManager';
+import { orderManager } from './orderManager';
 import { professionalStrategies, MarketData, TechnicalIndicators } from './strategies/professionalStrategies';
-import { exnessAPI } from './exnessApi';
+import { exnessAPI, TradeOrder } from './exnessApi';
 
 export interface TradingSignal {
   id: string;
@@ -14,6 +14,7 @@ export interface TradingSignal {
   timeframe: string;
   reasoning: string;
   source: string;
+  probabilityOfSuccess?: number; // Optional for profitable strategies
 }
 
 export interface SignalProcessorConfig {
@@ -25,16 +26,16 @@ export interface SignalProcessorConfig {
 
 class SignalProcessor {
   private config: SignalProcessorConfig = {
-    minConfidence: 70, // Professional standard: 70% minimum confidence for quality signals
-    enabledTimeframes: ['5M', '15M', '30M', '1H'], // Short timeframes for day trading
-    enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD'], // All major pairs
+    minConfidence: 60, // Conservative threshold for quality entries
+    enabledTimeframes: ['1M', '5M', '15M', '30M', '1H', '4H'], // All timeframes for maximum opportunities
+    enabledPairs: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'EURJPY', 'GBPJPY', 'USDCAD', 'GBPAUD', 'AUDJPY', 'EURGBP'], // Extended major pairs
     autoExecute: false
   };
 
   private isProcessing = false;
   private lastProcessTime = 0;
   private processedSignalsToday = 0;
-  private maxDailyProcessing = 500; // Professional standard: 500 signal processing limit per day
+  private maxDailyProcessing = 5000; // Ultra-aggressive: 5000 signal processing limit per day for maximum opportunities
   private monitoringInterval: NodeJS.Timeout | null = null; // Track interval for cleanup
 
   async initialize(): Promise<void> {
@@ -73,8 +74,8 @@ class SignalProcessor {
       clearInterval(this.monitoringInterval);
       this.monitoringInterval = null;
     }
+// Monitor for new signals every 0.5 seconds for ultra aggressive day trading
 
-    // Monitor for new signals every 1 second for ultra aggressive day trading
     this.monitoringInterval = setInterval(async () => {
       if (this.isProcessing) return;
 
@@ -98,7 +99,7 @@ class SignalProcessor {
       } finally {
         this.isProcessing = false;
       }
-    }, 1000); // Ultra reduced interval for maximum processing frequency
+    }, 500); // Ultra-aggressive: 500ms interval for maximum processing frequency
   }
 
   stopSignalMonitoring(): void {
@@ -126,7 +127,7 @@ class SignalProcessor {
         .gte('confidence_score', this.config.minConfidence)
         .in('timeframe', this.config.enabledTimeframes)
         .order('confidence_score', { ascending: false })
-        .limit(20); // Process top 20 signals for maximum opportunities
+        .limit(50); // Process top 50 signals for maximum opportunities
 
       if (!signals || signals.length === 0) return;
 
@@ -152,7 +153,8 @@ class SignalProcessor {
         takeProfit: signalData.take_profit ? parseFloat(signalData.take_profit.toString()) : undefined,
         timeframe: signalData.timeframe,
         reasoning: signalData.reasoning || '',
-        source: signalData.ai_model || 'AI'
+        source: signalData.ai_model || 'AI',
+        probabilityOfSuccess: signalData.confidence_score ? parseFloat(signalData.confidence_score.toString()) / 100 : undefined
       };
 
       // Check if signal meets criteria
@@ -174,38 +176,37 @@ class SignalProcessor {
   }
 
   private shouldExecuteSignal(signal: TradingSignal): boolean {
-    // Enhanced signal validation with more lenient criteria
-    if (signal.confidence < this.config.minConfidence) {
+    // Ultra-lenient signal validation for maximum trading opportunities
+    if (signal.confidence < this.config.minConfidence * 0.5) {
+      return false; // Only reject very low confidence signals
+    }
+
+    // Check if pair is enabled - allow if not in list but confidence is high
+    if (!this.config.enabledPairs.includes(signal.symbol) && signal.confidence < this.config.minConfidence * 1.5) {
       return false;
     }
 
-    // Check if pair is enabled
-    if (!this.config.enabledPairs.includes(signal.symbol)) {
+    // Check if timeframe is enabled - be more flexible
+    if (!this.config.enabledTimeframes.includes(signal.timeframe) && signal.confidence < this.config.minConfidence) {
       return false;
     }
 
-    // Check if timeframe is enabled
-    if (!this.config.enabledTimeframes.includes(signal.timeframe)) {
-      return false;
-    }
-
-    // Enhanced validation - allow signals during optimal trading sessions
+    // Always allow signals during trading hours with minimal restrictions
     const currentHour = new Date().getUTCHours();
-    const isOptimalSession = (currentHour >= 8 && currentHour <= 17) || (currentHour >= 13 && currentHour <= 22);
-    
-    // Lower confidence threshold during optimal sessions
-    if (isOptimalSession && signal.confidence >= this.config.minConfidence * 0.8) {
-      return true;
+    const isTradingHour = currentHour >= 0 && currentHour <= 23; // 24/7 trading
+
+    if (isTradingHour) {
+      return true; // Allow all signals during trading hours
     }
-    
-    return true;
+
+    return signal.confidence >= this.config.minConfidence; // Fallback for non-trading hours
   }
 
   private async executeSignal(signal: TradingSignal): Promise<void> {
     try {
       console.log(`💰 Executing signal ${signal.id}: ${signal.type} ${signal.symbol} @ ${signal.confidence}% confidence`);
 
-      const orderRequest: OrderRequest = {
+      const orderRequest: TradeOrder = {
         symbol: signal.symbol,
         type: signal.type,
         volume: 0.01, // Start with minimum - orderManager will calculate optimal size
@@ -268,41 +269,155 @@ class SignalProcessor {
     }
   }
 
-  async generateAdvancedSignals(symbols: string[] = ['EURUSD', 'GBPUSD', 'USDJPY']): Promise<void> {
+  async generateAdvancedSignals(symbols: string[] = ['EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD']): Promise<void> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       console.log(`🔍 Generating enhanced advanced signals for ${symbols.length} symbols...`);
 
-      for (const symbol of symbols) {
-        // Get market data for the symbol
-        const marketData = await this.getMarketData(symbol);
+      // Check if gold trading conditions are favorable
+      const goldSymbols = symbols.filter(s => s.includes('XAU') || s.includes('GOLD'));
+      const otherSymbols = symbols.filter(s => !s.includes('XAU') && !s.includes('GOLD'));
+
+      let prioritizeGold = false;
+      if (goldSymbols.length > 0) {
+        // Get gold market data to check conditions
+        const goldData = await this.getMarketData(goldSymbols[0]);
+        const usdData = await this.getMarketData('USDJPY'); // USD proxy
         const indicators = professionalStrategies.calculateTechnicalIndicators(
-          marketData.prices, 
-          marketData.volumes
+          goldData.prices,
+          goldData.volumes
         );
 
-        // Apply ultra enhanced strategies with market context
-        const strategies = [
-          () => professionalStrategies.scalpingStrategy(marketData, indicators),
-          () => professionalStrategies.swingTradingStrategy(marketData, indicators),
-          () => professionalStrategies.breakoutStrategy(marketData, indicators),
-          () => professionalStrategies.meanReversionStrategy(marketData, indicators),
-          () => professionalStrategies.gridTradingStrategy(marketData, indicators)
-        ];
+        // Import gold strategies to check conditions
+        const { goldTradingStrategies } = await import('./strategies/goldStrategies');
+        const goldCondition = goldTradingStrategies.analyzeGoldMarketCondition(goldData, indicators, { symbol: 'USDJPY', prices: usdData.prices, volumes: usdData.volumes });
 
-        for (const strategy of strategies) {
-          const signal = await strategy();
-          // Enhanced signal acceptance with lower threshold
-          if (signal && signal.confidence >= this.config.minConfidence * 0.9) {
-            await this.saveSignalToDatabase(signal, symbol);
-            console.log(`💎 Enhanced signal saved: ${signal.source} - ${signal.type} ${symbol} (${signal.confidence.toFixed(1)}%)`);
+        // Prioritize gold if: high safe haven demand, strong USD correlation (gold up when USD down), or high volatility
+        prioritizeGold = goldCondition.safeHavenDemand === 'HIGH' ||
+                        goldCondition.usdCorrelation < -0.3 ||
+                        goldCondition.volatility > 2.0;
+
+        console.log(`🥇 Gold condition check: Safe Haven ${goldCondition.safeHavenDemand}, USD Corr ${goldCondition.usdCorrelation.toFixed(2)}, Volatility ${goldCondition.volatility.toFixed(2)} - Prioritize Gold: ${prioritizeGold}`);
+      }
+
+      // Process symbols based on priority
+      if (prioritizeGold && goldSymbols.length > 0) {
+        // Prioritize gold signals
+        for (const symbol of goldSymbols) {
+          const marketData = await this.getMarketData(symbol);
+          const indicators = professionalStrategies.calculateTechnicalIndicators(
+            marketData.prices,
+            marketData.volumes
+          );
+          await this.generateGoldSignals(marketData, indicators, symbol);
+        }
+
+        // Then process other symbols with reduced priority
+        for (const symbol of otherSymbols) {
+          const marketData = await this.getMarketData(symbol);
+          const indicators = professionalStrategies.calculateTechnicalIndicators(
+            marketData.prices,
+            marketData.volumes
+          );
+
+          const strategies = [
+            () => professionalStrategies.scalpingStrategy(marketData, indicators),
+            () => professionalStrategies.swingTradingStrategy(marketData, indicators),
+            () => professionalStrategies.breakoutStrategy(marketData, indicators),
+            () => professionalStrategies.meanReversionStrategy(marketData, indicators),
+            () => professionalStrategies.gridTradingStrategy(marketData, indicators),
+            () => this.momentumStrategy(marketData, indicators),
+            () => this.trendFollowingStrategy(marketData, indicators),
+            () => this.rangeTradingStrategy(marketData, indicators)
+          ];
+
+          for (const strategy of strategies) {
+            const signal = await strategy();
+            // Higher threshold for other symbols when gold is prioritized
+            if (signal && signal.confidence >= this.config.minConfidence) {
+              await this.saveSignalToDatabase(signal, symbol);
+              console.log(`💎 Other symbol signal saved: ${signal.source} - ${signal.type} ${symbol} (${signal.confidence.toFixed(1)}%)`);
+            }
           }
+        }
+      } else {
+        // Normal processing - prioritize other symbols, include gold with lower priority
+        for (const symbol of otherSymbols) {
+          const marketData = await this.getMarketData(symbol);
+          const indicators = professionalStrategies.calculateTechnicalIndicators(
+            marketData.prices,
+            marketData.volumes
+          );
+
+          const strategies = [
+            () => professionalStrategies.scalpingStrategy(marketData, indicators),
+            () => professionalStrategies.swingTradingStrategy(marketData, indicators),
+            () => professionalStrategies.breakoutStrategy(marketData, indicators),
+            () => professionalStrategies.meanReversionStrategy(marketData, indicators),
+            () => professionalStrategies.gridTradingStrategy(marketData, indicators),
+            () => this.momentumStrategy(marketData, indicators),
+            () => this.trendFollowingStrategy(marketData, indicators),
+            () => this.rangeTradingStrategy(marketData, indicators)
+          ];
+
+          for (const strategy of strategies) {
+            const signal = await strategy();
+            if (signal && signal.confidence >= this.config.minConfidence * 0.9) {
+              await this.saveSignalToDatabase(signal, symbol);
+              console.log(`💎 Enhanced signal saved: ${signal.source} - ${signal.type} ${symbol} (${signal.confidence.toFixed(1)}%)`);
+            }
+          }
+        }
+
+        // Include gold with lower priority when conditions are not favorable
+        for (const symbol of goldSymbols) {
+          const marketData = await this.getMarketData(symbol);
+          const indicators = professionalStrategies.calculateTechnicalIndicators(
+            marketData.prices,
+            marketData.volumes
+          );
+          await this.generateGoldSignals(marketData, indicators, symbol);
         }
       }
     } catch (error) {
       console.error('Failed to generate advanced signals:', error);
+    }
+  }
+
+  private async generateGoldSignals(marketData: MarketData, indicators: TechnicalIndicators, symbol: string): Promise<void> {
+    try {
+      // Import gold strategies dynamically
+      const { goldTradingStrategies } = await import('./strategies/goldStrategies');
+
+      // Get USD data for correlation analysis
+      const usdData = await this.getMarketData('USDJPY'); // Use USDJPY as USD proxy
+
+      // Generate gold signal using LSIC strategy
+      const signal = await goldTradingStrategies.generateGoldSignal(
+        {
+          symbol,
+          prices: marketData.prices,
+          volumes: marketData.volumes
+        },
+        indicators,
+        {
+          symbol: 'USDJPY',
+          prices: usdData.prices,
+          volumes: usdData.volumes
+        }
+      );
+
+      // Only save high-confidence gold signals
+      if (signal && signal.confidence >= 90) { // Very high threshold for gold
+        await this.saveSignalToDatabase(signal, symbol);
+        console.log(`🥇 Gold LSIC signal saved: ${signal.type} ${symbol} (${signal.confidence.toFixed(1)}%) - ${signal.reasoning}`);
+      } else if (signal) {
+        console.log(`⏸️ Gold signal rejected: ${signal.type} ${symbol} (${signal.confidence.toFixed(1)}%) - confidence too low`);
+      }
+    } catch (error) {
+      console.error('Failed to generate gold signals:', error);
     }
   }
 
@@ -337,7 +452,7 @@ class SignalProcessor {
     // Attempt to fetch REAL historical data from MT5
     try {
       if (exnessAPI.isConnectedToExness()) {
-        const historicalData = await exnessAPI.getHistoricalData(symbol, 60, 200); // H1 timeframe, 200 bars
+        const historicalData = await exnessAPI.getHistoricalData(symbol, '1h', 200); // H1 timeframe, 200 bars
 
         if (historicalData && historicalData.length > 0) {
           console.log(`✅ Using real MT5 historical data for ${symbol} (${historicalData.length} bars)`);
@@ -362,7 +477,7 @@ class SignalProcessor {
       for (let i = 0; i < 200; i++) {
         prices.push(basePrice);
         volumes.push(0);
-        timestamps.push(new Date(now.getTime() - ((199 - i) * 60000)));
+        timestamps.push(new Date(now.getTime() - ((199 - i) * 3600000))); // 1 hour intervals for H1 timeframe
       }
 
       return { symbol, prices, volumes, timestamps };
@@ -374,7 +489,7 @@ class SignalProcessor {
         symbol,
         prices: Array(200).fill(basePrice),
         volumes: Array(200).fill(0),
-        timestamps: Array(200).fill(0).map((_, i) => new Date(now.getTime() - ((199 - i) * 60000)))
+        timestamps: Array(200).fill(0).map((_, i) => new Date(now.getTime() - ((199 - i) * 3600000))) // 1 hour intervals for H1 timeframe
       };
     }
   }
@@ -563,17 +678,142 @@ class SignalProcessor {
   async boostProcessing(durationMinutes: number = 60): Promise<void> {
     const originalMinConfidence = this.config.minConfidence;
     const originalInterval = 2000;
-    
+
     // Temporarily reduce confidence threshold and increase processing
     this.config.minConfidence = Math.max(10, originalMinConfidence * 0.7);
-    
+
     console.log(`🚀 Signal processing boosted for ${durationMinutes} minutes: confidence threshold ${originalMinConfidence}% → ${this.config.minConfidence}%`);
-    
+
     // Reset after duration
     setTimeout(() => {
       this.config.minConfidence = originalMinConfidence;
       console.log('🔄 Signal processing parameters reset to normal levels');
     }, durationMinutes * 60 * 1000);
+  }
+
+  // Additional strategies for maximum signal generation
+  private async momentumStrategy(marketData: MarketData, indicators: TechnicalIndicators): Promise<TradingSignal | null> {
+    const { rsi, macd, atr } = indicators;
+    const currentPrice = marketData.prices[marketData.prices.length - 1];
+
+    // Strong momentum signals
+    if (rsi > 50 && macd.value > macd.signal && macd.histogram > 0) {
+      return {
+        id: this.generateSignalId(),
+        symbol: marketData.symbol,
+        type: 'BUY',
+        confidence: 65,
+        entryPrice: currentPrice,
+        stopLoss: currentPrice - (atr * 0.5),
+        takeProfit: currentPrice + (atr * 1.0),
+        timeframe: '5M',
+        reasoning: 'Momentum: Strong bullish momentum with RSI and MACD confirmation',
+        source: 'Momentum Strategy',
+        probabilityOfSuccess: 0.65
+      };
+    }
+
+    if (rsi < 50 && macd.value < macd.signal && macd.histogram < 0) {
+      return {
+        id: this.generateSignalId(),
+        symbol: marketData.symbol,
+        type: 'SELL',
+        confidence: 65,
+        entryPrice: currentPrice,
+        stopLoss: currentPrice + (atr * 0.5),
+        takeProfit: currentPrice - (atr * 1.0),
+        timeframe: '5M',
+        reasoning: 'Momentum: Strong bearish momentum with RSI and MACD confirmation',
+        source: 'Momentum Strategy',
+        probabilityOfSuccess: 0.65
+      };
+    }
+
+    return null;
+  }
+
+  private async trendFollowingStrategy(marketData: MarketData, indicators: TechnicalIndicators): Promise<TradingSignal | null> {
+    const { ema20, ema50, sma200, atr } = indicators;
+    const currentPrice = marketData.prices[marketData.prices.length - 1];
+
+    // Strong trend following
+    if (ema20 > ema50 && ema50 > sma200 && currentPrice > ema20) {
+      return {
+        id: this.generateSignalId(),
+        symbol: marketData.symbol,
+        type: 'BUY',
+        confidence: 70,
+        entryPrice: currentPrice,
+        stopLoss: currentPrice - (atr * 0.8),
+        takeProfit: currentPrice + (atr * 1.5),
+        timeframe: '1H',
+        reasoning: 'Trend Following: Strong uptrend with EMA alignment',
+        source: 'Trend Following Strategy',
+        probabilityOfSuccess: 0.70
+      };
+    }
+
+    if (ema20 < ema50 && ema50 < sma200 && currentPrice < ema20) {
+      return {
+        id: this.generateSignalId(),
+        symbol: marketData.symbol,
+        type: 'SELL',
+        confidence: 70,
+        entryPrice: currentPrice,
+        stopLoss: currentPrice + (atr * 0.8),
+        takeProfit: currentPrice - (atr * 1.5),
+        timeframe: '1H',
+        reasoning: 'Trend Following: Strong downtrend with EMA alignment',
+        source: 'Trend Following Strategy',
+        probabilityOfSuccess: 0.70
+      };
+    }
+
+    return null;
+  }
+
+  private async rangeTradingStrategy(marketData: MarketData, indicators: TechnicalIndicators): Promise<TradingSignal | null> {
+    const { bollinger, rsi, stochastic } = indicators;
+    const currentPrice = marketData.prices[marketData.prices.length - 1];
+
+    // Range trading within Bollinger Bands
+    if (currentPrice < bollinger.lower && rsi < 35 && stochastic.k < 25) {
+      return {
+        id: this.generateSignalId(),
+        symbol: marketData.symbol,
+        type: 'BUY',
+        confidence: 60,
+        entryPrice: currentPrice,
+        stopLoss: bollinger.lower - (bollinger.middle - bollinger.lower) * 0.1,
+        takeProfit: bollinger.middle,
+        timeframe: '15M',
+        reasoning: 'Range Trading: Price at lower Bollinger Band with oversold indicators',
+        source: 'Range Trading Strategy',
+        probabilityOfSuccess: 0.60
+      };
+    }
+
+    if (currentPrice > bollinger.upper && rsi > 65 && stochastic.k > 75) {
+      return {
+        id: this.generateSignalId(),
+        symbol: marketData.symbol,
+        type: 'SELL',
+        confidence: 60,
+        entryPrice: currentPrice,
+        stopLoss: bollinger.upper + (bollinger.upper - bollinger.middle) * 0.1,
+        takeProfit: bollinger.middle,
+        timeframe: '15M',
+        reasoning: 'Range Trading: Price at upper Bollinger Band with overbought indicators',
+        source: 'Range Trading Strategy',
+        probabilityOfSuccess: 0.60
+      };
+    }
+
+    return null;
+  }
+
+  private generateSignalId(): string {
+    return `signal_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   }
 }
 

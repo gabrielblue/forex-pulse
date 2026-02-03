@@ -1,7 +1,11 @@
 /**
  * Smart Money Concepts (SMC) Analyzer - ChartLord AI Style
  * Detects institutional trading patterns: Order Blocks, FVGs, Liquidity Zones, BOS/CHoCH
+ * Enhanced with news sentiment analysis for better market direction prediction
  */
+
+import { newsSentimentAnalyzer, NewsSentimentAnalysis } from './newsSentimentAnalyzer';
+import { newsImpactPredictor } from './newsImpactPredictor';
 
 export interface OrderBlock {
   type: 'BULLISH' | 'BEARISH';
@@ -43,6 +47,12 @@ export interface SMCAnalysis {
   fairValueGaps: FairValueGap[];
   liquidityZones: LiquidityZone[];
   marketStructure: MarketStructure;
+  newsSentiment?: {
+    overallSentiment: number;
+    marketDirection: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+    confidence: number;
+    impactScore: number;
+  };
   confluenceScore: number;
   confluenceFactors: string[];
   tradeBias: 'BUY' | 'SELL' | 'NEUTRAL';
@@ -66,10 +76,10 @@ class SmartMoneyAnalyzer {
   private liquidityZones: LiquidityZone[] = [];
 
   /**
-   * Main analysis function - ChartLord style SMC analysis
-   */
-  analyze(candles: CandleData[], currentPrice: number): SMCAnalysis {
-    if (candles.length < 20) {
+   * Main analysis function - ChartLord style SMC analysis enhanced with news sentiment
+    */
+   async analyze(candles: CandleData[], currentPrice: number, symbol: string = 'UNKNOWN'): Promise<SMCAnalysis> {
+    if (!candles || candles.length < 20) {
       return this.getEmptyAnalysis();
     }
 
@@ -81,26 +91,59 @@ class SmartMoneyAnalyzer {
     const liquidityZones = this.detectLiquidityZones(candles);
     const marketStructure = this.analyzeMarketStructure(candles);
 
-    // Calculate confluence
+    // Get news sentiment analysis
+    let newsSentiment;
+    try {
+      const sentimentAnalysis = await newsSentimentAnalyzer.getNewsSentiment(symbol);
+      newsSentiment = {
+        overallSentiment: sentimentAnalysis.overallSentiment,
+        marketDirection: sentimentAnalysis.marketDirection,
+        confidence: sentimentAnalysis.confidence,
+        impactScore: sentimentAnalysis.confidence / 100 // Normalized 0-1
+      };
+    } catch (error) {
+      console.warn(`⚠️ Failed to get news sentiment for ${symbol}:`, error);
+      newsSentiment = {
+        overallSentiment: 0,
+        marketDirection: 'NEUTRAL' as const,
+        confidence: 0,
+        impactScore: 0
+      };
+    }
+
+    // Analyze volatility patterns for news impact prediction
+    newsImpactPredictor.analyzeVolatilityPatterns(symbol, candles);
+
+    // Calculate confluence with news sentiment
     const { score, factors, bias, entryZone, invalidation } = this.calculateConfluence(
       orderBlocks,
       fairValueGaps,
       liquidityZones,
       marketStructure,
-      currentPrice
+      currentPrice,
+      symbol,
+      candles,
+      newsSentiment
     );
 
-    return {
+    const result = {
       orderBlocks,
       fairValueGaps,
       liquidityZones,
       marketStructure,
+      newsSentiment,
       confluenceScore: score,
       confluenceFactors: factors,
       tradeBias: bias,
       entryZone,
       invalidationLevel: invalidation
     };
+
+    console.log(`🔍 SMC Analysis Result for ${currentPrice ? 'price_' + currentPrice.toFixed(2) : 'unknown'}: bias=${bias}, score=${score}, entryZone=${!!entryZone}, newsSentiment=${newsSentiment.overallSentiment.toFixed(2)}, factors=${factors.length > 0 ? factors.join(', ') : 'none'}`);
+    if (factors.length > 0) {
+      console.log(`📊 Factors: ${factors.join(' | ')}`);
+    }
+    return result;
   }
 
   /**
@@ -117,7 +160,7 @@ class SmartMoneyAnalyzer {
       // Bullish Order Block: Down candle followed by strong up move
       if (this.isBearishCandle(prev) && this.isBullishCandle(curr) && this.isBullishCandle(next)) {
         const moveStrength = Math.abs(next.close - prev.close) / prev.close * 100;
-        if (moveStrength > 0.1) { // 0.1% minimum move
+        if (moveStrength > 0.05) { // 0.05% minimum move for 15m charts
           orderBlocks.push({
             type: 'BULLISH',
             high: prev.high,
@@ -132,7 +175,7 @@ class SmartMoneyAnalyzer {
       // Bearish Order Block: Up candle followed by strong down move
       if (this.isBullishCandle(prev) && this.isBearishCandle(curr) && this.isBearishCandle(next)) {
         const moveStrength = Math.abs(prev.close - next.close) / prev.close * 100;
-        if (moveStrength > 0.1) {
+        if (moveStrength > 0.05) {
           orderBlocks.push({
             type: 'BEARISH',
             high: prev.high,
@@ -146,9 +189,12 @@ class SmartMoneyAnalyzer {
     }
 
     // Keep only recent and strong order blocks
-    return orderBlocks
-      .filter(ob => ob.strength > 30)
+    const filteredOBs = orderBlocks
+      .filter(ob => ob.strength > 20)
       .slice(-10);
+
+    console.log(`🔍 Order Blocks detected: ${filteredOBs.length} (from ${orderBlocks.length} total)`);
+    return filteredOBs;
   }
 
   /**
@@ -200,7 +246,9 @@ class SmartMoneyAnalyzer {
     }
 
     // Return unfilled FVGs (tradeable)
-    return fvgs.filter(fvg => !fvg.filled).slice(-5);
+    const unfilledFVGs = fvgs.filter(fvg => !fvg.filled).slice(-5);
+    console.log(`🔍 FVGs detected: ${unfilledFVGs.length} unfilled (from ${fvgs.length} total)`);
+    return unfilledFVGs;
   }
 
   /**
@@ -247,7 +295,9 @@ class SmartMoneyAnalyzer {
       });
     });
 
-    return zones.filter(z => z.strength >= 50).slice(-6);
+    const filteredZones = zones.filter(z => z.strength >= 30).slice(-6);
+    console.log(`🔍 Liquidity Zones detected: ${filteredZones.length} (from ${zones.length} total)`);
+    return filteredZones;
   }
 
   /**
@@ -328,15 +378,18 @@ class SmartMoneyAnalyzer {
   }
 
   /**
-   * Calculate Confluence Score - ChartLord's 8-10 factor requirement
-   */
-  private calculateConfluence(
-    orderBlocks: OrderBlock[],
-    fvgs: FairValueGap[],
-    liquidityZones: LiquidityZone[],
-    structure: MarketStructure,
-    currentPrice: number
-  ): { score: number; factors: string[]; bias: 'BUY' | 'SELL' | 'NEUTRAL'; entryZone: { high: number; low: number } | null; invalidation: number | null } {
+   * Calculate Confluence Score - ChartLord's 8-10 factor requirement enhanced with news sentiment
+    */
+   private calculateConfluence(
+     orderBlocks: OrderBlock[],
+     fvgs: FairValueGap[],
+     liquidityZones: LiquidityZone[],
+     structure: MarketStructure,
+     currentPrice: number,
+     symbol: string = '',
+     candles: CandleData[] = [],
+     newsSentiment?: { overallSentiment: number; marketDirection: 'BULLISH' | 'BEARISH' | 'NEUTRAL'; confidence: number; impactScore: number }
+   ): { score: number; factors: string[]; bias: 'BUY' | 'SELL' | 'NEUTRAL'; entryZone: { high: number; low: number } | null; invalidation: number | null } {
     const factors: string[] = [];
     let bullishPoints = 0;
     let bearishPoints = 0;
@@ -438,25 +491,106 @@ class SmartMoneyAnalyzer {
       factors.push(`✅ ${bearishOBs} bearish order blocks stacked`);
     }
 
+    // Factor 8: Volume confirmation (recent candles)
+    const recentCandles = candles.slice(-5);
+    const avgVolume = recentCandles.reduce((sum, c) => sum + c.volume, 0) / recentCandles.length;
+    const currentVolume = candles[candles.length - 1].volume;
+    if (currentVolume > avgVolume * 1.2) {
+      factors.push('✅ Above average volume');
+      bullishPoints += 3;
+      bearishPoints += 3;
+    }
+
+    // Factor 9: Price momentum (RSI-like)
+    const gains = recentCandles.filter(c => c.close > c.open).length;
+    const losses = recentCandles.filter(c => c.close < c.open).length;
+    const momentumScore = (gains - losses) / recentCandles.length;
+    if (momentumScore > 0.4) {
+      bullishPoints += 5;
+      factors.push('✅ Strong bullish momentum');
+    } else if (momentumScore < -0.4) {
+      bearishPoints += 5;
+      factors.push('✅ Strong bearish momentum');
+    }
+
+    // Factor 10: Market regime (trending vs ranging)
+    const priceRange = Math.max(...recentCandles.map(c => c.high)) - Math.min(...recentCandles.map(c => c.low));
+    const avgRange = recentCandles.reduce((sum, c) => sum + (c.high - c.low), 0) / recentCandles.length;
+    if (priceRange > avgRange * 1.5) {
+      factors.push('✅ Trending market regime');
+      // Boost points for trending markets
+      if (bullishPoints > bearishPoints) bullishPoints += 5;
+      if (bearishPoints > bullishPoints) bearishPoints += 5;
+    }
+
+    // Factor 11: News sentiment alignment
+    if (newsSentiment && newsSentiment.confidence > 30) {
+      const sentimentWeight = newsSentiment.impactScore * 15; // Up to 15 points
+
+      if (newsSentiment.marketDirection === 'BULLISH') {
+        bullishPoints += sentimentWeight;
+        factors.push(`✅ Bullish news sentiment (${(newsSentiment.overallSentiment * 100).toFixed(0)}% sentiment, ${(newsSentiment.confidence).toFixed(0)}% confidence)`);
+      } else if (newsSentiment.marketDirection === 'BEARISH') {
+        bearishPoints += sentimentWeight;
+        factors.push(`✅ Bearish news sentiment (${(newsSentiment.overallSentiment * 100).toFixed(0)}% sentiment, ${(newsSentiment.confidence).toFixed(0)}% confidence)`);
+      } else {
+        factors.push(`✅ Neutral news sentiment (${(newsSentiment.confidence).toFixed(0)}% confidence)`);
+        // Small boost to both sides for neutral but confident news
+        bullishPoints += sentimentWeight * 0.3;
+        bearishPoints += sentimentWeight * 0.3;
+      }
+    }
+
     // Calculate final score and bias
     const totalPoints = Math.max(bullishPoints, bearishPoints);
     const score = Math.min(totalPoints, 100);
-    
+
     let bias: 'BUY' | 'SELL' | 'NEUTRAL' = 'NEUTRAL';
     let entryZone: { high: number; low: number } | null = null;
     let invalidation: number | null = null;
 
-    if (bullishPoints > bearishPoints && bullishPoints >= 40) {
+    console.log(`🔍 SMC Confluence: bullish=${bullishPoints}, bearish=${bearishPoints}, score=${score}, factors=${factors.length}`);
+
+    // Conservative approach: Only trade with genuine high confluence
+    // No artificial score boosting for any symbol
+if (bullishPoints > bearishPoints && bullishPoints >= 40) {
+
       bias = 'BUY';
       if (nearBullishOB) {
         entryZone = { high: nearBullishOB.high, low: nearBullishOB.low };
         invalidation = nearBullishOB.low * 0.998; // Just below OB
+        console.log(`🔍 BUY entry zone set from bullish OB: ${entryZone.low} - ${entryZone.high}, currentPrice: ${currentPrice}`);
+      } else if (fvgs.some(fvg => fvg.type === 'BULLISH' && !fvg.filled)) {
+        // Fallback to FVG if no OB but strong confluence
+        const fvg = fvgs.find(fvg => fvg.type === 'BULLISH' && !fvg.filled)!;
+        entryZone = { high: fvg.high, low: fvg.low };
+        invalidation = fvg.low * 0.998;
+        console.log(`🔍 BUY entry zone set from bullish FVG: ${entryZone.low} - ${entryZone.high}, currentPrice: ${currentPrice}`);
+      } else {
+        // Aggressive fallback: Create entry zone from current price if minimal confluence
+        const spread = currentPrice * 0.001; // 0.1% spread
+        entryZone = { high: currentPrice + spread, low: currentPrice - spread };
+        invalidation = currentPrice * 0.995; // 0.5% below current price
+        console.log(`🔍 Aggressive BUY entry zone created: ${entryZone.low} - ${entryZone.high} (no OB/FVG but ${bullishPoints} points)`);
       }
     } else if (bearishPoints > bullishPoints && bearishPoints >= 40) {
       bias = 'SELL';
       if (nearBearishOB) {
         entryZone = { high: nearBearishOB.high, low: nearBearishOB.low };
         invalidation = nearBearishOB.high * 1.002; // Just above OB
+        console.log(`🔍 SELL entry zone set from bearish OB: ${entryZone.low} - ${entryZone.high}, currentPrice: ${currentPrice}`);
+      } else if (fvgs.some(fvg => fvg.type === 'BEARISH' && !fvg.filled)) {
+        // Fallback to FVG if no OB but strong confluence
+        const fvg = fvgs.find(fvg => fvg.type === 'BEARISH' && !fvg.filled)!;
+        entryZone = { high: fvg.high, low: fvg.low };
+        invalidation = fvg.high * 1.002;
+        console.log(`🔍 SELL entry zone set from bearish FVG: ${entryZone.low} - ${entryZone.high}, currentPrice: ${currentPrice}`);
+      } else {
+        // Aggressive fallback: Create entry zone from current price if minimal confluence
+        const spread = currentPrice * 0.001; // 0.1% spread
+        entryZone = { high: currentPrice + spread, low: currentPrice - spread };
+        invalidation = currentPrice * 1.005; // 0.5% above current price
+        console.log(`🔍 Aggressive SELL entry zone created: ${entryZone.low} - ${entryZone.high} (no OB/FVG but ${bearishPoints} points)`);
       }
     }
 
@@ -470,6 +604,41 @@ class SmartMoneyAnalyzer {
 
   private isBearishCandle(candle: CandleData): boolean {
     return candle.close < candle.open;
+  }
+
+  private calculateRSI(candles: CandleData[], period: number = 14): number {
+    if (candles.length < period + 1) return 50;
+
+    const gains: number[] = [];
+    const losses: number[] = [];
+
+    for (let i = 1; i <= period; i++) {
+      const change = candles[candles.length - i].close - candles[candles.length - i - 1].close;
+      if (change > 0) gains.push(change);
+      else losses.push(-change);
+    }
+
+    const avgGain = gains.length > 0 ? gains.reduce((sum, g) => sum + g, 0) / gains.length : 0;
+    const avgLoss = losses.length > 0 ? losses.reduce((sum, l) => sum + l, 0) / losses.length : 0;
+
+    if (avgLoss === 0) return 100;
+    const rs = avgGain / avgLoss;
+    return 100 - (100 / (1 + rs));
+  }
+
+  private calculateATR(candles: CandleData[], period: number = 14): number {
+    if (candles.length < period + 1) return 0;
+
+    const trs: number[] = [];
+    for (let i = 1; i < candles.length; i++) {
+      const high = candles[i].high;
+      const low = candles[i].low;
+      const prevClose = candles[i-1].close;
+      const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
+      trs.push(tr);
+    }
+
+    return trs.slice(-period).reduce((sum, tr) => sum + tr, 0) / period;
   }
 
   private clusterLevels(levels: number[]): number[] {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import { TradeExecutionLog } from "@/components/TradeExecutionLog";
 import { TradeExecutionChecklist } from "@/components/TradeExecutionChecklist";
 import { SMCAnalysisPanel } from "@/components/SMCAnalysisPanel";
+import { onTickEngine } from '@/lib/trading/onTickEngine';
 
 interface LivePosition {
   id: string;
@@ -69,6 +70,20 @@ interface TradingStatistics {
   maxDailyTrades: number;
 }
 
+interface ProfitLossAnalysis {
+  dailyPnL: number;
+  weeklyPnL: number;
+  monthlyPnL: number;
+  bestDay: number;
+  worstDay: number;
+  consecutiveWins: number;
+  consecutiveLosses: number;
+  riskAdjustedReturn: number;
+  sharpeRatio: number;
+  aiPerformanceRating: 'EXCELLENT' | 'GOOD' | 'FAIR' | 'POOR' | 'CRITICAL';
+  recommendations: string[];
+}
+
 export const LiveTradingDashboard = () => {
   const { status, isLoading } = useTradingBot();
   const [positions, setPositions] = useState<LivePosition[]>([]);
@@ -77,39 +92,26 @@ export const LiveTradingDashboard = () => {
   const [tradingStats, setTradingStats] = useState<TradingStatistics | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [goldOnlyMode, setGoldOnlyMode] = useState(false);
 
-  useEffect(() => {
-    if (status.isConnected) {
-      loadLiveData();
-      
-      // Update every 10 seconds when connected
-      const interval = setInterval(loadLiveData, 10000);
-      return () => clearInterval(interval);
-    }
-  }, [status.isConnected]);
-
-  const loadLiveData = async () => {
-    if (!status.isConnected) return;
-    
+  const loadTradingStatistics = useCallback(async () => {
     try {
-      await Promise.all([
-        loadPositions(),
-        loadMarketPrices(),
-        loadAccountInfo(),
-        loadTradingStatistics()
-      ]);
-      setLastUpdate(new Date());
+      const stats = await orderManager.getTradingStatistics();
+      if (stats) {
+        setTradingStats(stats);
+        console.log('📊 Trading statistics loaded:', stats);
+      }
     } catch (error) {
-      console.error('Failed to load live data:', error);
+      console.error('Failed to load trading statistics:', error);
     }
-  };
+  }, []);
 
-  const loadPositions = async () => {
+  const loadPositions = useCallback(async () => {
     try {
       if (!exnessAPI.isConnectedToExness()) return;
-      
+
       const exnessPositions = await exnessAPI.getPositions();
-      
+
       const formattedPositions: LivePosition[] = exnessPositions.map(pos => ({
         id: pos.ticketId,
         symbol: pos.symbol,
@@ -127,32 +129,32 @@ export const LiveTradingDashboard = () => {
         commission: pos.commission,
         swap: pos.swap
       }));
-      
+
       setPositions(formattedPositions);
       console.log(`📊 Loaded ${formattedPositions.length} live positions from Exness`);
     } catch (error) {
       console.error('Failed to load positions:', error);
     }
-  };
+  }, []);
 
-  const loadMarketPrices = async () => {
+  const loadMarketPrices = useCallback(async () => {
     try {
       if (!exnessAPI.isConnectedToExness()) return;
-      
+
       const symbols = ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'NZDUSD'];
       const pricePromises = symbols.map(symbol => exnessAPI.getCurrentPrice(symbol));
       const prices = await Promise.all(pricePromises);
-      
+
       const validPrices = prices.filter(price => price !== null) as MarketPrice[];
       setMarketPrices(validPrices);
-      
+
       console.log(`📈 Loaded ${validPrices.length} market prices from Exness`);
     } catch (error) {
       console.error('Failed to load market prices:', error);
     }
-  };
+  }, []);
 
-  const loadAccountInfo = async () => {
+  const loadAccountInfo = useCallback(async () => {
     try {
       const accountInfo = await exnessAPI.getAccountInfo();
       if (accountInfo) {
@@ -161,19 +163,54 @@ export const LiveTradingDashboard = () => {
     } catch (error) {
       console.error('Failed to load account info:', error);
     }
-  };
+  }, []);
 
-  const loadTradingStatistics = async () => {
+  const loadLiveData = useCallback(async () => {
+    if (!status.isConnected) return;
+
     try {
-      const stats = await orderManager.getTradingStatistics();
-      if (stats) {
-        setTradingStats(stats);
-        console.log('📊 Trading statistics loaded:', stats);
-      }
+      await Promise.all([
+        loadPositions(),
+        loadMarketPrices(),
+        loadAccountInfo(),
+        loadTradingStatistics()
+      ]);
+      setLastUpdate(new Date());
     } catch (error) {
-      console.error('Failed to load trading statistics:', error);
+      console.error('Failed to load live data:', error);
     }
-  };
+  }, [loadPositions, loadTradingStatistics, loadAccountInfo, loadMarketPrices, status.isConnected]);
+
+  useEffect(() => {
+    if (status.isConnected) {
+      loadLiveData();
+
+      // Update every 10 seconds when connected
+      const interval = setInterval(loadLiveData, 10000);
+
+      // Setup real-time subscription for trading stats
+      let tradesChannel: any = null;
+      const setupSubscription = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          tradesChannel = supabase
+            .channel('live-trades-changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'live_trades', filter: `user_id=eq.${user.id}` }, () => {
+              loadTradingStatistics();
+            })
+            .subscribe();
+        }
+      };
+      setupSubscription();
+
+      return () => {
+        clearInterval(interval);
+        if (tradesChannel) {
+          supabase.removeChannel(tradesChannel);
+        }
+      };
+    }
+  }, [status.isConnected, loadLiveData, loadTradingStatistics]);
 
   const calculatePips = (openPrice: number, currentPrice: number, symbol: string, type: string): number => {
     const pipValue = symbol.includes('JPY') ? 0.01 : 0.0001;
@@ -717,7 +754,51 @@ export const LiveTradingDashboard = () => {
               Export Data
             </Button>
 
-            <Button 
+            <Button
+              variant={goldOnlyMode ? "default" : "outline"}
+              onClick={async () => {
+                const newMode = !goldOnlyMode;
+                setGoldOnlyMode(newMode);
+
+                try {
+                  // Update trading bot configuration
+                  const { tradingBot } = await import('@/lib/trading/tradingBot');
+                  
+                  // Only XAUUSD and XAGUSD for gold-only mode
+                  const goldSymbols = ['XAUUSD', 'XAGUSD'];
+                  
+                  // Default mode: all forex pairs (no gold/silver)
+                  const defaultSymbols = ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'USDCAD', 'NZDUSD'];
+                  
+                  const symbols = newMode ? goldSymbols : defaultSymbols;
+
+                  await tradingBot.updateConfiguration({
+                    enabledSymbols: symbols
+                  });
+
+                  // Also switch to gold-only mode in the trading bot
+                  if (newMode) {
+                    await tradingBot.switchTradingMode('gold-only');
+                    toast.success('Gold-only mode enabled - Bot configured for gold/silver trading only');
+                  } else {
+                    await tradingBot.switchTradingMode('default');
+                    toast.success('Default mode enabled - Bot configured for forex trading only');
+                  }
+                  
+                  // IMPORTANT: Do NOT auto-start the bot or enable auto-trading
+                  // User must explicitly start the bot and enable auto-trading
+                  console.log('💡 Gold-only mode configured. Please start the bot and enable auto-trading manually.');
+                } catch (error) {
+                  console.error('Failed to update trading configuration:', error);
+                  toast.error('Failed to update trading mode');
+                  setGoldOnlyMode(!newMode); // Revert on error
+                }
+              }}
+            >
+              {goldOnlyMode ? 'Disable Gold Only' : 'Only Trade Gold'}
+            </Button>
+
+            <Button
               variant="outline"
               onClick={async () => {
                 try {

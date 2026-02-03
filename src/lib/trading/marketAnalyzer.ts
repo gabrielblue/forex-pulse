@@ -145,7 +145,7 @@ class MarketAnalyzer {
       resistanceLevels: this.calculateResistanceLevels(currentPrice),
 
       // Session-based analysis (real)
-      trend: this.getCurrentTrend(),
+      trend: this.getCurrentTrend(symbol, historicalData),
 
       // Risk assessment based on real market hours
       riskLevel: this.assessRiskLevel(symbol, timeframe),
@@ -432,9 +432,52 @@ class MarketAnalyzer {
   }
 
   // Helper methods for analysis
-  private getCurrentTrend(): "BULLISH" | "BEARISH" | "SIDEWAYS" {
-    // Real trend would be calculated from MT5 historical prices
-    // For now, return neutral until proper implementation
+  private getCurrentTrend(symbol: string, historicalPrices: number[]): "BULLISH" | "BEARISH" | "SIDEWAYS" {
+    if (!historicalPrices || historicalPrices.length < 20) {
+      return "SIDEWAYS";
+    }
+    
+    // Calculate trend using price action over multiple periods
+    const currentPrice = historicalPrices[historicalPrices.length - 1];
+    const price5 = historicalPrices[Math.max(0, historicalPrices.length - 5)];
+    const price10 = historicalPrices[Math.max(0, historicalPrices.length - 10)];
+    const price20 = historicalPrices[Math.max(0, historicalPrices.length - 20)];
+    
+    // Calculate percentage changes
+    const change5 = (currentPrice - price5) / price5 * 100;
+    const change10 = (currentPrice - price10) / price10 * 100;
+    const change20 = (currentPrice - price20) / price20 * 100;
+    
+    // Determine trend based on consistent direction
+    const bullishCount = (change5 > 0 ? 1 : 0) + (change10 > 0 ? 1 : 0) + (change20 > 0 ? 1 : 0);
+    const bearishCount = (change5 < 0 ? 1 : 0) + (change10 < 0 ? 1 : 0) + (change20 < 0 ? 1 : 0);
+    
+    // Use EMA alignment for confirmation
+    const ema20 = this.calculateEMAValue(historicalPrices.slice(-20), 20);
+    const ema50 = this.calculateEMAValue(historicalPrices.slice(-50), 50);
+    const emaAbove = currentPrice > ema20;
+    const emaAligned = ema20 > ema50;
+    
+    // Strong bullish: Consistent up movement + EMA confirmation
+    if (bullishCount >= 3 && change5 > 0.1 && change20 > 0.5 && emaAbove) {
+      return "BULLISH";
+    }
+    
+    // Strong bearish: Consistent down movement + EMA confirmation
+    if (bearishCount >= 3 && change5 < -0.1 && change20 < -0.5 && !emaAbove) {
+      return "BEARISH";
+    }
+    
+    // Moderate bullish: 2 periods up, EMA aligned
+    if (bullishCount >= 2 && change10 > 0.2 && emaAligned) {
+      return "BULLISH";
+    }
+    
+    // Moderate bearish: 2 periods down, EMA aligned
+    if (bearishCount >= 2 && change10 < -0.2 && !emaAligned) {
+      return "BEARISH";
+    }
+    
     return "SIDEWAYS";
   }
 

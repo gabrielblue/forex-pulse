@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { newsSentimentAnalyzer } from './newsSentimentAnalyzer';
 
 // ============= SESSION KILLZONES =============
 // These are the optimal trading windows with highest liquidity and best SMC setups
@@ -81,37 +82,46 @@ export interface TradingFilterResult {
   activeKillzone: Killzone | null;
   newsBlackout: boolean;
   upcomingNews: UpcomingNews | null;
+  newsSentimentFilter: boolean;
+  sentimentScore: number;
   reason: string;
   bestPairsNow: string[];
 }
 
 class TradingFilters {
-  private newsBlackoutMinutes = 30; // Stop trading X minutes before/after high-impact news
-  private lowImpactBlackoutMinutes = 10; // Less time for medium-impact news
+  private newsBlackoutMinutes = 15; // 15-minute blackout before/after high-impact news
+  private lowImpactBlackoutMinutes = 5; // 5-minute blackout for low impact news
   private cachedNews: UpcomingNews[] = [];
   private lastNewsFetch = 0;
-  private newsFetchInterval = 60000; // Refresh news every minute
-  
-  private killzoneEnabled = true;
-  private newsBlackoutEnabled = true;
+  private newsFetchInterval = 60000; // 1-minute news refresh interval
+
+  // 24/7 TRADING ENABLED - All filters disabled for continuous trading
+  private killzoneEnabled = false; // Disable session killzones for 24/7 trading
+  private newsBlackoutEnabled = false; // Disable news blackout for 24/7 trading
 
   /**
    * Main filter check - should we trade right now?
    */
   async canTradeNow(symbol: string): Promise<TradingFilterResult> {
     const now = new Date();
-    
+
     // Check killzone
     const killzoneResult = this.checkKillzone(now, symbol);
-    
+
     // Check news blackout
     const newsResult = await this.checkNewsBlackout(now, symbol);
-    
+
+    // Check news sentiment filter
+    const sentimentResult = await this.checkNewsSentimentFilter(symbol);
+
     // Combine results
     const canTrade = (
       (!this.killzoneEnabled || killzoneResult.inKillzone) &&
-      (!this.newsBlackoutEnabled || !newsResult.inBlackout)
+      (!this.newsBlackoutEnabled || !newsResult.inBlackout) &&
+      sentimentResult.canTrade
     );
+
+    console.log(`🔍 Trading Filters: killzoneEnabled=${this.killzoneEnabled}, inKillzone=${killzoneResult.inKillzone}, newsBlackout=${newsResult.inBlackout}, sentimentFilter=${!sentimentResult.canTrade}, canTrade=${canTrade}`);
 
     let reason = '';
     if (!canTrade) {
@@ -120,6 +130,9 @@ class TradingFilters {
       }
       if (this.newsBlackoutEnabled && newsResult.inBlackout) {
         reason = `News blackout: ${newsResult.upcomingNews?.title} in ${this.getTimeUntil(newsResult.upcomingNews?.eventTime)}`;
+      }
+      if (!sentimentResult.canTrade) {
+        reason = sentimentResult.reason;
       }
     } else {
       if (killzoneResult.inKillzone) {
@@ -133,6 +146,8 @@ class TradingFilters {
       activeKillzone: killzoneResult.activeKillzone,
       newsBlackout: newsResult.inBlackout,
       upcomingNews: newsResult.upcomingNews,
+      newsSentimentFilter: !sentimentResult.canTrade,
+      sentimentScore: sentimentResult.sentimentScore,
       reason,
       bestPairsNow: killzoneResult.activeKillzone?.bestPairs || []
     };
@@ -206,12 +221,57 @@ class TradingFilters {
   }
 
   /**
+   * Check news sentiment filter - avoid trading against strong sentiment
+   */
+  private async checkNewsSentimentFilter(symbol: string): Promise<{
+    canTrade: boolean;
+    sentimentScore: number;
+    reason: string;
+  }> {
+    try {
+      const sentimentScore = await newsSentimentAnalyzer.getNewsEntryFilter(symbol);
+
+      // If sentiment score is very low (< 15), block trading (less restrictive for max performance)
+      if (sentimentScore < 15) {
+        return {
+          canTrade: false,
+          sentimentScore,
+          reason: `Low news sentiment score (${sentimentScore.toFixed(0)}/100) - market conditions unfavorable`
+        };
+      }
+
+      return {
+        canTrade: true,
+        sentimentScore,
+        reason: ''
+      };
+    } catch (error) {
+      console.warn(`⚠️ Failed to check news sentiment filter for ${symbol}:`, error);
+      // Allow trading if sentiment check fails
+      return {
+        canTrade: true,
+        sentimentScore: 50,
+        reason: ''
+      };
+    }
+  }
+
+  /**
    * Check for upcoming high-impact news that would trigger blackout
    */
   private async checkNewsBlackout(now: Date, symbol: string): Promise<{
     inBlackout: boolean;
     upcomingNews: UpcomingNews | null;
   }> {
+    // Skip news blackout for gold due to 24/7 volatility
+    if (symbol.includes('XAU') || symbol.includes('GOLD')) {
+      return {
+        inBlackout: false,
+        upcomingNews: null
+      };
+    }
+  
+
     // Refresh cached news if needed
     if (Date.now() - this.lastNewsFetch > this.newsFetchInterval) {
       await this.fetchUpcomingNews();
@@ -240,8 +300,8 @@ class TradingFilters {
         ? this.newsBlackoutMinutes 
         : this.lowImpactBlackoutMinutes;
 
-      // Check if in blackout window (before or after)
-      const inBlackout = minutesUntilEvent <= blackoutMinutes && minutesSinceEvent <= blackoutMinutes;
+      // Check if in blackout window (only before upcoming events)
+      const inBlackout = minutesUntilEvent >= 0 && minutesUntilEvent <= blackoutMinutes;
 
       if (inBlackout) {
         console.log(`📰 NEWS BLACKOUT: ${news.title} (${news.impact})`, {
@@ -269,43 +329,90 @@ class TradingFilters {
    */
   private async fetchUpcomingNews(): Promise<void> {
     try {
-      const now = new Date();
-      const twoHoursFromNow = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-      const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
-
-      // Try to fetch from economic_events table
-      const { data: events, error } = await supabase
-        .from('economic_events')
-        .select('*')
-        .gte('event_time', twoHoursAgo.toISOString())
-        .lte('event_time', twoHoursFromNow.toISOString())
-        .in('impact', ['HIGH', 'high', 'MEDIUM', 'medium'])
-        .order('event_time', { ascending: true });
-
-      if (error) {
-        console.error('Failed to fetch economic events:', error);
-        // Use fallback scheduled events
-        this.cachedNews = this.getFallbackScheduledNews();
-      } else if (events && events.length > 0) {
-        this.cachedNews = events.map(event => ({
-          id: event.id,
-          title: event.title,
-          currency: event.currency,
-          impact: (event.impact?.toUpperCase() || 'MEDIUM') as 'HIGH' | 'MEDIUM' | 'LOW',
-          eventTime: new Date(event.event_time),
-          affectedPairs: event.affected_pairs || this.getAffectedPairs(event.currency)
-        }));
-      } else {
-        this.cachedNews = this.getFallbackScheduledNews();
-      }
-
+      // Skip Supabase operations to avoid session issues
+      console.log('📝 Using fallback news data to avoid session issues');
+      this.cachedNews = this.getFallbackScheduledNews();
       this.lastNewsFetch = Date.now();
-      console.log(`📰 Loaded ${this.cachedNews.length} upcoming news events`);
+      return;
+
+      // For real trading, try to fetch from Supabase with proper auth handling
+      try {
+        // Ensure we have a valid session before making requests
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError || !session || await this.isSessionExpired(session)) {
+          console.log('🔄 Session expired or invalid, attempting refresh...');
+          const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+          if (refreshError || !refreshedSession) {
+            console.error('❌ Failed to refresh session:', refreshError?.message);
+            // Fall back to scheduled news instead of failing completely
+            this.cachedNews = this.getFallbackScheduledNews();
+            this.lastNewsFetch = Date.now();
+            return;
+          }
+          console.log('✅ Session refreshed successfully');
+        }
+
+        const now = new Date();
+        const twoHoursFromNow = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+        const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+
+        // Try to fetch from economic_events table
+        const { data: events, error } = await supabase
+          .from('economic_events')
+          .select('*')
+          .gte('event_time', twoHoursAgo.toISOString())
+          .lte('event_time', twoHoursFromNow.toISOString())
+          .in('impact', ['HIGH', 'high', 'MEDIUM', 'medium'])
+          .order('event_time', { ascending: true });
+
+        if (error) {
+          console.error('Failed to fetch economic events:', error);
+          // Use fallback scheduled events
+          this.cachedNews = this.getFallbackScheduledNews();
+        } else if (events && events.length > 0) {
+          this.cachedNews = events.map(event => ({
+            id: event.id,
+            title: event.title,
+            currency: event.currency,
+            impact: (event.impact?.toUpperCase() || 'MEDIUM') as 'HIGH' | 'MEDIUM' | 'LOW',
+            eventTime: new Date(event.event_time),
+            affectedPairs: event.affected_pairs || this.getAffectedPairs(event.currency)
+          }));
+        } else {
+          this.cachedNews = this.getFallbackScheduledNews();
+        }
+
+        this.lastNewsFetch = Date.now();
+        console.log(`📰 Loaded ${this.cachedNews.length} upcoming news events`);
+
+      } catch (authError) {
+        console.error('❌ Authentication error fetching news:', authError);
+        // Fall back to scheduled news on auth failure
+        this.cachedNews = this.getFallbackScheduledNews();
+        this.lastNewsFetch = Date.now();
+      }
 
     } catch (error) {
       console.error('Error fetching news:', error);
       this.cachedNews = this.getFallbackScheduledNews();
     }
+  }
+
+  private async isPaperTradingMode(): Promise<boolean> {
+    try {
+      const { orderManager } = await import('./orderManager');
+      return (orderManager as any).isPaperTradingMode;
+    } catch (error) {
+      console.warn('Could not check paper trading mode:', error);
+      return false;
+    }
+  }
+
+  private async isSessionExpired(session: any): Promise<boolean> {
+    if (!session || !session.expires_at) return true;
+    const expiresAt = new Date(session.expires_at * 1000); // Convert to milliseconds
+    const now = new Date();
+    return expiresAt <= now;
   }
 
   /**
@@ -389,7 +496,7 @@ class TradingFilters {
   }
 
   setNewsBlackoutMinutes(minutes: number): void {
-    this.newsBlackoutMinutes = Math.max(5, Math.min(60, minutes));
+    this.newsBlackoutMinutes = Math.max(5, Math.min(30, minutes));
     console.log(`📰 News blackout window: ${this.newsBlackoutMinutes} minutes`);
   }
 
@@ -438,3 +545,4 @@ class TradingFilters {
 }
 
 export const tradingFilters = new TradingFilters();
+

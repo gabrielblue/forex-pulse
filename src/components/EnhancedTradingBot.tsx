@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +26,9 @@ import { SessionAlerts } from "./SessionAlerts";
 import { MarketAnalysisEngine } from "./MarketAnalysisEngine";
 import { WorldClassStrategies } from "./WorldClassStrategies";
 import { ChartAnalysisEngine } from "./ChartAnalysisEngine";
+import { MarketStudyComponent } from "./MarketStudyComponent";
 import { useTradingBot } from "@/hooks/useTradingBot";
+import { realMarketDataService } from "@/lib/trading/realMarketDataService";
 import { toast } from "sonner";
 
 interface BotCapability {
@@ -86,37 +88,66 @@ export const EnhancedTradingBot = () => {
   ]);
 
   const [analysisLog, setAnalysisLog] = useState<string[]>([]);
+  const [marketAnalysis, setMarketAnalysis] = useState<string>('Initializing market analysis...');
+  const analysisIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    // Start continuous market analysis logging
-    const logInterval = setInterval(() => {
-      addAnalysisLog();
-    }, 30000);
-
-    return () => clearInterval(logInterval);
+  const updateRealMarketAnalysis = useCallback(async (symbols: string[]) => {
+    try {
+      const analyses: string[] = [];
+      
+      for (const symbol of symbols) {
+        try {
+          const analysis = await realMarketDataService.getRealTimeAnalysis(symbol);
+          if (analysis.indicators) {
+            const ind = analysis.indicators;
+            const bias = analysis.multiTimeframe 
+              ? realMarketDataService.getMultiTimeframeBias(analysis.multiTimeframe)
+              : { bias: 'NEUTRAL', confidence: 0, reason: 'No data' };
+            
+            analyses.push(
+              `📊 ${symbol}: ${ind.trendDirection} | RSI: ${ind.rsi.toFixed(1)} | Bias: ${bias.bias} (${bias.confidence.toFixed(0)}%)`
+            );
+          } else {
+            analyses.push(`⚠️ ${symbol}: No data available`);
+          }
+        } catch (err) {
+          analyses.push(`❌ ${symbol}: Analysis failed`);
+        }
+      }
+      
+      const analysisText = `${new Date().toLocaleTimeString()} - ${analyses.join(' | ')}`;
+      setAnalysisLog(prev => [analysisText, ...prev].slice(0, 50));
+      setMarketAnalysis(analyses.join('\n'));
+    } catch (error) {
+      console.error('Market analysis error:', error);
+    }
   }, []);
 
-  const addAnalysisLog = () => {
-    // Use real market data instead of random selection
-    const symbol = "EURUSD"; // Primary trading pair
+  const startRealMarketAnalysis = useCallback(async () => {
+    const symbols = ['EURUSD', 'GBPUSD', 'AUDUSD', 'NZDUSD'];
     
-    const logMessages = [
-      `📊 ${symbol}: Bullish momentum building on 1H chart - RSI at 45, MACD turning positive`,
-      `🔍 ${symbol}: Support level holding at key Fibonacci 61.8% retracement`,
-      `⚡ ${symbol}: Breakout above resistance with volume confirmation - monitoring for continuation`,
-      `📈 ${symbol}: Double bottom pattern forming - waiting for neckline break`,
-      `🎯 ${symbol}: Institutional flow detected - large buy orders accumulating`,
-      `⚠️ ${symbol}: Approaching overbought levels - watching for reversal signals`,
-      `✅ ${symbol}: All timeframes aligned bullish - high probability setup developing`,
-      `🔄 ${symbol}: Range-bound price action - waiting for directional break`,
-      `📉 ${symbol}: Bearish divergence on RSI - potential reversal signal`,
-      `🚀 ${symbol}: Momentum accelerating - trend continuation likely`
-    ];
+    // Initial analysis
+    await updateRealMarketAnalysis(symbols);
+    
+    // Continuous updates every 30 seconds
+    analysisIntervalRef.current = setInterval(async () => {
+      await updateRealMarketAnalysis(symbols);
+    }, 30000);
+  }, [updateRealMarketAnalysis]);
 
-    const newLog = `${new Date().toLocaleTimeString()} - ${logMessages[Date.now() % logMessages.length]}`;
+  useEffect(() => {
+    // Start continuous market analysis logging with real data
+    if (status.isActive) {
+      startRealMarketAnalysis();
+    }
     
-    setAnalysisLog(prev => [newLog, ...prev].slice(0, 50));
-  };
+    return () => {
+      if (analysisIntervalRef.current) {
+        clearInterval(analysisIntervalRef.current);
+        analysisIntervalRef.current = null;
+      }
+    };
+  }, [status.isActive, startRealMarketAnalysis]);
 
   const handleBotToggle = async () => {
     try {
@@ -169,7 +200,7 @@ export const EnhancedTradingBot = () => {
             </div>
             <div className="flex items-center gap-4">
               <Badge variant={status.isActive ? "default" : "secondary"} className={status.isActive ? "bg-green-500" : ""}>
-                {status.isActive ? "ACTIVE & ANALYZING" : "STANDBY"}
+                {status.isActive ? (status.autoTradingEnabled ? "AUTO TRADING ACTIVE" : "ACTIVE & ANALYZING") : "STANDBY"}
               </Badge>
               <Button
                 onClick={handleBotToggle}
@@ -189,6 +220,33 @@ export const EnhancedTradingBot = () => {
                   </>
                 )}
               </Button>
+              {status.isActive && (
+                <Button
+                  onClick={async () => {
+                    try {
+                      await enableAutoTrading(!status.autoTradingEnabled);
+                      toast.success(status.autoTradingEnabled ? "Auto-trading disabled" : "Auto-trading enabled - Real trades will be executed!");
+                    } catch (err) {
+                      toast.error("Failed to toggle auto-trading: " + (err instanceof Error ? err.message : 'Unknown error'));
+                    }
+                  }}
+                  variant={status.autoTradingEnabled ? "destructive" : "default"}
+                  disabled={isLoading}
+                  size="lg"
+                >
+                  {status.autoTradingEnabled ? (
+                    <>
+                      <Shield className="w-4 h-4 mr-2" />
+                      Disable Auto Trading
+                    </>
+                  ) : (
+                    <>
+                      <Target className="w-4 h-4 mr-2" />
+                      Enable Auto Trading
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -233,12 +291,13 @@ export const EnhancedTradingBot = () => {
 
       {/* Enhanced Features Tabs */}
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="sessions">Session Alerts</TabsTrigger>
           <TabsTrigger value="analysis">Market Analysis</TabsTrigger>
           <TabsTrigger value="charts">Chart Analysis</TabsTrigger>
           <TabsTrigger value="strategies">Elite Strategies</TabsTrigger>
+          <TabsTrigger value="marketStudy">Market Study</TabsTrigger>
         </TabsList>
         
         <TabsContent value="overview" className="space-y-6">
@@ -317,6 +376,10 @@ export const EnhancedTradingBot = () => {
         
         <TabsContent value="strategies">
           <WorldClassStrategies />
+        </TabsContent>
+        
+        <TabsContent value="marketStudy">
+          <MarketStudyComponent symbols={['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'NZDUSD', 'USDCAD']} refreshInterval={30000} />
         </TabsContent>
       </Tabs>
 

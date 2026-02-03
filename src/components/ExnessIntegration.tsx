@@ -43,24 +43,33 @@ export const ExnessIntegration = () => {
   const [autoTradingEnabled, setAutoTradingEnabled] = useState(false);
 
   const serverOptions = [
-    // Demo/Trial Servers (all available trial servers)
-    { value: "ExnessKE-MT5Trial01", label: "ExnessKE-MT5Trial01 (Demo)", type: "demo" },
-    { value: "ExnessKE-MT5Trial02", label: "ExnessKE-MT5Trial02 (Demo)", type: "demo" },
-    { value: "ExnessKE-MT5Trial03", label: "ExnessKE-MT5Trial03 (Demo)", type: "demo" },
-    { value: "ExnessKE-MT5Trial04", label: "ExnessKE-MT5Trial04 (Demo)", type: "demo" },
-    { value: "ExnessKE-MT5Trial05", label: "ExnessKE-MT5Trial05 (Demo)", type: "demo" },
-    { value: "ExnessKE-MT5Trial06", label: "ExnessKE-MT5Trial06 (Demo)", type: "demo" },
-    { value: "ExnessKE-MT5Trial07", label: "ExnessKE-MT5Trial07 (Demo)", type: "demo" },
-    { value: "ExnessKE-MT5Trial08", label: "ExnessKE-MT5Trial08 (Demo)", type: "demo" },
-    { value: "ExnessKE-MT5Trial09", label: "ExnessKE-MT5Trial09 (Demo)", type: "demo" },
-    { value: "ExnessKE-MT5Trial10", label: "ExnessKE-MT5Trial10 (Demo)", type: "demo" },
-    
-    // Live/Real Servers (all available real servers)
-    { value: "ExnessKE-MT5Real01", label: "ExnessKE-MT5Real01 (Live)", type: "live" },
-    { value: "ExnessKE-MT5Real02", label: "ExnessKE-MT5Real02 (Live)", type: "live" },
-    { value: "ExnessKE-MT5Real03", label: "ExnessKE-MT5Real03 (Live)", type: "live" },
-    { value: "ExnessKE-MT5Real04", label: "ExnessKE-MT5Real04 (Live)", type: "live" },
-    { value: "ExnessKE-MT5Real05", label: "ExnessKE-MT5Real05 (Live)", type: "live" },
+    // Demo/Trial Servers (standard Exness servers)
+    { value: "Exness-MT5Trial", label: "Exness-MT5Trial (Demo)", type: "demo" },
+    { value: "Exness-MT5Trial2", label: "Exness-MT5Trial2 (Demo)", type: "demo" },
+    { value: "Exness-MT5Trial3", label: "Exness-MT5Trial3 (Demo)", type: "demo" },
+    { value: "Exness-MT5Trial4", label: "Exness-MT5Trial4 (Demo)", type: "demo" },
+    { value: "Exness-MT5Trial5", label: "Exness-MT5Trial5 (Demo)", type: "demo" },
+    { value: "Exness-MT5Trial6", label: "Exness-MT5Trial6 (Demo)", type: "demo" },
+    { value: "Exness-MT5Trial7", label: "Exness-MT5Trial7 (Demo)", type: "demo" },
+    { value: "Exness-MT5Trial8", label: "Exness-MT5Trial8 (Demo)", type: "demo" },
+    { value: "Exness-MT5Trial9", label: "Exness-MT5Trial9 (Demo)", type: "demo" },
+    { value: "Exness-MT5Trial10", label: "Exness-MT5Trial10 (Demo)", type: "demo" },
+
+    // Live/Real Servers (standard Exness servers)
+    { value: "Exness-MT5Real", label: "Exness-MT5Real (Live)", type: "live" },
+    { value: "Exness-MT5Real2", label: "Exness-MT5Real2 (Live)", type: "live" },
+    { value: "Exness-MT5Real3", label: "Exness-MT5Real3 (Live)", type: "live" },
+    { value: "Exness-MT5Real4", label: "Exness-MT5Real4 (Live)", type: "live" },
+    { value: "Exness-MT5Real5", label: "Exness-MT5Real5 (Live)", type: "live" },
+    { value: "Exness-MT5Real6", label: "Exness-MT5Real6 (Live)", type: "live" },
+    { value: "Exness-MT5Real7", label: "Exness-MT5Real7 (Live)", type: "live" },
+    { value: "Exness-MT5Real8", label: "Exness-MT5Real8 (Live)", type: "live" },
+    { value: "Exness-MT5Real9", label: "Exness-MT5Real9 (Live)", type: "live" },
+    { value: "Exness-MT5Real10", label: "Exness-MT5Real10 (Live)", type: "live" },
+
+    // Kenya-specific servers (if applicable)
+    { value: "ExnessKE-MT5Trial", label: "ExnessKE-MT5Trial (Demo KE)", type: "demo" },
+    { value: "ExnessKE-MT5Real", label: "ExnessKE-MT5Real (Live KE)", type: "live" },
   ];
 
   useEffect(() => {
@@ -274,6 +283,7 @@ export const ExnessIntegration = () => {
             <CardHeader>
               <CardTitle>MT5 Account Connection</CardTitle>
             </CardHeader>
+            <form>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -443,6 +453,7 @@ export const ExnessIntegration = () => {
                 </div>
               )}
             </CardContent>
+            </form>
           </Card>
 
           {/* Setup Instructions */}

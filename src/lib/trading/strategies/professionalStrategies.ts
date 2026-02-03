@@ -37,7 +37,8 @@ export class ProfessionalTradingStrategies {
         takeProfit: currentPrice + (0.0003 * this.getPipValue(marketData.symbol)), // Ultra close take profit
         timeframe: '1M',
         reasoning: 'Day trading scalping: RSI oversold with bullish MACD crossover',
-        source: 'Scalping Strategy'
+        source: 'Scalping Strategy',
+        probabilityOfSuccess: 0.60
       };
     }
     
@@ -52,7 +53,8 @@ export class ProfessionalTradingStrategies {
         takeProfit: currentPrice - (0.0003 * this.getPipValue(marketData.symbol)), // Ultra close take profit
         timeframe: '1M',
         reasoning: 'Day trading scalping: RSI overbought with bearish MACD crossover',
-        source: 'Scalping Strategy'
+        source: 'Scalping Strategy',
+        probabilityOfSuccess: 0.60
       };
     }
     
@@ -76,7 +78,8 @@ export class ProfessionalTradingStrategies {
         takeProfit: currentPrice + (currentPrice * 0.009), // Closer take profit (0.9%)
         timeframe: '4H',
         reasoning: 'Day trading swing: EMA bullish alignment with momentum',
-        source: 'Swing Trading Strategy'
+        source: 'Swing Trading Strategy',
+        probabilityOfSuccess: 0.75
       };
     }
     
@@ -92,7 +95,8 @@ export class ProfessionalTradingStrategies {
         takeProfit: currentPrice - (currentPrice * 0.009), // Closer take profit
         timeframe: '4H',
         reasoning: 'Day trading swing: EMA bearish alignment with momentum',
-        source: 'Swing Trading Strategy'
+        source: 'Swing Trading Strategy',
+        probabilityOfSuccess: 0.75
       };
     }
     
@@ -119,7 +123,8 @@ export class ProfessionalTradingStrategies {
         takeProfit: currentPrice + (atr * 0.9), // Ultra close take profit
         timeframe: '1H',
         reasoning: 'Day trading breakout: Bollinger upper breakout with momentum',
-        source: 'Breakout Strategy'
+        source: 'Breakout Strategy',
+        probabilityOfSuccess: 0.72
       };
     }
     
@@ -134,7 +139,8 @@ export class ProfessionalTradingStrategies {
         takeProfit: currentPrice - (atr * 0.9), // Ultra close take profit
         timeframe: '1H',
         reasoning: 'Day trading breakout: Bollinger lower breakout with momentum',
-        source: 'Breakout Strategy'
+        source: 'Breakout Strategy',
+        probabilityOfSuccess: 0.72
       };
     }
     
@@ -158,7 +164,8 @@ export class ProfessionalTradingStrategies {
         takeProfit: currentPrice + (indicators.atr * 0.8), // Ultra close take profit
         timeframe: '1H',
         reasoning: 'Day trading mean reversion: Oversold conditions with reversal potential',
-        source: 'Mean Reversion Strategy'
+        source: 'Mean Reversion Strategy',
+        probabilityOfSuccess: 0.68
       };
     }
     
@@ -174,7 +181,8 @@ export class ProfessionalTradingStrategies {
         takeProfit: currentPrice - (indicators.atr * 0.8), // Ultra close take profit
         timeframe: '1H',
         reasoning: 'Day trading mean reversion: Overbought conditions with reversal potential',
-        source: 'Mean Reversion Strategy'
+        source: 'Mean Reversion Strategy',
+        probabilityOfSuccess: 0.68
       };
     }
     
@@ -201,7 +209,8 @@ export class ProfessionalTradingStrategies {
         takeProfit: ema20,
         timeframe: '15M',
         reasoning: 'Grid: Price below EMA, buying at grid level',
-        source: 'Grid Trading Strategy'
+        source: 'Grid Trading Strategy',
+        probabilityOfSuccess: 0.75
       };
     }
     
@@ -216,7 +225,8 @@ export class ProfessionalTradingStrategies {
         takeProfit: ema20,
         timeframe: '15M',
         reasoning: 'Grid: Price above EMA, selling at grid level',
-        source: 'Grid Trading Strategy'
+        source: 'Grid Trading Strategy',
+        probabilityOfSuccess: 0.75
       };
     }
     
@@ -249,7 +259,8 @@ export class ProfessionalTradingStrategies {
           takeProfit: currentPrice + (0.004 * this.getPipValue(marketData.symbol)),
           timeframe: '5M',
           reasoning: 'News: Medium impact news with positive momentum and volume',
-          source: 'News-Based Strategy'
+          source: 'News-Based Strategy',
+          probabilityOfSuccess: 0.82
         };
       }
     }

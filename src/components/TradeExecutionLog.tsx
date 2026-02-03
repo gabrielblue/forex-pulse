@@ -38,26 +38,45 @@ export const TradeExecutionLog = () => {
 
   useEffect(() => {
     loadExecutionLogs();
-    
-    // Subscribe to real-time updates
-    const channel = supabase
-      .channel('trade-execution-log-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'trade_execution_log'
-        },
-        (payload) => {
-          console.log('📨 New execution log:', payload.new);
-          setLogs(prevLogs => [payload.new as ExecutionLog, ...prevLogs]);
+
+    // Subscribe to real-time updates only if authenticated
+    let channel: any = null;
+    const setupRealtimeSubscription = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          channel = supabase
+            .channel('trade-execution-log-changes')
+            .on(
+              'postgres_changes',
+              {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'trade_execution_log',
+                filter: `user_id=eq.${user.id}`
+              },
+              (payload) => {
+                console.log('📨 New execution log:', payload.new);
+                setLogs(prevLogs => [payload.new as ExecutionLog, ...prevLogs]);
+              }
+            )
+            .subscribe();
         }
-      )
-      .subscribe();
+      } catch (error) {
+        console.warn('Failed to setup realtime subscription:', error);
+      }
+    };
+
+    setupRealtimeSubscription();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch (error) {
+          console.warn('Error removing realtime channel:', error);
+        }
+      }
     };
   }, []);
 

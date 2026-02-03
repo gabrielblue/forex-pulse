@@ -1,5 +1,8 @@
 import { TradingSignal } from '../signalProcessor';
 import { WorldClassTradingStrategies, AdvancedSignal } from './worldClassStrategies';
+import { goldTradingStrategies } from './goldStrategies';
+import { multiTimeframeAnalyzer } from '../multiTimeframeAnalyzer';
+import { exnessAPI } from '../exnessApi';
 
 export interface OptimizedSignal extends AdvancedSignal {
   volatilityAdjustedVolume: number;
@@ -22,50 +25,64 @@ export class EnhancedTradingSystem {
   
   // Main strategy orchestrator - combines all strategies for optimal results
   async generateOptimalSignal(
-    symbol: string, 
-    marketData: any, 
+    symbol: string,
+    marketData: any,
     indicators: any,
     sessionInfo: any,
     newsEvents: any[] = []
   ): Promise<OptimizedSignal | null> {
-    
+
     try {
       // Validate input data
       if (!marketData || !marketData.prices || marketData.prices.length === 0) {
         console.warn('Invalid market data for', symbol);
         return null;
       }
-      
+
       // Ensure indicators have all required properties
       const safeIndicators = this.ensureCompleteIndicators(indicators, marketData);
-      
+
       // 1. Analyze market regime
       const marketRegime = this.analyzeMarketRegime(marketData, safeIndicators);
-      
+
       // 2. Get session-specific analysis
       const sessionAnalysis = this.analyzeSessionContext(sessionInfo, symbol);
-      
+
       // 3. Assess news impact
       const newsImpact = this.assessNewsImpact(newsEvents, symbol);
-      
-      // 4. Run multiple world-class strategies
+
+      // 4. Get multi-timeframe analysis for sniper entries
+      const currentPrice = marketData.prices[marketData.prices.length - 1];
+      const multiTimeframeAnalysis = await multiTimeframeAnalyzer.analyzeSymbol(symbol, currentPrice);
+
+      // 5. Run multiple world-class strategies
       const strategySignals = await this.runAllStrategies(marketData, safeIndicators);
-      
-      // 5. Select best strategy based on market conditions
+
+      // 6. Select best strategy based on market conditions
       const bestSignal = this.selectOptimalStrategy(strategySignals, marketRegime, sessionAnalysis);
-      
+
       if (!bestSignal) return null;
-      
-      // 6. Enhance signal with advanced risk management
-      const optimizedSignal = await this.enhanceSignalWithRiskManagement(
+
+      // 7. Apply sniper entry logic
+      const sniperSignal = await this.applySniperEntryLogic(
         bestSignal,
+        multiTimeframeAnalysis,
+        marketRegime,
+        newsImpact
+      );
+
+      if (!sniperSignal) return null;
+
+      // 8. Enhance signal with advanced risk management
+      const optimizedSignal = await this.enhanceSignalWithRiskManagement(
+        sniperSignal,
         marketRegime,
         sessionAnalysis,
         newsImpact
       );
-      
+
       return optimizedSignal;
-      
+
     } catch (error) {
       console.error('Error in enhanced strategy generation:', error);
       return null;
@@ -149,9 +166,27 @@ export class EnhancedTradingSystem {
   
   private async runAllStrategies(marketData: any, indicators: any): Promise<AdvancedSignal[]> {
     const signals: AdvancedSignal[] = [];
-    
+    const { symbol } = marketData;
+
     try {
-      // Run all world-class strategies
+      // For gold (XAUUSD), use specialized gold strategies
+      if (symbol.includes('XAU') || symbol.includes('GOLD')) {
+        console.log('🎯 Using specialized gold trading strategies for', symbol);
+        const goldSignal = await goldTradingStrategies.generateGoldSignal(
+          marketData,
+          indicators,
+          undefined, // USD data not available yet
+          undefined, // session info
+          [] // news events
+        );
+
+        if (goldSignal) {
+          signals.push(goldSignal);
+        }
+        return signals; // Return only gold signals for gold trading
+      }
+
+      // For other symbols, run all world-class strategies
       const strategies = [
         () => this.worldClassStrategies.renaissanceStatArb(marketData, indicators),
         () => this.worldClassStrategies.citadelMarketMaking(marketData, indicators),
@@ -163,11 +198,11 @@ export class EnhancedTradingSystem {
         () => this.worldClassStrategies.aqrMomentumFactor(marketData, indicators),
         () => this.worldClassStrategies.manGroupCTA(marketData, indicators)
       ];
-      
+
       for (const strategy of strategies) {
         try {
           const signal = await strategy();
-          if (signal && signal.confidence > 70) {
+          if (signal && signal.confidence > 80) { // Higher confidence threshold for better win rate
             signals.push(signal);
           }
         } catch (error) {
@@ -177,28 +212,48 @@ export class EnhancedTradingSystem {
     } catch (error) {
       console.error('Error running strategies:', error);
     }
-    
+
     return signals;
   }
   
   private selectOptimalStrategy(
-    signals: AdvancedSignal[], 
-    marketRegime: string, 
+    signals: AdvancedSignal[],
+    marketRegime: string,
     sessionAnalysis: any
   ): AdvancedSignal | null {
-    
+
     if (signals.length === 0) return null;
-    
+
     // Score each signal based on market conditions
     const scoredSignals = signals.map(signal => ({
       signal,
       score: this.calculateSignalScore(signal, marketRegime, sessionAnalysis)
     }));
-    
+
     // Sort by score and return best
     scoredSignals.sort((a, b) => b.score - a.score);
-    
-    return scoredSignals[0].signal;
+
+    const bestSignal = scoredSignals[0].signal;
+
+    // Cross-check validation: Ensure signal aligns with market regime
+    if (!this.validateSignalAgainstMarketRegime(bestSignal, marketRegime)) {
+      console.log(`❌ Signal rejected: ${bestSignal.strategyName} doesn't align with ${marketRegime} market regime`);
+      return null;
+    }
+
+    // Cross-check validation: Ensure risk-reward ratio is acceptable
+    if (bestSignal.riskRewardRatio < 1.5) {
+      console.log(`❌ Signal rejected: Poor risk-reward ratio ${bestSignal.riskRewardRatio.toFixed(2)}`);
+      return null;
+    }
+
+    // Cross-check validation: Ensure confidence is high enough
+    if (bestSignal.confidence < 85) {
+      console.log(`❌ Signal rejected: Low confidence ${bestSignal.confidence}%`);
+      return null;
+    }
+
+    return bestSignal;
   }
   
   private calculateSignalScore(signal: AdvancedSignal, marketRegime: string, sessionAnalysis: any): number {
@@ -242,15 +297,15 @@ export class EnhancedTradingSystem {
     newsImpact: any
   ): Promise<OptimizedSignal> {
     
-    // Calculate aggressive position sizing for day trading
-    const baseVolume = 0.20; // Start with much larger base volume
-    const confidenceMultiplier = Math.max(1.0, signal.confidence / 80); // Minimum 100% multiplier
-    const sessionMultiplier = Math.max(2.0, sessionAnalysis.volatilityMultiplier); // Minimum 2.0x
-    const newsRiskFactor = Math.max(0.9, newsImpact.riskMultiplier); // Minimal news impact
-    
+    // Conservative position sizing for small accounts - focus on take profits
+    const baseVolume = signal.symbol.includes('XAU') ? 0.02 : 0.20; // Small base volume for gold with $18 account
+    const confidenceMultiplier = Math.max(1.5, signal.confidence / 70); // Higher minimum multiplier for gold
+    const sessionMultiplier = Math.max(2.0, sessionAnalysis.volatilityMultiplier); // Moderate multiplier for safety
+    const newsRiskFactor = Math.max(0.9, newsImpact.riskMultiplier); // Conservative news impact
+
     const volatilityAdjustedVolume = Math.max(
-      0.15, // Minimum 0.15 lots
-      Math.min(1.0, baseVolume * confidenceMultiplier * sessionMultiplier * newsRiskFactor) // Max 1.0 lots
+      0.01, // Minimum broker size
+      Math.min(signal.symbol.includes('XAU') ? 0.03 : 1.0, baseVolume * confidenceMultiplier * sessionMultiplier * newsRiskFactor) // Max 0.03 lots for gold
     );
     
     // Calculate expected outcome
@@ -300,32 +355,36 @@ export class EnhancedTradingSystem {
   }
   
   private optimizeStopLoss(signal: AdvancedSignal, marketRegime: string, sessionAnalysis: any): number {
+    // For sniper entries, keep the calculated SL from market structure
+    // Only make minor adjustments for extreme conditions
     let stopLoss = signal.stopLoss;
-    
-    // Adjust for volatility
+
+    // Conservative adjustment for high volatility (max 10% adjustment)
     if (marketRegime === 'VOLATILE') {
-      const adjustment = Math.abs(signal.entryPrice - stopLoss) * 0.2;
-      stopLoss = signal.type === 'BUY' ? stopLoss - adjustment : stopLoss + adjustment;
-    }
-    
-    // Adjust for session
-    if (sessionAnalysis.spreadAdjustment > 1.5) {
       const adjustment = Math.abs(signal.entryPrice - stopLoss) * 0.1;
       stopLoss = signal.type === 'BUY' ? stopLoss - adjustment : stopLoss + adjustment;
     }
-    
+
+    // Minimal adjustment for poor session conditions
+    if (sessionAnalysis.spreadAdjustment > 2.0) {
+      const adjustment = Math.abs(signal.entryPrice - stopLoss) * 0.05;
+      stopLoss = signal.type === 'BUY' ? stopLoss - adjustment : stopLoss + adjustment;
+    }
+
     return stopLoss;
   }
-  
+
   private optimizeTakeProfit(signal: AdvancedSignal, marketRegime: string, sessionAnalysis: any): number {
+    // For sniper entries, keep the calculated TP from market structure
+    // Only extend in strong trending conditions
     let takeProfit = signal.takeProfit;
-    
-    // Extend target in trending markets
-    if (marketRegime === 'TRENDING') {
-      const extension = Math.abs(takeProfit - signal.entryPrice) * 0.3;
+
+    // Extend target only in strong trending markets with good confluence
+    if (marketRegime === 'TRENDING' && sessionAnalysis.isOptimalTime) {
+      const extension = Math.abs(takeProfit - signal.entryPrice) * 0.2;
       takeProfit = signal.type === 'BUY' ? takeProfit + extension : takeProfit - extension;
     }
-    
+
     return takeProfit;
   }
   
@@ -365,7 +424,7 @@ export class EnhancedTradingSystem {
   private calculateLiquidityScore(activeSessions: any[], symbol: string): number {
     let score = 0;
     activeSessions.forEach(session => {
-      if (session.majorPairs.includes(symbol)) {
+      if (session.majorPairs && Array.isArray(session.majorPairs) && session.majorPairs.includes(symbol)) {
         score += session.volume === 'HIGH' ? 40 : session.volume === 'MEDIUM' ? 25 : 15;
       }
     });
@@ -396,6 +455,146 @@ export class EnhancedTradingSystem {
     // Real trend direction comes from AI analysis
     console.warn('⚠️ getTrendDirection fallback should not be used - use AI analysis');
     return 'BUY'; // Conservative default
+  }
+
+  // Sniper Entry Logic - Enter at precise support/resistance levels
+  private async applySniperEntryLogic(
+    signal: AdvancedSignal,
+    multiTimeframeAnalysis: any,
+    marketRegime: string,
+    newsImpact: any
+  ): Promise<AdvancedSignal | null> {
+
+    // Reject signal if news impact is too high
+    if (newsImpact.hasHighImpact) {
+      console.log(`📰 Rejecting signal for ${signal.symbol} due to high news impact: ${newsImpact.newsType}`);
+      return null;
+    }
+
+    // Get current price
+    const currentPrice = await this.getCurrentPrice(signal.symbol);
+    if (!currentPrice) return null;
+
+    // Extract support and resistance levels from multi-timeframe analysis
+    const allSupportLevels: number[] = [];
+    const allResistanceLevels: number[] = [];
+
+    multiTimeframeAnalysis.timeframes.forEach((tf: any) => {
+      allSupportLevels.push(...tf.supportResistance.support);
+      allResistanceLevels.push(...tf.supportResistance.resistance);
+    });
+
+    // Sort and deduplicate levels
+    const supportLevels = Array.from(new Set(allSupportLevels)).sort((a, b) => b - a); // Descending
+    const resistanceLevels = Array.from(new Set(allResistanceLevels)).sort((a, b) => a - b); // Ascending
+
+    // Find sniper entry point
+    let sniperEntryPrice: number | null = null;
+    let sniperStopLoss: number | null = null;
+    let sniperTakeProfit: number | null = null;
+
+    if (signal.type === 'BUY') {
+      // For BUY: Enter at support level, TP at resistance, SL below support
+      const nearestSupport = this.findNearestLevel(currentPrice, supportLevels, 'below');
+      const nextResistance = this.findNearestLevel(currentPrice, resistanceLevels, 'above');
+
+      if (nearestSupport && nextResistance) {
+        sniperEntryPrice = nearestSupport;
+        sniperTakeProfit = nextResistance;
+        sniperStopLoss = nearestSupport - Math.abs(nextResistance - nearestSupport) * 0.2; // 20% below support
+      }
+    } else {
+      // For SELL: Enter at resistance level, TP at support, SL above resistance
+      const nearestResistance = this.findNearestLevel(currentPrice, resistanceLevels, 'above');
+      const nextSupport = this.findNearestLevel(currentPrice, supportLevels, 'below');
+
+      if (nearestResistance && nextSupport) {
+        sniperEntryPrice = nearestResistance;
+        sniperTakeProfit = nextSupport;
+        sniperStopLoss = nearestResistance + Math.abs(nearestResistance - nextSupport) * 0.2; // 20% above resistance
+      }
+    }
+
+    if (!sniperEntryPrice || !sniperStopLoss || !sniperTakeProfit) {
+      console.log(`🎯 No valid sniper entry found for ${signal.symbol} ${signal.type}`);
+      return null;
+    }
+
+    // Validate risk-reward ratio (minimum 1:1.5)
+    const risk = Math.abs(sniperEntryPrice - sniperStopLoss);
+    const reward = Math.abs(sniperTakeProfit - sniperEntryPrice);
+    const riskRewardRatio = reward / risk;
+
+    if (riskRewardRatio < 1.5) {
+      console.log(`📊 Poor risk-reward ratio ${riskRewardRatio.toFixed(2)} for ${signal.symbol}, rejecting`);
+      return null;
+    }
+
+    // Check if entry is too far from current price (max 1% for sniper precision)
+    const entryDistance = Math.abs(sniperEntryPrice - currentPrice) / currentPrice;
+    if (entryDistance > 0.01) {
+      console.log(`📍 Entry too far from current price (${(entryDistance * 100).toFixed(2)}%), rejecting sniper entry`);
+      return null;
+    }
+
+    console.log(`🎯 Sniper entry found for ${signal.symbol} ${signal.type}: Entry=${sniperEntryPrice.toFixed(5)}, SL=${sniperStopLoss.toFixed(5)}, TP=${sniperTakeProfit.toFixed(5)}, RR=${riskRewardRatio.toFixed(2)}`);
+
+    return {
+      ...signal,
+      entryPrice: sniperEntryPrice,
+      stopLoss: sniperStopLoss,
+      takeProfit: sniperTakeProfit,
+      riskRewardRatio,
+      reasoning: `${signal.reasoning} | Sniper Entry: ${sniperEntryPrice.toFixed(5)} | Market Structure Confirmed | RR: ${riskRewardRatio.toFixed(2)}`
+    };
+  }
+
+  private findNearestLevel(currentPrice: number, levels: number[], direction: 'above' | 'below'): number | null {
+    if (levels.length === 0) return null;
+
+    if (direction === 'below') {
+      // Find highest level below current price
+      const belowLevels = levels.filter(level => level <= currentPrice);
+      return belowLevels.length > 0 ? Math.max(...belowLevels) : null;
+    } else {
+      // Find lowest level above current price
+      const aboveLevels = levels.filter(level => level >= currentPrice);
+      return aboveLevels.length > 0 ? Math.min(...aboveLevels) : null;
+    }
+  }
+
+  private async getCurrentPrice(symbol: string): Promise<number | null> {
+    try {
+      const price = await exnessAPI.getCurrentPrice(symbol);
+      return price ? (price.bid + price.ask) / 2 : null;
+    } catch (error) {
+      console.error('Failed to get current price:', error);
+      return null;
+    }
+  }
+
+  private validateSignalAgainstMarketRegime(signal: AdvancedSignal, marketRegime: string): boolean {
+    // Validate that signal type aligns with market regime
+    if (marketRegime === 'TRENDING') {
+      // In trending markets, prefer momentum-based strategies
+      const momentumStrategies = ['Two Sigma Machine Learning', 'Bridgewater Macro Trend', 'AQR Momentum Factor'];
+      return momentumStrategies.some(strategy => signal.strategyName.includes(strategy));
+    }
+
+    if (marketRegime === 'RANGING') {
+      // In ranging markets, prefer mean reversion strategies
+      const meanReversionStrategies = ['Millennium High-Frequency Mean Reversion', 'Renaissance Statistical Arbitrage'];
+      return meanReversionStrategies.some(strategy => signal.strategyName.includes(strategy));
+    }
+
+    if (marketRegime === 'VOLATILE') {
+      // In volatile markets, prefer volatility-based strategies
+      const volatilityStrategies = ['Jane Street Volatility Trading'];
+      return volatilityStrategies.some(strategy => signal.strategyName.includes(strategy));
+    }
+
+    // For QUIET markets, accept any high-confidence signal
+    return signal.confidence >= 85;
   }
 }
 

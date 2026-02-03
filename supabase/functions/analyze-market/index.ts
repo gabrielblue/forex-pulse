@@ -91,34 +91,33 @@ serve(async (req) => {
   try {
     console.log('📊 Market analysis request received');
 
-    // Verify JWT authentication
+    // Optional authentication - allow anonymous access for AI analysis
     const authHeader = req.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.error('❌ Missing or invalid authorization header');
-      return new Response(
-        JSON.stringify({ error: "Unauthorized: Missing authentication token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    let user = null;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        // Create Supabase client to verify the user if token provided
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+        const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+          global: { headers: { Authorization: authHeader } }
+        });
+
+        // Verify the user is authenticated
+        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+        if (!authError && authUser) {
+          user = authUser;
+          console.log('✅ Authenticated user:', user.id);
+        } else {
+          console.log('⚠️ Invalid token provided, proceeding anonymously');
+        }
+      } catch (error) {
+        console.log('⚠️ Authentication check failed, proceeding anonymously:', error);
+      }
+    } else {
+      console.log('ℹ️ No authentication token provided, proceeding anonymously');
     }
-
-    // Create Supabase client to verify the user
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
-
-    // Verify the user is authenticated
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      console.error('❌ Authentication failed:', authError?.message);
-      return new Response(
-        JSON.stringify({ error: "Unauthorized: Invalid or expired token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log('✅ Authenticated user:', user.id);
 
     const requestBody = await req.json();
     console.log('📋 Request body:', JSON.stringify(requestBody, null, 2));
@@ -201,47 +200,23 @@ Recent Price Action:
 - Change: ${marketData.change || 'N/A'}%
     `.trim();
 
-    const systemPrompt = `You are an elite forex trading analyst trained in Smart Money Concepts (SMC) and institutional trading strategies, similar to ChartLord AI.
+    const systemPrompt = `You are an elite forex analyst using Smart Money Concepts (SMC).
 
-SMART MONEY CONCEPTS TO ANALYZE:
-1. Order Blocks - Areas where institutions placed large orders
-2. Fair Value Gaps (FVGs) - Imbalanced price areas that tend to fill
-3. Liquidity Zones - Areas with stop losses that institutions hunt
-4. Break of Structure (BOS) - Trend continuation signals
-5. Change of Character (CHoCH) - Trend reversal signals
-6. Breaker Blocks - Failed order blocks that become support/resistance
+ANALYZE for BUY/SELL/HOLD based on confluence of:
+- Trend (EMA 20/50)
+- RSI momentum
+- Order blocks/FVGs
+- BOS/CHoCH signals
+- Support/resistance levels
 
-CONFLUENCE REQUIREMENT (ChartLord Style):
-- Only give BUY/SELL if at least 5 of these factors align:
-  1. Trend direction (use EMA 20/50)
-  2. RSI confirming momentum (not overbought for BUY, not oversold for SELL)
-  3. Price at/near order block or FVG
-  4. Recent BOS in trade direction
-  5. Volume confirmation
-  6. Key support/resistance level
-  7. Clean price action setup
+REQUIREMENTS:
+- BUY/SELL only with 5+ confluence factors
+- HOLD if <5 factors or unclear
+- Confidence: 75-95% for 7+ factors, 65-74% for 5-6 factors
+- Entry: precise price, SL: 20-30 pips, TP: 40-60 pips (2:1 RR)
+- Risk: LOW/MEDIUM/HIGH, Position size: SMALL/MEDIUM/LARGE
 
-CRITICAL RULES:
-1. Be SELECTIVE - only trade with 5+ confluence factors
-2. Use HOLD when confluence < 5 factors
-3. Assign confidence 75-95% for clear setups with 7+ factors
-4. Assign confidence 65-74% for decent setups with 5-6 factors
-5. Below 65% = HOLD - not enough confluence
-
-When analyzing:
-- Multiple confluence factors aligned = HIGH confidence (75%+)
-- Single indicator without confirmation = HOLD
-- Choppy/ranging with no clear direction = HOLD
-
-Provide:
-1. Market regime (trending/ranging/volatile/consolidating)
-2. Clear BUY/SELL/HOLD signal with SMC reasoning
-3. Confidence score reflecting confluence strength
-4. Precise entry, stop-loss (20-30 pips), take-profit (40-60 pips, 2:1 R:R)
-5. Risk assessment
-6. Position sizing recommendation (SMALL for cautious entries)
-7. Support/resistance levels
-8. SMC patterns detected (order blocks, FVGs, BOS)`;
+OUTPUT: regime, signal, confidence, reasoning, entry/stops, levels, patterns, risk, sizing`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

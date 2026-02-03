@@ -44,8 +44,8 @@ export const SMCAnalysisPanel = ({ symbol = 'EURUSD' }: SMCAnalysisPanelProps) =
   const [selectedSymbol, setSelectedSymbol] = useState(symbol);
   const [filterResult, setFilterResult] = useState<TradingFilterResult | null>(null);
   const [filterStatus, setFilterStatus] = useState<FilterStatus | null>(null);
-  const [killzoneEnabled, setKillzoneEnabled] = useState(true);
-  const [newsBlackoutEnabled, setNewsBlackoutEnabled] = useState(true);
+  const [killzoneEnabled, setKillzoneEnabled] = useState(false); // Default to disabled for 24/7 trading
+  const [newsBlackoutEnabled, setNewsBlackoutEnabled] = useState(false); // Default to disabled for 24/7 trading
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -207,7 +207,7 @@ export const SMCAnalysisPanel = ({ symbol = 'EURUSD' }: SMCAnalysisPanelProps) =
 
         {/* Symbol Selector */}
         <div className="flex gap-2 flex-wrap">
-          {['EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'AUDUSD', 'USDCHF'].map(sym => (
+          {['XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF'].map(sym => (
             <Badge
               key={sym}
               variant={selectedSymbol === sym ? 'default' : 'outline'}
@@ -264,7 +264,7 @@ export const SMCAnalysisPanel = ({ symbol = 'EURUSD' }: SMCAnalysisPanelProps) =
                 <ScrollArea className="h-32 rounded-md border p-2">
                   <div className="space-y-1">
                     {analysis.confluenceFactors.map((factor, idx) => (
-                      <div key={idx} className="text-xs text-muted-foreground">
+                      <div key={`factor-${idx}-${factor.substring(0, 10)}`} className="text-xs text-muted-foreground">
                         {factor}
                       </div>
                     ))}
@@ -303,8 +303,8 @@ export const SMCAnalysisPanel = ({ symbol = 'EURUSD' }: SMCAnalysisPanelProps) =
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {onTickEngine.getKillzones().map((kz, idx) => (
-                    <div 
-                      key={idx}
+                    <div
+                      key={`killzone-${kz.name}-${idx}`}
                       className={`p-2 rounded text-xs ${
                         filterResult?.activeKillzone?.name === kz.name
                           ? 'bg-emerald-500/20 border border-emerald-500/30'
@@ -332,8 +332,8 @@ export const SMCAnalysisPanel = ({ symbol = 'EURUSD' }: SMCAnalysisPanelProps) =
                 <ScrollArea className="h-32">
                   <div className="space-y-1">
                     {filterStatus?.upcomingHighImpactNews.map((news, idx) => (
-                      <div 
-                        key={idx}
+                      <div
+                        key={`news-${news.id || 'unknown'}-${idx}`}
                         className="p-2 rounded text-xs bg-red-500/10 border-l-2 border-red-500"
                       >
                         <div className="flex justify-between">
@@ -446,11 +446,11 @@ export const SMCAnalysisPanel = ({ symbol = 'EURUSD' }: SMCAnalysisPanelProps) =
                 <ScrollArea className="h-24">
                   <div className="space-y-1">
                     {analysis.orderBlocks.map((ob, idx) => (
-                      <div 
-                        key={idx} 
+                      <div
+                        key={`ob-${idx}-${ob.low}-${ob.high}`}
                         className={`p-2 rounded text-xs ${
-                          ob.type === 'BULLISH' 
-                            ? 'bg-emerald-500/10 border-l-2 border-emerald-500' 
+                          ob.type === 'BULLISH'
+                            ? 'bg-emerald-500/10 border-l-2 border-emerald-500'
                             : 'bg-red-500/10 border-l-2 border-red-500'
                         }`}
                       >
@@ -479,11 +479,11 @@ export const SMCAnalysisPanel = ({ symbol = 'EURUSD' }: SMCAnalysisPanelProps) =
                 <ScrollArea className="h-24">
                   <div className="space-y-1">
                     {analysis.fairValueGaps.map((fvg, idx) => (
-                      <div 
-                        key={idx} 
+                      <div
+                        key={`fvg-${idx}-${fvg.low}-${fvg.high}`}
                         className={`p-2 rounded text-xs ${
-                          fvg.type === 'BULLISH' 
-                            ? 'bg-emerald-500/10 border-l-2 border-emerald-500' 
+                          fvg.type === 'BULLISH'
+                            ? 'bg-emerald-500/10 border-l-2 border-emerald-500'
                             : 'bg-red-500/10 border-l-2 border-red-500'
                         }`}
                       >
@@ -514,8 +514,8 @@ export const SMCAnalysisPanel = ({ symbol = 'EURUSD' }: SMCAnalysisPanelProps) =
                 <ScrollArea className="h-20">
                   <div className="space-y-1">
                     {analysis.liquidityZones.map((zone, idx) => (
-                      <div 
-                        key={idx} 
+                      <div
+                        key={`zone-${idx}-${zone.level}`}
                         className="p-2 rounded text-xs bg-muted/30"
                       >
                         <div className="flex justify-between">
@@ -548,9 +548,9 @@ export const SMCAnalysisPanel = ({ symbol = 'EURUSD' }: SMCAnalysisPanelProps) =
           <div className="mt-4 space-y-2">
             <span className="text-sm font-medium">Active Trades (Dynamic Trailing)</span>
             <div className="space-y-2">
-              {activeTrades.map(trade => (
-                <div 
-                  key={trade.ticketId}
+              {activeTrades.map((trade, idx) => (
+                <div
+                  key={`trade-${trade.ticketId}-${idx}`}
                   className={`p-3 rounded-lg ${
                     trade.profit >= 0 ? 'bg-emerald-500/10' : 'bg-red-500/10'
                   }`}
@@ -588,3 +588,4 @@ export const SMCAnalysisPanel = ({ symbol = 'EURUSD' }: SMCAnalysisPanelProps) =
 };
 
 export default SMCAnalysisPanel;
+
